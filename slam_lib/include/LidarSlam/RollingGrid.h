@@ -80,6 +80,9 @@ public:
   //! Extract all points in map lying in given bounding box
   PointCloud::Ptr Get(const Eigen::Array3d& minPoint, const Eigen::Array3d& maxPoint) const;
 
+  //! Extract all points in map that are close to points from given cloud
+  PointCloud::Ptr Get(const PointCloud& pcToMatch) const;
+
   //! Get all points
   PointCloud::Ptr Get() const;
 

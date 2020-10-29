@@ -20,6 +20,8 @@
 #include "LidarSlam/RollingGrid.h"
 #include "LidarSlam/Utilities.h"
 
+#include <unsupported/Eigen/CXX11/Tensor>
+
 // A new PCL Point is added so we need to recompile PCL to be able to use
 // filters (pcl::VoxelGrid) with this new type
 #ifndef PCL_NO_PRECOMPILE
@@ -131,6 +133,56 @@ RollingGrid::PointCloud::Ptr RollingGrid::Get(const Eigen::Array3d& minPoint, co
     for (int y = intersectionMin.y(); y <= intersectionMax.y(); y++)
       for (int z = intersectionMin.z(); z <= intersectionMax.z(); z++)
         *intersection += *(this->Grid[x][y][z]);
+
+  return intersection;
+}
+
+//------------------------------------------------------------------------------
+RollingGrid::PointCloud::Ptr RollingGrid::Get(const PointCloud& pcToMatch) const
+{
+  // Identify voxels in which lie input points
+  Eigen::Tensor<float, 3> nonEmptyVoxels(this->GridSize, this->GridSize, this->GridSize);
+  nonEmptyVoxels.setZero();
+  Eigen::Array3i voxelGridOrigin = this->PositionToVoxel(this->VoxelGridPosition) - this->GridSize / 2;
+  for (const Point& point : pcToMatch)
+  {
+    // Find the voxel containing this point
+    Eigen::Array3i cubeIdx = this->PositionToVoxel(point.getArray3fMap()) - voxelGridOrigin;
+    // Add a vote to the corresponding voxel
+    if (((0 <= cubeIdx) && (cubeIdx < this->GridSize)).all())
+      nonEmptyVoxels(cubeIdx.x(), cubeIdx.y(), cubeIdx.z())++;
+  }
+
+  // Dilate the votes by convolving with blur kernel
+  Eigen::TensorFixedSize<float, Eigen::Sizes<3, 3, 3>> kernel;
+  constexpr float centerWeight = 1.;
+  constexpr float orthoWeight  = 0.4;
+  constexpr float diagWeight   = 0.2;
+  constexpr float cornerWeight = 0.1;
+  kernel.setValues({{{cornerWeight,   diagWeight,  cornerWeight},
+                     {  diagWeight,  orthoWeight,    diagWeight},
+                     {cornerWeight,   diagWeight,  cornerWeight}},
+
+                    {{  diagWeight,  orthoWeight,    diagWeight},
+                     { orthoWeight, centerWeight,   orthoWeight},
+                     {  diagWeight,  orthoWeight,    diagWeight}},
+
+                    {{cornerWeight,   diagWeight,  cornerWeight},
+                     {  diagWeight,  orthoWeight,    diagWeight},
+                     {cornerWeight,   diagWeight,  cornerWeight}}});
+  // Perform SAME convolution by adding padding
+  Eigen::array<std::pair<int, int>, 3> padding = {{{1, 1}, {1, 1}, {1, 1}}};
+  Eigen::array<int, 3> dims = {0, 1, 2};
+  Eigen::Tensor<float, 3> voxelsToUse = nonEmptyVoxels.pad(padding).eval().convolve(kernel, dims);
+
+  // Get all points from voxels to use
+  constexpr float THRESHOLD = 1.;
+  PointCloud::Ptr intersection(new PointCloud);
+  for (int x = 0; x < this->GridSize; x++)
+    for (int y = 0; y < this->GridSize; y++)
+      for (int z = 0; z < this->GridSize; z++)
+        if (voxelsToUse(x, y, z) >= THRESHOLD)
+          *intersection += *(this->Grid[x][y][z]);
 
   return intersection;
 }

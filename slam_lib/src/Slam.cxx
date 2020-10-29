@@ -939,14 +939,12 @@ void Slam::Localization()
 
   auto extractMapKeypointsAndBuildKdTree = [this](const PointCloud::Ptr& currKeypoints, RollingGrid& map, PointCloud::Ptr& prevKeypoints, KDTree& kdTree)
   {
-    // Estimate current keypoints bounding box
+    // Estimate current keypoints WORLD positions
     PointCloud currWordKeypoints;
     pcl::transformPointCloud(*currKeypoints, currWordKeypoints, this->Tworld.matrix());
-    Eigen::Vector4f minPoint, maxPoint;
-    pcl::getMinMax3D(currWordKeypoints, minPoint, maxPoint);
 
-    // Extract all points in maps lying in this bounding box
-    prevKeypoints = map.Get(minPoint.head<3>().cast<double>().array(), maxPoint.head<3>().cast<double>().array());
+    // Extract all points in maps lying near these points
+    prevKeypoints = map.Get(currWordKeypoints);
     kdTree.Reset(prevKeypoints);
   };
 
