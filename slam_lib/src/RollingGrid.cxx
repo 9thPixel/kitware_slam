@@ -140,18 +140,36 @@ RollingGrid::PointCloud::Ptr RollingGrid::Get(const Eigen::Array3d& minPoint, co
 //------------------------------------------------------------------------------
 RollingGrid::PointCloud::Ptr RollingGrid::Get(const PointCloud& pcToMatch) const
 {
-  // Identify voxels in which lie input points
-  Eigen::Tensor<float, 3> nonEmptyVoxels(this->GridSize, this->GridSize, this->GridSize);
-  nonEmptyVoxels.setZero();
+  // Identify voxels in which lie input points, and the bounding box of the non-empty voxels
+  Eigen::Tensor<float, 3> pointsInVoxels(this->GridSize, this->GridSize, this->GridSize);
+  pointsInVoxels.setZero();
   Eigen::Array3i voxelGridOrigin = this->PositionToVoxel(this->VoxelGridPosition) - this->GridSize / 2;
+  Eigen::Array3i minCell, maxCell;
+  minCell.setConstant(this->GridSize - 1);
+  maxCell.setConstant(0);
   for (const Point& point : pcToMatch)
   {
     // Find the voxel containing this point
     Eigen::Array3i cubeIdx = this->PositionToVoxel(point.getArray3fMap()) - voxelGridOrigin;
-    // Add a vote to the corresponding voxel
+    // Notify the voxel if it is within grid
     if (((0 <= cubeIdx) && (cubeIdx < this->GridSize)).all())
-      nonEmptyVoxels(cubeIdx.x(), cubeIdx.y(), cubeIdx.z())++;
+    {
+      pointsInVoxels(cubeIdx.x(), cubeIdx.y(), cubeIdx.z())++;
+      minCell = minCell.min(cubeIdx);
+      maxCell = maxCell.max(cubeIdx);
+    }
   }
+
+  // Check if maxPoint is greater than minPoint.
+  // If not, this means that no point from pcToMatch lies in rolling grid.
+  if ((minCell > maxCell).any())
+    return PointCloud::Ptr(new PointCloud);
+
+  // Extract non empty part of rolling grid using bounding box
+  // We do that to to save time by avoiding convolving the entire rolling grid
+  Eigen::array<int, 3> offsets = {minCell.x(), minCell.y(), minCell.z()};
+  Eigen::array<int, 3> extents = {maxCell.x() - minCell.x() + 1, maxCell.y() - minCell.y() + 1, maxCell.z() - minCell.z() + 1};
+  Eigen::Tensor<float, 3> nonEmptyVoxels = pointsInVoxels.slice(offsets, extents);
 
   // Dilate the votes by convolving with blur kernel
   Eigen::TensorFixedSize<float, Eigen::Sizes<3, 3, 3>> kernel;
@@ -175,14 +193,14 @@ RollingGrid::PointCloud::Ptr RollingGrid::Get(const PointCloud& pcToMatch) const
   Eigen::array<int, 3> dims = {0, 1, 2};
   Eigen::Tensor<float, 3> voxelsToUse = nonEmptyVoxels.pad(padding).eval().convolve(kernel, dims);
 
-  // Get all points from voxels to use
+  // Extract all points from voxels to use
   constexpr float THRESHOLD = 1.;
   PointCloud::Ptr intersection(new PointCloud);
-  for (int x = 0; x < this->GridSize; x++)
-    for (int y = 0; y < this->GridSize; y++)
-      for (int z = 0; z < this->GridSize; z++)
+  for (int x = 0; x < voxelsToUse.dimension(0); x++)
+    for (int y = 0; y < voxelsToUse.dimension(1); y++)
+      for (int z = 0; z < voxelsToUse.dimension(2); z++)
         if (voxelsToUse(x, y, z) >= THRESHOLD)
-          *intersection += *(this->Grid[x][y][z]);
+          *intersection += *(this->Grid[x + minCell.x()][y + minCell.y()][z + minCell.z()]);
 
   return intersection;
 }
