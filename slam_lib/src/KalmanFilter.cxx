@@ -13,43 +13,19 @@ KalmanFilter::KalmanFilter()
 void KalmanFilter::ResetKalmanFilter()
 {
   // set the number of measures observed
-  this->NbrMeasures = 6;
-  if (this->mode > 0)
-  {
-    this->NbrMeasures = 7;
-  }
+  this->SizeState = 12;
 
-  // Fill motion Model diagonal
-  this->MotionModel = Eigen::Matrix<double, 12, 12>::Zero();
-  for (unsigned int i = 0; i < 12; ++i)
-  {
-      this->MotionModel(i, i) = 1.0;
-  }
+  // Init motion Model diagonal
+  this->MotionModel.setIdentity();
 
-  // Fill Estimator covariance
-  // Set to zero because without
-  // any other information
-  this->EstimatorCovariance = Eigen::Matrix<double, 12, 12>::Zero();
+  // Init Motion model covariance
+  this->MotionCovariance.setZero();
 
-  // Fill measure model
-  this->MeasureModel = Eigen::MatrixXd(this->NbrMeasures, 12);// ::Matrix<double, 6, 12>::Zero();
-  for (unsigned int j = 0; j < 12; ++j)
-  {
-    for (unsigned int i = 0; i < this->NbrMeasures; ++i)
-    {
-      this->MeasureModel(i, j) = 0.0;
-    }
-  }
-  for (unsigned int i = 0; i < 6; ++i)
-  {
-    this->MeasureModel(i, i) = 1.0;
-  }
+  // Init Estimator covariance
+  this->CovarianceEstimated.setZero();
 
-  // Fill Motion model covariance
-  this->ModelCovariance = Eigen::Matrix<double, 12, 12>::Zero();
-
-  // Fill vector state
-  this->VectorState << 0,0,0,0,0,0,0,0,0,0,0,0;
+  // Fill state vector
+  this->StateEstimated.setZero();
 
   // Set the maximale acceleration
   // Settle to 10 m.s-2 (= 1g). it is
@@ -69,17 +45,21 @@ void KalmanFilter::ResetKalmanFilter()
   // in one second. This seems reasonable
   // We can take an additional 20% error
   this->MaxAngleAcceleration = 1.2 * 1080.0 / 180.0 * M_PI;
+
+  this->PreviousTime = 0.0;
+  this->CurrentTime = 0.0;
+  this->DeltaTime = 0.0;
 }
 
 //-----------------------------------------------------------------------------
-void KalmanFilter::SetInitialStatevector(Eigen::Matrix<double, 12, 1> iniVector, Eigen::Matrix<double, 12, 12> iniCov)
+void KalmanFilter::InitState(Eigen::Matrix<double, 12, 1> iniState, Eigen::Matrix<double, 12, 12> iniCov)
 {
-  this->VectorState = iniVector;
-  this->EstimatorCovariance = iniCov;
+  this->StateEstimated = iniState;
+  this->CovarianceEstimated = iniCov;
 }
 
 //-----------------------------------------------------------------------------
-void KalmanFilter::SetCurrentTime(double time)
+void KalmanFilter::EstimateMotion(double time)
 {
   // Update time
   this->PreviousTime = this->CurrentTime;
@@ -92,99 +72,72 @@ void KalmanFilter::SetCurrentTime(double time)
     this->MotionModel(i, i + 6) = this->DeltaTime;
   }
 
-  // Update Motion model covariance matrix
-  // angle
+  // Update Motion model covariance matrix :
+  // -Angle
   for (unsigned int i = 0; i < 3; ++i)
   {
-    this->ModelCovariance(i, i) = std::pow(0.5 * this->MaxAngleAcceleration * std::pow(this->DeltaTime, 2), 2);
+    this->MotionCovariance(i, i) = std::pow(0.5 * this->MaxAngleAcceleration * std::pow(this->DeltaTime, 2), 2);
   }
-  // Position
+  // -Position
   for (unsigned int i = 3; i < 6; ++i)
   {
-    this->ModelCovariance(i, i) = std::pow(0.5 * this->MaxAcceleration * std::pow(this->DeltaTime, 2), 2);
+    this->MotionCovariance(i, i) = std::pow(0.5 * this->MaxAcceleration * std::pow(this->DeltaTime, 2), 2);
   }
-  // Angle speed
+  // -Angle speed
   for (unsigned int i = 6; i < 9; ++i)
   {
-    this->ModelCovariance(i, i) = std::pow(this->MaxAngleAcceleration * this->DeltaTime, 2);
+    this->MotionCovariance(i, i) = std::pow(this->MaxAngleAcceleration * this->DeltaTime, 2);
   }
-  // Velocity
+  // -Velocity
   for (unsigned int i = 9; i < 12; ++i)
   {
-    this->ModelCovariance(i, i) = std::pow(this->MaxAcceleration * this->DeltaTime, 2);
+    this->MotionCovariance(i, i) = std::pow(this->MaxAcceleration * this->DeltaTime, 2);
   }
-}
-
-//-----------------------------------------------------------------------------
-void KalmanFilter::SetMeasureCovariance(Eigen::MatrixXd argCov)
-{
-  this->MeasureCovariance = argCov;
 }
 
 //-----------------------------------------------------------------------------
 void KalmanFilter::Prediction()
 {
   // Prediction using motion model and motion covariance
-  // Vector state prediction
-  this->VectorStatePredicted = this->MotionModel * this->VectorState;
-  // Estimator covariance update
-  this->EstimatorCovariance = this->MotionModel * this->EstimatorCovariance * this->MotionModel.transpose() + this->ModelCovariance;
+  // State prediction
+  this->StateEstimated = this->MotionModel * this->StateEstimated ;
+  // Covariance prediction
+  this->CovarianceEstimated = this->MotionModel * this->CovarianceEstimated * this->MotionModel.transpose() + this->MotionCovariance;
 }
 
 //-----------------------------------------------------------------------------
-void KalmanFilter::Correction(Eigen::MatrixXd Measure)
+
+void KalmanFilter::KalmanIteration(std::vector<inputMeasure*>& Inputs, double t)
 {
-  // Update the measure model, since we have a non
-  // linear link between the state vector and the measure
-  // (norm of the velocity) we need to compute the jacobian
-  // of the measure function at the current point in the
-  // state vector space
-  double normV = std::sqrt(std::pow(this->VectorStatePredicted(9), 2) + std::pow(this->VectorStatePredicted(10), 2) + std::pow(this->VectorStatePredicted(11), 2));
-  if (this->mode > 0)
-  {
-    // check that the norm is not null
-    double nv = normV;
-    if (nv < 1e-6)
-      nv = 1.0;
-
-    this->MeasureModel(6, 9) = this->VectorStatePredicted(9) / nv;
-    this->MeasureModel(6, 10) = this->VectorStatePredicted(10) / nv;
-    this->MeasureModel(6, 11) = this->VectorStatePredicted(11) / nv;
-    std::cout << "Vector State: " << std::endl << this->VectorStatePredicted.transpose() << std::endl;
-    std::cout << "Measure: " << std::endl << Measure.transpose() << std::endl;
-    std::cout << "Measure model: " << std::endl << this->MeasureModel << std::endl;
-  }
-
-  // Update using the measure and its covariance
-  Eigen::MatrixXd novelty = (this->MeasureModel * this->EstimatorCovariance * this->MeasureModel.transpose() + this->MeasureCovariance);
-  Eigen::MatrixXd gain = this->EstimatorCovariance * this->MeasureModel.transpose() * novelty.inverse();
-
-  // Update the vector state estimation
-  Eigen::MatrixXd errVector(this->NbrMeasures, 1);
-  if (this->mode > 0)
-  {
-    for (unsigned int k = 0; k < 6; ++k)
-    {
-      errVector(k) = this->VectorStatePredicted(k);
-    }
-    errVector(6) = normV;
-    errVector = Measure - errVector;
-  }
-  else
-  {
-    errVector = Measure - this->MeasureModel * this->VectorStatePredicted;
-  }
-
-  this->VectorState = this->VectorStatePredicted + gain * errVector;
-
-  // Update Estimator covariance
-  this->EstimatorCovariance = this->EstimatorCovariance - gain * this->MeasureModel * this->EstimatorCovariance;
+  //Perform a complete iteration prediction + update with all available inputs
+  //Update motion with current time
+  EstimateMotion(t);
+  // predict pose with motion model
+  Prediction();
+  for(int i = 0; i<Inputs.size(); ++i)
+    Update(*Inputs[i]);
 }
 
 //-----------------------------------------------------------------------------
-Eigen::Matrix<double, 12, 1> KalmanFilter::GetStateVector()
+void KalmanFilter::Update(inputMeasure& input)
 {
-  return this->VectorState;
+  // Update estimated state with one measure (various measures can update the result successively)
+  // Compute Kalman gain (named K)
+  Eigen::MatrixXd innovation = (input.MeasureModel * this->CovarianceEstimated * input.MeasureModel.transpose() + input.MeasureCovariance);
+  Eigen::MatrixXd K = this->CovarianceEstimated * input.MeasureModel.transpose() * innovation.inverse();
+
+  // Update the estimated state
+  Eigen::MatrixXd errVector = input.Measure - input.MeasureModel * this->StateEstimated;
+  this->StateEstimated += K * errVector;
+
+  // Update the estimated covariance
+  this->CovarianceEstimated -= K * input.MeasureModel * this->CovarianceEstimated;
+}
+
+//-----------------------------------------------------------------------------
+Eigen::MatrixXd KalmanFilter::GetState()
+{
+  return this->StateEstimated;
 }
 
 //-----------------------------------------------------------------------------
@@ -199,21 +152,9 @@ void KalmanFilter::SetMaxVelocityAcceleration(double acc)
   this->MaxAcceleration = acc;
 }
 
-//-----------------------------------------------------------------------------
-void KalmanFilter::SetMode(int argMode)
-{
-  this->mode = argMode;
-  this->ResetKalmanFilter();
-}
 
 //-----------------------------------------------------------------------------
-int KalmanFilter::GetMode()
+int KalmanFilter::GetSizeState()
 {
-  return this->mode;
-}
-
-//-----------------------------------------------------------------------------
-int KalmanFilter::GetNbrMeasure()
-{
-  return this->NbrMeasures;
+  return this->StateEstimated.rows();
 }
