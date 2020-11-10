@@ -3,6 +3,7 @@
 
 #include <math.h>
 #include <vector>
+#include <iostream>
 
 #include <Eigen/Dense>
 #include <Eigen/Core>
@@ -30,13 +31,13 @@ public:
   KalmanFilter();
 
   // Reset the class
-  void ResetKalmanFilter();
+  void Reset();
 
   // Set current time of the algorithm and consequently update the motion model/prediction features
-  void EstimateMotion(double time);
+  void EstimateMotion(double delta_time);
 
   // Prediction of the next state vector
-  void Prediction();
+  void Prediction(double delta_time);
 
   // Update of the state using the input measure (ex : a 3D rigid transform)
   void Update(inputMeasure& input);
@@ -56,17 +57,17 @@ public:
   Eigen::MatrixXd GetState();
 
   // Initialize the state vector and the covariance
-  void InitState(Eigen::Matrix<double, 12, 1> iniVector, Eigen::Matrix<double, 12, 12> iniCov);
+  void InitState(Eigen::MatrixXd iniVector, Eigen::MatrixXd iniCov);
 
   // return the size of the state
   int GetSizeState();
 
-private:
-  // Kalman Filter mode:
-  // 0 : registration
-  // 1 : registration + GPS velocity
-  int mode;
+  //return the 6D parameters needed for SLAM registration (i.e RPYXYZ)
+  Eigen::Matrix<double, 6, 1> Get6DState();
+  //return the 6D parameters covariance needed for SLAM registration (i.e RPYXYZ)
+  Eigen::Matrix<double, 6, 6> Get6DCovariance();
 
+private:
   //------------------------------------------------------
   // STATE
   //------------------------------------------------------
@@ -75,27 +76,24 @@ private:
   // -tx, ty, tz
   // -drx/dt, dry/dt, drz/dt
   // -dtx/dt, dty/dt, dtz/dt
-  Eigen::Matrix<double, 12, 1> StateEstimated;
-  Eigen::Matrix<double, 12, 12> CovarianceEstimated;
+  // -drx2/dt2, dry2/dt2, drz2/dt2
+  // -dtx2/dt2, dty2/dt2, dtz2/dt2
+  Eigen::MatrixXd StateEstimated;
+  Eigen::MatrixXd CovarianceEstimated;
 
   //------------------------------------------------------
   // MOTION MODEL
   //------------------------------------------------------
   // Function M to estimate the state with previous position X(t+1) = MX(t)
-  Eigen::Matrix<double, 12, 12> MotionModel;
+  Eigen::MatrixXd MotionModel;
 
   // Covariance of motion model
-  Eigen::Matrix<double, 12, 12> MotionCovariance;
+  Eigen::MatrixXd MotionCovariance;
 
   // Maximale acceleration endorsed by the vehicule
   // used to estimate motion model covariance
   double MaxAcceleration;
   double MaxAngleAcceleration;
-
-  // delta time to compute current estimated motion from motion model
-  double PreviousTime;
-  double CurrentTime;
-  double DeltaTime;
 
   //------------------------------------------------------
   // OTHER

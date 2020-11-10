@@ -2,7 +2,6 @@
 #include <random>
 #include <fstream>
 #include <string>
-#include <iostream>
 
 void save(std::vector<Eigen::Vector3d>& pos, std::string file_name)
 {
@@ -63,31 +62,31 @@ int main()
     float delta_theta = 2*M_PI/N; // angular displacement at each step
 
     // Create real data
-    std::vector<Eigen::Matrix<double, 12, 1>> real(N);
+    std::vector<Eigen::Matrix<double, 18, 1>> real(N);
     for(int i = 0; i<N; ++i)
-    real[i] << 0, 0, M_PI/2 + i*delta_theta, cos(i*delta_theta) , sin(i*delta_theta), 1, 0, 0, M_PI/2 + i*delta_theta, cos(i*delta_theta) , sin(i*delta_theta), 0;
+        real[i] << 0, 0, M_PI/2 + i*delta_theta, cos(i*delta_theta) , sin(i*delta_theta), 1, 0, 0, delta_theta, cos((i+1)*delta_theta) - cos(i*delta_theta), sin((i+1)*delta_theta) - sin(i*delta_theta), 0, 0, 0, 0, 0, 0, 0;
 
     // Init first sensor (registration like?)
     inputMeasure s1;
-    s1.MeasureModel = Eigen::MatrixXd::Identity(6, 12);
+    s1.MeasureModel = Eigen::MatrixXd::Identity(6, 18);
     Eigen::Matrix<double, 6, 1> diag_C1;
-    diag_C1<<0.0, 0.0, pow(5*M_PI/180,2), pow(0.05,2), pow(0.02,2), pow(0.01,2);
-    s1.MeasureCovariance  = Eigen::Matrix<double, 6, 6>(diag_C1.asDiagonal());
+    diag_C1<< pow(5*M_PI/180,2), pow(5*M_PI/180, 2), pow(5*M_PI/180, 2), pow(0.05,2), pow(0.02,2), pow(0.01,2);
+    s1.MeasureCovariance  = diag_C1.asDiagonal();
 
     // Init second sensor (GPS like?)
     inputMeasure s2;
-    s2.MeasureModel = Eigen::MatrixXd::Zero(3, 12);
+    s2.MeasureModel = Eigen::MatrixXd::Zero(3, 18);
     s2.MeasureModel(0, 3) = 1;
     s2.MeasureModel(1, 4) = 1;
     s2.MeasureModel(2, 5) = 1;
     Eigen::Matrix<double, 3, 1> diag_C2;
-    diag_C2<<pow(0.05,2), pow(0.05,2), pow(0.05,2);
-    s2.MeasureCovariance  = Eigen::Matrix<double, 3, 3>(diag_C2.asDiagonal());
+    diag_C2<< pow(0.05,2), pow(0.05,2), pow(0.05,2);
+    s2.MeasureCovariance  = diag_C2.asDiagonal();
 
     // Use Kalman filter
     KalmanFilter kf;
     kf.ResetKalmanFilter();
-    kf.InitState(real[0], Eigen::Matrix<double, 12, 12>::Zero());
+    kf.InitState(real[0], Eigen::Matrix<double, 18, 18>::Zero());
     std::vector<inputMeasure*> sensors ={&s1, &s2};
 
     //------------------display purpose-------------------
@@ -95,7 +94,7 @@ int main()
     std::vector<Eigen::Vector3d> measures_2(N-1);
     std::vector<Eigen::Vector3d> estimated(N-1);
     std::vector<Eigen::Vector3d> X(N-1);
-    std::vector<Eigen::Matrix<double, 12, 1>> error(N-1);
+    std::vector<Eigen::Matrix<double, 18, 1>> error(N-1);
     //----------------------------------------------------
     for(int i = 1; i<N; ++i)
     {
@@ -114,9 +113,9 @@ int main()
 
     // Compute some result to evaluate efficiency of Kalman
 
-    Eigen::Matrix<double, 12, 1> std_dev;
+    Eigen::Matrix<double, 18, 1> std_dev;
     std_dev.setZero();
-    Eigen::Matrix<double, 12, 1> mean;
+    Eigen::Matrix<double, 18, 1> mean;
     mean.setZero();
     for (int i=0; i<error.size(); ++i)
       mean += error[i];
@@ -126,17 +125,17 @@ int main()
         std_dev(j,0) += pow((error[i](j)-mean(j)),2);
     std_dev /= error.size();
     for(int j = 0; j<std_dev.rows(); ++j)
-    std_dev(j,0) = sqrt(std_dev(j,0));
+        std_dev(j,0) = sqrt(std_dev(j,0));
 
     std::cout<<"\nFirst sensor features :"<<std::endl;
-    std::cout<<"\t std_deviation X = "<< sqrt(s1.MeasureCovariance(3, 3))<<"\t std_deviation Y = "<<sqrt(s1.MeasureCovariance(4, 4))<<"\t std_deviation Z = "<<sqrt(s1.MeasureCovariance(5, 5))<< "\t std_deviation alpha = "<<sqrt(s1.MeasureCovariance(2, 2)*180/M_PI)<<"°\n"<<std::endl;
+    std::cout<<"\t std_deviation X = "<< sqrt(s1.MeasureCovariance(3, 3))<<"\t std_deviation Y = "<<sqrt(s1.MeasureCovariance(4, 4))<<"\t std_deviation Z = "<< sqrt(s1.MeasureCovariance(5, 5)) << "\t std_deviation alpha = "<< sqrt(s1.MeasureCovariance(2, 2)) * 180 / M_PI<<"°\n"<<std::endl;
     std::cout<<""<<std::endl;
     std::cout<<"Second sensor features :"<<std::endl;
-    std::cout<<"\t std_deviation X = "<< sqrt(s2.MeasureCovariance(0, 0))<<"\t std_deviation Y = "<<sqrt(s2.MeasureCovariance(1, 1))<<"\t std_deviation Z = "<<sqrt(s2.MeasureCovariance(2, 2))<<"\n"<<std::endl;
+    std::cout<<"\t std_deviation X = "<< sqrt(s2.MeasureCovariance(0, 0))<<"\t std_deviation Y = "<<sqrt(s2.MeasureCovariance(1, 1))<<"\t std_deviation Z = "<< sqrt(s2.MeasureCovariance(2, 2)) <<"\n"<<std::endl;
     std::cout<<""<<std::endl;
     std::cout<<"Results : "<<std::endl;
-    std::cout<<"\t mean_error X = "<< mean(3)<<"\t mean_error Y = "<<mean(4)<<"\t mean_error Z = "<<mean(5)<<"\t mean_error alpha = "<<mean(2)<<"°\n"<<std::endl;
-    std::cout<<"\t std_deviation X = "<<std_dev(3)<<" \t std_deviation Y = "<<std_dev(4)<<" \t std_deviation Z = "<<std_dev(5)<<" \t std_deviation alpha = "<<std_dev(2)<<"°"<<std::endl;
+    std::cout<<"\t mean_error X = "<< mean(3)<<"\t mean_error Y = "<<mean(4)<<"\t mean_error Z = "<<mean(5)<<"\t mean_error alpha = "<< mean(2)*180/M_PI <<"°\n"<<std::endl;
+    std::cout<<"\t std_deviation X = "<<std_dev(3)<<" \t std_deviation Y = "<<std_dev(4)<<" \t std_deviation Z = "<<std_dev(5)<<" \t std_deviation alpha = "<< std_dev(2)*180/M_PI <<"°"<<std::endl;
 
     // Save XYZ position results
 
