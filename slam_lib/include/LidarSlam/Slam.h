@@ -74,6 +74,7 @@
 #pragma once
 
 #include "LidarSlam/Utilities.h"
+#include "LidarSlam/KalmanFilter.h"
 #include "LidarSlam/Transform.h"
 #include "LidarSlam/LidarPoint.h"
 #include "LidarSlam/Enums.h"
@@ -534,12 +535,21 @@ private:
   double LocalizationFinalLossScale = 0.05;   // Saturation around 0.4 meters
 
   // ---------------------------------------------------------------------------
+  //   Kalman Filter
+  // ---------------------------------------------------------------------------
+
+  bool Kalman = true;
+  KalmanFilter kf;
+  std::vector<inputMeasure> sensors;
+  double delta_time = 0;
+
+  // ---------------------------------------------------------------------------
   //   Main sub-problems and methods
   // ---------------------------------------------------------------------------
 
   // Update current frame (check frame dropping, correct time field) and
   // estimate new state (estimate new pose with a constant velocity model)
-  void UpdateFrameAndState(const PointCloud::Ptr& inputPc);
+  void PredictPoseWithMotion(const PointCloud::Ptr& inputPc);
 
   // Extract keypoints from input pointcloud,
   // and transform them from LIDAR to BASE coordinate system.
@@ -552,6 +562,9 @@ private:
   // Compute the pose of the current frame in world referential by registering
   // current frame keypoints on keypoints from maps
   void Localization();
+
+  // Apply step of Kalman filter with fusion
+  void KalmanUpdate();
 
   // Update the maps by adding to the rolling grids the current keypoints
   // expressed in the world reference frame coordinate system

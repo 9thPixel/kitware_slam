@@ -11,6 +11,7 @@ set(LidarSlam_PUBLIC_HEADERS
   include/LidarSlam/Enums.h
   include/LidarSlam/GlobalTrajectoriesRegistration.h
   include/LidarSlam/KDTreePCLAdaptor.h
+  include/LidarSlam/KalmanFilter.h
   include/LidarSlam/KeypointsRegistration.h
   include/LidarSlam/LidarPoint.h
   include/LidarSlam/MotionModel.h
@@ -32,6 +33,7 @@ add_library(LidarSlam SHARED
   src/MotionModel.cxx
   src/RollingGrid.cxx
   src/Slam.cxx
+  src/KalmanFilter.cxx
   src/SpinningSensorKeypointExtractor.cxx
   src/Transform.cxx
   src/Utilities.cxx

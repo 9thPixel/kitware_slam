@@ -1,19 +1,18 @@
 #ifndef KALMANFILTER_H
 #define KALMANFILTER_H
 
-#include <math.h>
 #include <vector>
-#include <iostream>
 
 #include <Eigen/Dense>
 #include <Eigen/Core>
 
-// Fix for windows compilation
+// Fix for windows compilation,
 // M_PI is not define by include/math.h
 #define M_PI       3.14159265358979323846
 
 struct inputMeasure
 {
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
   // Function H to convert a state X to one measure Z (Z = HX)
   Eigen::MatrixXd MeasureModel;
 
@@ -27,8 +26,9 @@ struct inputMeasure
 class KalmanFilter
 {
 public:
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
   // default constructor
-  KalmanFilter();
+  KalmanFilter(){this->Reset();}
 
   // Reset the class
   void Reset();
@@ -57,7 +57,7 @@ public:
   Eigen::MatrixXd GetState();
 
   // Initialize the state vector and the covariance
-  void InitState(Eigen::MatrixXd iniVector, Eigen::MatrixXd iniCov);
+  void InitState(const Eigen::MatrixXd& iniVector, const Eigen::MatrixXd& iniCov);
 
   // return the size of the state
   int GetSizeState();

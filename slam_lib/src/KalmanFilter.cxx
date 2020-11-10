@@ -1,10 +1,6 @@
-#include "KalmanFilter.h"
+#include "LidarSlam/KalmanFilter.h"
 
-//-----------------------------------------------------------------------------
-KalmanFilter::KalmanFilter()
-{
-  this->Reset();
-}
+struct inputMeasure;
 
 //-----------------------------------------------------------------------------
 void KalmanFilter::Reset()
@@ -38,14 +34,14 @@ void KalmanFilter::Reset()
   // 1080 degrees / s-2. To have an image
   // the maximale acceleration corresponds
   // to an none-mobile object than can goes
-  // up to 3 rotations per seconde (180 per min)
-  // in one second. This seems reasonable
+  // up to 3 rotations in one second (180
+  // per min). This seems reasonable.
   // We can take an additional 20% error
   this->MaxAngleAcceleration = 1.2 * 1080.0 / 180.0 * M_PI;
 }
 
 //-----------------------------------------------------------------------------
-void KalmanFilter::InitState(Eigen::MatrixXd iniState, Eigen::MatrixXd iniCov)
+void KalmanFilter::InitState(const Eigen::MatrixXd& iniState, const Eigen::MatrixXd& iniCov)
 {
   this->StateEstimated = iniState;
   this->CovarianceEstimated = iniCov;
@@ -60,24 +56,25 @@ void KalmanFilter::EstimateMotion(double delta_time)
 
   // Update Motion model covariance matrix :
   // -Angle
+  int fact = 1;
   for (unsigned int i = 0; i < 3; ++i)
-    this->MotionCovariance(i, i) = std::pow(0.5 * this->MaxAngleAcceleration * std::pow(delta_time, 2), 2);
+    this->MotionCovariance(i, i) = std::pow(fact*0.5 * this->MaxAngleAcceleration * std::pow(delta_time, 2), 2);
 
   // -Position
   for (unsigned int i = 3; i < 6; ++i)
-    this->MotionCovariance(i, i) = std::pow(0.5 * this->MaxAcceleration * std::pow(delta_time, 2), 2);
+    this->MotionCovariance(i, i) = std::pow(fact*0.5 * this->MaxAcceleration * std::pow(delta_time, 2), 2);
 
   // -Angle speed
   for (unsigned int i = 6; i < 9; ++i)
-    this->MotionCovariance(i, i) = std::pow(this->MaxAngleAcceleration * delta_time, 2);
+    this->MotionCovariance(i, i) = std::pow(fact*this->MaxAngleAcceleration * delta_time, 2);
 
   // -Velocity
   for (unsigned int i = 9; i < 12; ++i)
-    this->MotionCovariance(i, i) = std::pow(this->MaxAcceleration * delta_time, 2);
+    this->MotionCovariance(i, i) = std::pow(fact*this->MaxAcceleration * delta_time, 2);
 
   // -Acceleration
   for (unsigned int i = 12; i < 18; ++i)
-    this->MotionCovariance(i, i) = std::pow(this->MaxAcceleration, 2);
+    this->MotionCovariance(i, i) = std::pow(fact*this->MaxAcceleration, 2);
 }
 
 //-----------------------------------------------------------------------------
@@ -85,7 +82,7 @@ void KalmanFilter::Prediction(double delta_time)
 {
   // Prediction using motion model and motion covariance
   // Build new motion model with current time
-    EstimateMotion(delta_time);
+  EstimateMotion(delta_time);
   // State prediction
   this->StateEstimated = this->MotionModel * this->StateEstimated ;
   // Covariance prediction
@@ -125,15 +122,15 @@ Eigen::MatrixXd KalmanFilter::GetState()
 }
 
 //-----------------------------------------------------------------------------
-Eigen::Matrix<double, 6, 1> Get6DState()
+Eigen::Matrix<double, 6, 1> KalmanFilter::Get6DState()
 {
-  return this.StateEstimated.topLeftCorner(6, 1);
+  return this->StateEstimated.topLeftCorner(6, 1);
 }
 
 //-----------------------------------------------------------------------------
-Eigen::Matrix<double, 6, 6> Get6DCovariance()
+Eigen::Matrix<double, 6, 6> KalmanFilter::Get6DCovariance()
 {
-  return this.CovarianceEstimated.topLeftCorner(6, 6);
+  return this->CovarianceEstimated.topLeftCorner(6, 6);
 }
 
 //-----------------------------------------------------------------------------

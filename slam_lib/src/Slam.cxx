@@ -194,15 +194,22 @@ void Slam::Reset(bool resetLog)
     this->LogBlobsPoints.clear();
   }
 
-  // Reset processing duration timers
   Utils::Timer::Reset();
+  //reset KalmanFilter
+  this->kf.Reset();
+  this->sensors.clear();
+  // Eigen::Matrix<double, 18, 18> initCov;
+  // initCov.setZero();
+  // this->kf.InitState(Eigen::Matrix<double, 18, 1>::Zero(), initCov);
 }
 
 //-----------------------------------------------------------------------------
 void Slam::AddFrame(const PointCloud::Ptr& pc, const std::vector<size_t>& laserIdMapping)
 {
-  Utils::Timer::Init("SLAM frame processing");
+  //clear Kalman filter Inputs
+  this->sensors.clear();
 
+  Utils::Timer::Init("SLAM frame processing");
   // Skip frame if empty
   if (pc->empty())
   {
@@ -223,8 +230,9 @@ void Slam::AddFrame(const PointCloud::Ptr& pc, const std::vector<size_t>& laserI
 
   // Update current frame (check frame dropping, correct time field) and
   // estimate new state (extrapolate new pose with a constant velocity model)
+
   IF_VERBOSE(3, Utils::Timer::Init("Update frame and state"));
-  this->UpdateFrameAndState(pc);
+  this->PredictPoseWithMotion(pc);
   IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Update frame and state"));
 
   // Compute the edges and planars keypoints
@@ -260,6 +268,24 @@ void Slam::AddFrame(const PointCloud::Ptr& pc, const std::vector<size_t>& laserI
     IF_VERBOSE(3, Utils::Timer::Init("Localization"));
     this->Localization();
     IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Localization"));
+
+    if(this->Kalman)
+    {
+      // Create input for Kalman filter
+      inputMeasure registration;
+      registration.MeasureModel = Eigen::MatrixXd::Identity(6, this->kf.GetSizeState());
+      registration.MeasureCovariance = this->TworldCovariance;
+      registration.Measure = IsometryToRPYXYZ(this->Tworld);
+      this->sensors.push_back(registration);
+
+      // Temporary test of Kalman Filter
+      for (inputMeasure s : sensors)
+        this->kf.Update(s);
+
+      this->Tworld = RPYXYZtoIsometry(this->kf.Get6DState());
+      this->TworldCovariance = this->kf.Get6DCovariance();
+      this->Trelative = this->PreviousTworld.inverse() * this->Tworld;
+    }
   }
 
   // Update keypoints maps : add current keypoints to map using Tworld
@@ -322,6 +348,7 @@ void Slam::AddFrame(const PointCloud::Ptr& pc, const std::vector<size_t>& laserI
   // Frame processing duration
   this->Latency = Utils::Timer::Stop("SLAM frame processing");
   this->NbrFrameProcessed++;
+
   IF_VERBOSE(1, Utils::Timer::StopAndDisplay("SLAM frame processing"));
 }
 
@@ -678,7 +705,7 @@ Slam::PointCloud::Ptr Slam::GetBlobsKeypoints(bool worldCoordinates) const
 //==============================================================================
 
 //-----------------------------------------------------------------------------
-void Slam::UpdateFrameAndState(const PointCloud::Ptr& inputPc)
+void Slam::PredictPoseWithMotion(const PointCloud::Ptr& inputPc)
 {
   // Check frame dropping
   unsigned int droppedFrames = inputPc->header.seq - this->PreviousFrameSeq - 1;
@@ -699,7 +726,16 @@ void Slam::UpdateFrameAndState(const PointCloud::Ptr& inputPc)
     const double t1 = this->LogTrajectory[this->LogTrajectory.size() - 1].time;
     const double t0 = this->LogTrajectory[this->LogTrajectory.size() - 2].time;
     if (t0 < t1 && t1 < t)
-      TworldEstimation = LinearInterpolation(this->PreviousTworld, this->Tworld, t, t0, t1);
+    {
+      if(this->Kalman)
+      {
+        this->delta_time = t - this->LogTrajectory[this->LogTrajectory.size() - 1].time;
+        this->kf.Prediction(delta_time);
+        TworldEstimation = RPYXYZtoIsometry(this->kf.Get6DState()); // breaks some registration with bad initialization (velocity badly estimated?)
+      }
+      else
+        TworldEstimation = LinearInterpolation(this->PreviousTworld, this->Tworld, t, t0, t1);
+    }
     else
       PRINT_WARNING("Motion extrapolation skipped as time is not strictly increasing.");
   }
@@ -1045,6 +1081,16 @@ void Slam::Localization()
                    "\nOrientation uncertainty = " << this->LocalizationUncertainty.OrientationError << " °"
                    " (along [" << this->LocalizationUncertainty.OrientationErrorDirection.transpose() << "])");
   RESET_COUT_FIXED_PRECISION;
+}
+
+//-----------------------------------------------------------------------------
+void Slam::KalmanUpdate()
+{
+  for (inputMeasure s : this->sensors)
+    this->kf.Update(s);
+  this->Tworld = RPYXYZtoIsometry(this->kf.Get6DState());
+  this->TworldCovariance = this->kf.Get6DCovariance();
+  this->Trelative = this->PreviousTworld.inverse() * this->Tworld;
 }
 
 //-----------------------------------------------------------------------------
