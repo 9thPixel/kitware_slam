@@ -7,6 +7,10 @@ to use this file :
     -references : with SLAM reference results of data
     -data : containing pcap data
     -test_output : where SLAM tests results were saved
+-All files concerning one dataset must have the same name and a different extension:
+    -data ->.pcap
+    -test_output + references -> .poses / .times
+-Calibrations are .xml
 '''
 
 import subprocess

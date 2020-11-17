@@ -16,20 +16,16 @@ import os.path
 import math
 import argparse
 
-#Parameters for evaluation----------------------------------------------------------------------------
-threshold_trans_pose_rel = 0.01 # 1cm
-threshold_rot_pose_rel = 1*np.pi/180 # 1deg
-#-----------------------------------------------------------------------------------------------------
-
 def FileToTimes(file_name):
-    # read SLAM log file and extract processing times (in log : [...] vtkslam took : 10.032 ms [...]
+    # read SLAM log file and extract processing times (example in log : "[...] SLAM frame processing took : 10.032 ms [...]")
     proc_times = []
+    pattern = "SLAM frame processing took : "
     with open(file_name, 'r') as f:
         lines = f.readlines()
         for l in lines:
-            nl = l.find("vtkSlam t")
+            nl = l.find(pattern)
             if nl != -1:
-                proc_times.append(float(l[nl + 15: nl + 15 + 6])) # we suppose 6 digit are sufficient to have precise time
+                proc_times.append(float(l[nl + len(pattern): nl + len(pattern) + 6])) # we suppose 6 digit are sufficient to have precise time
     return proc_times
 
 
@@ -153,11 +149,17 @@ args = parser.parse_args()
 
 dataset_name = os.path.basename(args.Input_file_path).split('.')[0]
 
-#load files
+#Parameters for evaluation---------------------------------------------------------------------------
+threshold_trans_pose_rel = 0.01 # 1cm
+threshold_rot_pose_rel = 1*np.pi/180 # 1deg
+threshold_time_factor = 1.1 # warning on time when 1.1 slower or more
+#----------------------------------------------------------------------------------------------------
+
+#load files------------------------------------------------------------------------------------------
 poses_res = FileToList(args.Input_file_path)
 poses_ref = FileToList(args.Reference_file_path)
-
-# # introducing errors to test----------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------
+# # introducing errors to test-----------------------------------------------------------------------
 # poses_res[30:] = [np.array([0, 0, 0, 0, 10, 0, 0]) + x for x in poses_res[30:]]
 # poses_res[50:] = [np.array([0, 2 * np.pi / 180, 0, 0, 0, 0, 0]) + x for x in poses_res[50:]]
 # N = 15
@@ -186,15 +188,15 @@ if os.path.exists(args.Loop_closure_transfo_file_path):
             print("New version may improve results on dataset {} : translation drift lowered".format(dataset_name))
 # ---------------------------------------------------------------------------------------------------
 
-time_has_changed = False
 # Compare processing time----------------------------------------------------------------------------
+time_has_changed = False
 proc_times_res = FileToTimes(args.Input_times_file_path)
 proc_times_ref = FileToTimes(args.Reference_times_file_path)
 mean_proc_time_res = np.array(proc_times_res).mean()
 mean_proc_time_ref = np.array(proc_times_ref).mean()
-if(abs(mean_proc_time_res - mean_proc_time_ref) > 100):
+if(mean_proc_time_res > threshold_time_factor*mean_proc_time_ref):
     time_has_changed = True
-    print("Error : the new version is significantly slower")
+    print("Error : the new version is  {}% slower".format(100*mean_proc_time_res/mean_proc_time_ref))
 # ---------------------------------------------------------------------------------------------------
 
 # Display results------------------------------------------------------------------------------------
