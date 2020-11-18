@@ -274,16 +274,17 @@ void Slam::AddFrame(const PointCloud::Ptr& pc, const std::vector<size_t>& laserI
       // Create input for Kalman filter
       inputMeasure registration;
       registration.MeasureModel = Eigen::MatrixXd::Identity(6, this->kf.GetSizeState());
-      registration.MeasureCovariance = this->TworldCovariance;
-      registration.Measure = IsometryToRPYXYZ(this->Tworld);
+      registration.MeasureCovariance = this->LocalizationUncertainty.Covariance;
+      registration.MeasureCovariance.topLeftCorner(3, 3) = this->LocalizationUncertainty.Covariance.bottomRightCorner(3, 3);
+      registration.MeasureCovariance.bottomRightCorner(3, 3) = this->LocalizationUncertainty.Covariance.topLeftCorner(3, 3);
+      registration.Measure = LidarSlam::Utils::IsometryToRPYXYZ(this->Tworld);
       this->sensors.push_back(registration);
 
       // Temporary test of Kalman Filter
       for (inputMeasure s : sensors)
         this->kf.Update(s);
 
-      this->Tworld = RPYXYZtoIsometry(this->kf.Get6DState());
-      this->TworldCovariance = this->kf.Get6DCovariance();
+      this->Tworld = LidarSlam::Utils::RPYXYZtoIsometry(this->kf.Get6DState());
       this->Trelative = this->PreviousTworld.inverse() * this->Tworld;
     }
   }
@@ -731,7 +732,7 @@ void Slam::PredictPoseWithMotion(const PointCloud::Ptr& inputPc)
       {
         this->delta_time = t - this->LogTrajectory[this->LogTrajectory.size() - 1].time;
         this->kf.Prediction(delta_time);
-        TworldEstimation = RPYXYZtoIsometry(this->kf.Get6DState()); // breaks some registration with bad initialization (velocity badly estimated?)
+        TworldEstimation = LidarSlam::Utils::RPYXYZtoIsometry(this->kf.Get6DState()); // breaks some registration with bad initialization (velocity badly estimated?)
       }
       else
         TworldEstimation = LinearInterpolation(this->PreviousTworld, this->Tworld, t, t0, t1);
@@ -1088,8 +1089,7 @@ void Slam::KalmanUpdate()
 {
   for (inputMeasure s : this->sensors)
     this->kf.Update(s);
-  this->Tworld = RPYXYZtoIsometry(this->kf.Get6DState());
-  this->TworldCovariance = this->kf.Get6DCovariance();
+  this->Tworld = LidarSlam::Utils::RPYXYZtoIsometry(this->kf.Get6DState());
   this->Trelative = this->PreviousTworld.inverse() * this->Tworld;
 }
 
