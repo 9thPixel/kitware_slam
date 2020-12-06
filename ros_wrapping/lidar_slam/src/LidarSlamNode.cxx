@@ -694,4 +694,9 @@ void LidarSlamNode::SetSlamParameters(ros::NodeHandle& priv_nh)
   SetKeypointsExtractorParam(double, "slam/ke/edge_depth_gap_threshold", EdgeDepthGapThreshold)
   SetKeypointsExtractorParam(double, "slam/ke/edge_saliency_threshold", EdgeSaliencyThreshold)
   SetKeypointsExtractorParam(double, "slam/ke/edge_intensity_gap_threshold", EdgeIntensityGapThreshold)
+  
+  std::string PathMap;
+  priv_nh.getParam("slam/maps_path", PathMap);
+  if(!PathMap.empty())
+    LidarSlam.LoadMapsFromPCD(PathMap, false);
 }
