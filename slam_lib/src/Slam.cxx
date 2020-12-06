@@ -494,10 +494,12 @@ void Slam::LoadMapsFromPCD(const std::string& filePrefix, bool resetMaps)
       std::cout << "SLAM keypoints map successfully loaded from " << path << std::endl;
       map->Add(keypoints);
     }
+    else
+      std::cout << "No SLAM keypoints map found in file system (path given : " << path << ")"<< std::endl;
   };
 
   loadMapFromPCD(filePrefix + "edges.pcd",   this->EdgesPointsLocalMap);
-  loadMapFromPCD(filePrefix + "planars.pcd", this->PlanarPointsLocalMap);
+  loadMapFromPCD(filePrefix + "planes.pcd", this->PlanarPointsLocalMap);
   loadMapFromPCD(filePrefix + "blobs.pcd",   this->BlobsPointsLocalMap);
 
   // TODO : load/use map origin (in which coordinates?) in title or VIEWPOINT field
