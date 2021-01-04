@@ -105,6 +105,42 @@ public:
   {
     return this->KnnSearch(queryPoint.data, knearest, knnIndices, knnSqDistances);
   }
+  
+  /**
+    * \brief Finds the neighbor points in a specified radius from a given query point in the KD-tree.
+    * \param[in] queryPoint Input point from which the neighborhood is extracted.
+    * \param[in] radius distance in meters for neighborhood definition.
+    * \param[out] IndicesDistances neighbor indices and relative squared distances from the query point.
+    * \return Number `N` of neighbors found.
+    */
+  inline size_t RadiusSearch(const float queryPoint[3], float radius, std::vector<std::pair<int, float>>& IndicesDistances) const
+  {
+    // Find nearest neighbors
+    nanoflann::SearchParams params;
+    return this->Index->radiusSearch(queryPoint, radius*radius, IndicesDistances, params);
+  }
+  
+  /**
+    * \brief Finds the neighbor points in a specified radius from a given query point in the KD-tree.
+    * \param[in] queryPoint Input point from which the neighborhood is extracted.
+    * \param[in] radius distance in meters for neighborhood definition.
+    * \param[out] radiusIndices neighbor indices.
+    * \param[out] radiusSqDistances neighbors squared distances from query point.
+    * \return Number `N` of neighbors found.
+    */
+  inline size_t RadiusSearch(const float queryPoint[3], float radius, std::vector<int>& radiusIndices, std::vector<float>& radiusSqDistances) const
+  {
+    std::vector<std::pair<int, float>> indicesSqDistances;
+    size_t kneighbors = this->RadiusSearch(queryPoint[3], radius, indicesSqDistances);
+    radiusIndices.reserve(kneighbors);
+    radiusSqDistances.reserve(kneighbors);
+    for(const std::pair<int,float>& idxDist : indicesSqDistances)
+    {
+      radiusIndices.push_back(idxDist.first);
+      radiusSqDistances.push_back(idxDist.second);
+    }
+    return kneighbors;
+  }
 
   /**
     * \brief Get the input pointcloud.
