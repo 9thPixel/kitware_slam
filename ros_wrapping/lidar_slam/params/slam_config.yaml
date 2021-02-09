@@ -162,8 +162,11 @@ slam:
     plane_distance_nbr_neighbors: 5     # Number of nearest neighbors to look for in map to build plane model.
     plane_distance_factor1: 35.         # PCA eigenvalues ratio to consider a neighborhood fits a plane model :
     plane_distance_factor2: 8.          #   V2 < factor2 * V1  and  V1 > factor1 * V0
+    blob_distance_nbr_neighbors: 10     # Number of nearest neighbors to look for in map to build blob model.
+    blob_distance_factor: 10.           # PCA eigenvalues ratio to consider a neighborhood fits an ellipsoid (V2 < factor * V1).
     max_line_distance: 0.2              # [m] Max distance to line model allowed to keep neighborhood.
     max_plane_distance: 0.2             # [m] Max distance to plane model allowed to keep neighborhood.
+    max_blob_distance: 1.0              # [m] Max distance to blob model allowed to keep neighborhood.
     init_saturation_distance: 2.        # Initial distance beyon which residuals are saturated using Tukey loss to limit outlier contribution.
     final_saturation_distance: 0.5      # Final distance beyon which residuals are saturated using Tukey loss to limit outlier contribution.
 
@@ -171,7 +174,7 @@ slam:
   voxel_grid:
     leaf_size_edges: 0.30   # [m] Resolution used to downsample the edges map with a VoxelGrid filter.
     leaf_size_planes: 0.60  # [m] Resolution used to downsample the planes map with a VoxelGrid filter.
-    leaf_size_blobs: 0.30   # [m] Resolution used to downsample the blobs map with a VoxelGrid filter.
+    leaf_size_blobs: 0.60   # [m] Resolution used to downsample the blobs map with a VoxelGrid filter.
     size: 50                # [voxels] Size of the voxel grid used to store keypoints maps : n*n*n voxels.
     resolution: 10.         # [m/voxel] Resolution of a voxel.
 
