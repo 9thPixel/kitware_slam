@@ -84,7 +84,9 @@ public:
     double PlaneDistancefactor2 = 8.0;  //<     V1 >= factor1 * V0 and V2 <= factor2 * V1
     double MaxPlaneDistance = 0.2; //< maximum distance between keypoints and their computed plane
 
-    unsigned int BlobDistanceNbrNeighbors = 25; //< number of blob neighbors required to approximate the corresponding ellipsoid
+    unsigned int BlobDistanceNbrNeighbors = 15; //< number of blob neighbors required to approximate the corresponding ellipsoid
+    double BlobDistancefactor = 10.; //< PCA eigenvalues ratio to consider a neighborhood fits an ellipsoid model : V2 <= factor * V0
+    double MaxBlobDistance = 1.; //< maximum distance between keypoints and their computed ellipsoid
 
     // **** LM optimization Parameters ****
 

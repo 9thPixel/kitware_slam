@@ -146,7 +146,7 @@ Slam::Slam()
   this->SetVoxelGridSize(50);
   this->SetVoxelGridLeafSizeEdges(0.30);
   this->SetVoxelGridLeafSizePlanes(0.60);
-  this->SetVoxelGridLeafSizeBlobs(0.30);
+  this->SetVoxelGridLeafSizeBlobs(0.60);
 
   // Reset SLAM internal state
   this->Reset();
@@ -1045,6 +1045,8 @@ void Slam::Localization()
     optimParams.PlaneDistancefactor2 = this->LocalizationPlaneDistancefactor2;
     optimParams.MaxPlaneDistance = this->LocalizationMaxPlaneDistance;
     optimParams.BlobDistanceNbrNeighbors = this->LocalizationBlobDistanceNbrNeighbors;
+    optimParams.BlobDistancefactor = this->LocalizationBlobDistancefactor;
+    optimParams.MaxBlobDistance = this->LocalizationMaxBlobDistance;
     optimParams.LMMaxIter = this->LocalizationLMMaxIter;
     double iterRatio = icpIter / static_cast<double>(this->LocalizationICPMaxIter);
     optimParams.SaturationDistance = (1 - iterRatio) * this->LocalizationInitSaturationDistance + iterRatio * this->LocalizationFinalSaturationDistance;

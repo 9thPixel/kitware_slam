@@ -313,11 +313,20 @@ public:
   GetMacro(LocalizationPlaneDistancefactor2, double)
   SetMacro(LocalizationPlaneDistancefactor2, double)
 
+  GetMacro(LocalizationBlobDistanceNbrNeighbors, unsigned int)
+  SetMacro(LocalizationBlobDistanceNbrNeighbors, unsigned int)
+
+  GetMacro(LocalizationBlobDistancefactor, double)
+  SetMacro(LocalizationBlobDistancefactor, double)
+
   GetMacro(LocalizationMaxLineDistance, double)
   SetMacro(LocalizationMaxLineDistance, double)
 
   GetMacro(LocalizationMaxPlaneDistance, double)
   SetMacro(LocalizationMaxPlaneDistance, double)
+
+  GetMacro(LocalizationMaxBlobDistance, double)
+  SetMacro(LocalizationMaxBlobDistance, double)
 
   GetMacro(LocalizationInitSaturationDistance, double)
   SetMacro(LocalizationInitSaturationDistance, double)
@@ -506,12 +515,11 @@ private:
   // If the distance is over this limit, no match residual will be built.
   double MaxDistanceForICPMatching = 5.;
 
-  // Maximum number of iteration
-  // in the ego motion optimization step
-  unsigned int EgoMotionLMMaxIter = 15;
+  // Min number of keypoints that have been matched to run optimization
+  double MinNbrMatchedKeypoints = 20.;  // TODO : set from user interface ?
 
-  // Maximum number of iteration
-  // in the localization optimization step
+  // Maximum number of iteration of the LM optimization step
+  unsigned int EgoMotionLMMaxIter = 15;
   unsigned int LocalizationLMMaxIter = 15;
 
   // During the Levenberg-Marquardt algoritm
@@ -537,10 +545,12 @@ private:
   double LocalizationPlaneDistancefactor1 = 35.0;
   double LocalizationPlaneDistancefactor2 = 8.0;
 
-  double LocalizationMaxPlaneDistance = 0.2;
-  double LocalizationMaxLineDistance = 0.2;
+  unsigned int LocalizationBlobDistanceNbrNeighbors = 10;
+  double LocalizationBlobDistancefactor = 1.0;
 
-  unsigned int LocalizationBlobDistanceNbrNeighbors = 25.;  // TODO : set from user interface
+  double LocalizationMaxLineDistance = 0.2;
+  double LocalizationMaxPlaneDistance = 0.2;
+  double LocalizationMaxBlobDistance = 1.;
 
   unsigned int EgoMotionLineDistanceNbrNeighbors = 8;
   unsigned int EgoMotionMinimumLineNeighborRejection = 3;
@@ -552,8 +562,6 @@ private:
 
   double EgoMotionMaxPlaneDistance = 0.2;
   double EgoMotionMaxLineDistance = 0.2;
-
-  double MinNbrMatchedKeypoints = 20.;  // TODO : set from user interface
 
   // Maximum distance (in meters) beyond which the residual errors are
   // saturated to robustify the optimization against outlier constraints.

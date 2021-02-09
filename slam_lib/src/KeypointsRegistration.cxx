@@ -358,9 +358,6 @@ KeypointsRegistration::MatchingResults::MatchInfo KeypointsRegistration::BuildBl
   // ===================================================
   // Get neighboring points in previous set of keypoints
 
-  // double maxDist = this->MaxDistanceForICPMatching;  //< maximum distance between keypoints and its neighbors
-  float maxDiameter = 4.;
-
   std::vector<int> knnIndices;
   std::vector<float> knnSqDist;
   unsigned int neighborhoodSize = kdtreePreviousBlobs.KnnSearch(worldPoint.data(), this->Params.BlobDistanceNbrNeighbors, knnIndices, knnSqDist);
@@ -381,30 +378,8 @@ KeypointsRegistration::MatchingResults::MatchInfo KeypointsRegistration::BuildBl
   // Shortcut to keypoints cloud
   const PointCloud& previousBlobsPoints = *kdtreePreviousBlobs.GetInputCloud();
 
-  // ======================================
-  // Check the diameter of the neighborhood
-
-  // If the diameter is too big, we don't want to keep this blob.
-  // We must do that since the fitted ellipsoid assumes to encode the local
-  // shape of the neighborhood.
-  float squaredDiameter = 0.;
-  for (unsigned int nearestPointIndexI: knnIndices)
-  {
-    const Point& ptI = previousBlobsPoints[nearestPointIndexI];
-    for (unsigned int nearestPointIndexJ: knnIndices)
-    {
-      const Point& ptJ = previousBlobsPoints[nearestPointIndexJ];
-      float squaredDistanceIJ = (ptI.getVector3fMap() - ptJ.getVector3fMap()).squaredNorm();
-      squaredDiameter = std::max(squaredDiameter, squaredDistanceIJ);
-    }
-  }
-  if (squaredDiameter > maxDiameter * maxDiameter)
-  {
-    return { MatchingResults::MatchStatus::MSE_TOO_LARGE, 0. };
-  }
-
-  // ======================================================
-  // Compute point-to-blob optimization parameters with PCA
+  // =======================================================
+  // Check if neighborhood is a good blob candidate with PCA
 
   // Compute PCA to determine best ellipsoid approximation of the neighborhood.
   // Thanks to the PCA we will check the shape of the neighborhood and tune a
@@ -414,11 +389,16 @@ KeypointsRegistration::MatchingResults::MatchInfo KeypointsRegistration::BuildBl
   Eigen::Matrix3d eigVecs;
   Utils::ComputeMeanAndPCA(previousBlobsPoints, knnIndices, mean, eigVecs, eigVals);
 
-  // TODO: check PCA structure
-  // if (PCA shape isn't OK)
-  // {
-  //   return { MatchingResults::MatchStatus::BAD_PCA_STRUCTURE, 0. };
-  // }
+  // If the eigen values are approximately the same, it means that the points
+  // are more or less distributed within an ellipsoid.
+  // Otherwise, discard this bad unstructured neighborhood.
+  if (eigVals(0) * this->Params.BlobDistancefactor <  eigVals(2))
+  {
+    return { MatchingResults::MatchStatus::BAD_PCA_STRUCTURE, 0. };
+  }
+
+  // ======================================================
+  // Compute point-to-blob optimization parameters with PCA
 
   // The inverse of the covariance matrix encodes the mahalanobis distance.
   // Rescale the eigen values to preserve the shape of the mahalanobis distance,
@@ -428,19 +408,35 @@ KeypointsRegistration::MatchingResults::MatchInfo KeypointsRegistration::BuildBl
   Eigen::Matrix3d A = eigVecs * eigValsInv.asDiagonal() * eigVecs.transpose();
 
   // Check the determinant of the matrix
-  if (!std::isfinite(eigValsInv.prod()))
+  if (!std::isfinite(A(0, 0)) || !std::isfinite(eigValsInv.prod()))
   {
     return { MatchingResults::MatchStatus::INVALID_NUMERICAL, 0. };
   }
+
+  // Evaluate the distance from the fitted ellispoid distribution of the neighborhood
+  double meanSquaredDist = 0.;
+  double squaredMaxDist = this->Params.MaxBlobDistance * this->Params.MaxBlobDistance;
+  for (unsigned int nearestPointIndex: knnIndices)
+  {
+    const Point& pt = previousBlobsPoints[nearestPointIndex];
+    Eigen::Vector3d Xtemp(pt.x, pt.y, pt.z);
+    double squaredDist = (Xtemp - mean).transpose() * A * (Xtemp - mean);
+    // CHECK invalidate all neighborhood even if only one point is bad?
+    if (squaredDist > squaredMaxDist)
+    {
+      return { MatchingResults::MatchStatus::MSE_TOO_LARGE, 0. };
+    }
+    meanSquaredDist += squaredDist;
+  }
+  meanSquaredDist /= static_cast<double>(neighborhoodSize);
 
   // ===========================================
   // Add valid parameters for later optimization
 
   // Quality score of the point-to-blob match
-  // The aim is to prevent wrong matching pulling the pointcloud in a bad direction.
-  double fitQualityCoeff = 1.0;//1.0 - knnSqDist.back() / maxDist;
+  double fitQualityCoeff =  1.0 - std::sqrt(meanSquaredDist / squaredMaxDist);
 
-  // store the distance parameters values
+  // Store the distance parameters values
   this->AddIcpResidual(A, mean, localPoint, fitQualityCoeff);
 
   return { MatchingResults::MatchStatus::SUCCESS, fitQualityCoeff };
