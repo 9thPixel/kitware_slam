@@ -286,6 +286,7 @@ int vtkSlam::RequestData(vtkInformation* vtkNotUsed(request),
     {
       auto* edgePoints = vtkPolyData::GetData(outputVector, EDGE_KEYPOINTS_OUTPUT_PORT);
       auto* planarPoints = vtkPolyData::GetData(outputVector, PLANE_KEYPOINTS_OUTPUT_PORT);
+      auto* blobPoints = vtkPolyData::GetData(outputVector, BLOB_KEYPOINTS_OUTPUT_PORT);
       std::unordered_map<std::string, vtkPolyData*> outputMap;
       outputMap["EgoMotion: edges matches"] = edgePoints;
       outputMap["EgoMotion: edges weights"] = edgePoints;
@@ -295,6 +296,8 @@ int vtkSlam::RequestData(vtkInformation* vtkNotUsed(request),
       outputMap["EgoMotion: planes weights"] = planarPoints;
       outputMap["Localization: planes matches"] = planarPoints;
       outputMap["Localization: planes weights"] = planarPoints;
+      outputMap["Localization: blobs matches"] = blobPoints;
+      outputMap["Localization: blobs weights"] = blobPoints;
       auto debugArray = this->SlamAlgo->GetDebugArray();
       for (const auto& it : outputMap)
       {

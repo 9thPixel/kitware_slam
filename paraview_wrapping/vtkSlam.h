@@ -190,11 +190,20 @@ public:
   vtkCustomGetMacro(LocalizationPlaneDistancefactor2, double)
   vtkCustomSetMacro(LocalizationPlaneDistancefactor2, double)
 
+  vtkCustomGetMacro(LocalizationBlobDistanceNbrNeighbors, unsigned int)
+  vtkCustomSetMacro(LocalizationBlobDistanceNbrNeighbors, unsigned int)
+
+  vtkCustomGetMacro(LocalizationBlobDistancefactor, double)
+  vtkCustomSetMacro(LocalizationBlobDistancefactor, double)
+
   vtkCustomGetMacro(LocalizationMaxLineDistance, double)
   vtkCustomSetMacro(LocalizationMaxLineDistance, double)
 
   vtkCustomGetMacro(LocalizationMaxPlaneDistance, double)
   vtkCustomSetMacro(LocalizationMaxPlaneDistance, double)
+
+  vtkCustomGetMacro(LocalizationMaxBlobDistance, double)
+  vtkCustomSetMacro(LocalizationMaxBlobDistance, double)
 
   vtkCustomGetMacro(LocalizationInitSaturationDistance, double)
   vtkCustomSetMacro(LocalizationInitSaturationDistance, double)
