@@ -289,13 +289,16 @@
       <!-- ==================== General ==================== -->
 
       <IntVectorProperty
-          name="Fast Slam"
-          command="SetFastSlam"
-          default_values="1"
+          name="Use blobs"
+          command="SetUseBlobs"
+          default_values="0"
           number_of_elements="1">
         <BooleanDomain name="bool" />
         <Documentation>
-          If enabled, blobs keypoints are not used.
+          Enable the usage of blob keypoints.
+          Blob points only bring little and approximate constraints. They should
+          only be used when there is really nothing else around (~grass or bushes).
+          Enabling blobs also leads to slower processing time.
         </Documentation>
       </IntVectorProperty>
 
@@ -398,7 +401,7 @@
       </IntVectorProperty>
 
       <PropertyGroup label="General Parameters">
-        <Property name="Fast Slam" />
+        <Property name="Use blobs" />
         <Property name="Verbosity level" />
         <Property name="Ego-Motion mode" />
         <Property name="Undistortion mode" />

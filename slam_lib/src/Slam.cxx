@@ -365,7 +365,7 @@ void Slam::RunPoseGraphOptimization(const std::vector<Transform>& gpsPositions,
     // Transform frame keypoints to world coordinates
     const auto& logEdges = this->LogEdgesPoints[i].GetCloud();
     const auto& logPlanes = this->LogPlanarsPoints[i].GetCloud();
-    const auto& logBlobs = !this->FastSlam ? this->LogBlobsPoints[i].GetCloud() : PointCloud::Ptr(new PointCloud);
+    const auto& logBlobs = this->UseBlobs ? this->LogBlobsPoints[i].GetCloud() : PointCloud::Ptr(new PointCloud);
     if (this->Undistortion && i >= 1)
     {
       // Init the undistortion interpolator
@@ -422,7 +422,7 @@ void Slam::RunPoseGraphOptimization(const std::vector<Transform>& gpsPositions,
   };
   updateMap(*this->EdgesPointsLocalMap, edgesKeypoints, aggregatedEdgesMap);
   updateMap(*this->PlanarPointsLocalMap, planarsKeypoints, aggregatedPlanarsMap);
-  if (!this->FastSlam)
+  if (this->UseBlobs)
     updateMap(*this->BlobsPointsLocalMap, blobsKeypoints, aggregatedBlobsMap);
 
   // Processing duration
@@ -801,7 +801,7 @@ void Slam::ExtractKeypoints()
     Eigen::Isometry3d baseToLidar = this->GetBaseToLidarOffset(lidarDevice);
     AddBaseKeypoints(this->CurrentRawEdgesPoints,   ke->GetEdgePoints(),   baseToLidar);
     AddBaseKeypoints(this->CurrentRawPlanarsPoints, ke->GetPlanarPoints(), baseToLidar);
-    if (!this->FastSlam)
+    if (this->UseBlobs)
       AddBaseKeypoints(this->CurrentRawBlobsPoints, ke->GetBlobPoints(),   baseToLidar);
   }
 
@@ -1002,7 +1002,7 @@ void Slam::Localization()
     #pragma omp section
     extractMapKeypointsAndBuildKdTree(this->CurrentPlanarsPoints, *this->PlanarPointsLocalMap, subPlanarPointsLocalMap, kdtreePlanes);
     #pragma omp section
-    if (!this->FastSlam)
+    if (this->UseBlobs)
       extractMapKeypointsAndBuildKdTree(this->CurrentBlobsPoints, *this->BlobsPointsLocalMap, subBlobPointsLocalMap, kdtreeBlobs);
   }
 
@@ -1145,7 +1145,7 @@ void Slam::UpdateMapsUsingTworld()
     #pragma omp section
     updateMap(this->PlanarPointsLocalMap, this->CurrentPlanarsPoints, this->CurrentWorldPlanarsPoints);
     #pragma omp section
-    if (!this->FastSlam)
+    if (this->UseBlobs)
       updateMap(this->BlobsPointsLocalMap, this->CurrentBlobsPoints, this->CurrentWorldBlobsPoints);
   }
 }
@@ -1161,7 +1161,7 @@ void Slam::LogCurrentFrameState(double time, const std::string& frameId)
     this->LogCovariances.emplace_back(Utils::Matrix6dToStdArray36(this->LocalizationUncertainty.Covariance));
     this->LogEdgesPoints.emplace_back(this->CurrentRawEdgesPoints, this->LoggingStorage);
     this->LogPlanarsPoints.emplace_back(this->CurrentRawPlanarsPoints, this->LoggingStorage);
-    if (!this->FastSlam)
+    if (this->UseBlobs)
       this->LogBlobsPoints.emplace_back(this->CurrentRawBlobsPoints, this->LoggingStorage);
 
     // If a timeout is defined, forget too old data
@@ -1175,7 +1175,7 @@ void Slam::LogCurrentFrameState(double time, const std::string& frameId)
         this->LogCovariances.pop_front();
         this->LogEdgesPoints.pop_front();
         this->LogPlanarsPoints.pop_front();
-        if (!this->FastSlam)
+        if (this->UseBlobs)
           this->LogBlobsPoints.pop_front();
       }
     }

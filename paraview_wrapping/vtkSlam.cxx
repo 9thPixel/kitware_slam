@@ -324,7 +324,7 @@ void vtkSlam::PrintSelf(ostream& os, vtkIndent indent)
   vtkIndent paramIndent = indent.GetNextIndent();
   #define PrintParameter(param) os << paramIndent << #param << "\t" << this->SlamAlgo->Get##param() << std::endl;
 
-  PrintParameter(FastSlam)
+  PrintParameter(UseBlobs)
   PrintParameter(Undistortion)
   PrintParameter(NbThreads)
   PrintParameter(Verbosity)

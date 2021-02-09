@@ -73,7 +73,12 @@ gps:
 slam:
 
   n_threads: 8      # Max number of threads to use for parallel processing (default: 1)
-  fast_slam: true   # Use only edge and planar keypoints (do not use blob keypoints)
+
+  # Enable the usage of blob keypoints.
+  # Blob points only bring little and approximate constraints. They should only
+  # be used when there is nothing else around (~grass or bushes).
+  # Enabling blobs also leads to slower processing time.
+  use_blobs: false
 
   # How to estimate Ego-Motion (approximate relative motion since last frame).
   # The ego-motion step aims to give a fast and approximate initialization of new

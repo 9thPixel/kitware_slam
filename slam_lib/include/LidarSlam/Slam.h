@@ -198,8 +198,8 @@ public:
   SetMacro(Verbosity, int)
   GetMacro(Verbosity, int)
 
-  GetMacro(FastSlam, bool)
-  SetMacro(FastSlam, bool)
+  GetMacro(UseBlobs, bool)
+  SetMacro(UseBlobs, bool)
 
   SetMacro(EgoMotion, EgoMotionMode)
   GetMacro(EgoMotion, EgoMotionMode)
@@ -355,11 +355,11 @@ private:
   // Max number of threads to use for parallel processing
   int NbThreads = 1;
 
-  // If set to true the "Localization" step planars keypoints used
-  // will be the same than the "EgoMotion" step ones. If set to false
-  // all points that are not set to invalid will be used
-  // as "Localization" step planars points.
-  bool FastSlam = true;
+  // Enable the usage of blob keypoints.
+  // Blob points only bring little and approximate constraints. They should only
+  // be used when there is nothing else around (~grass or bushes).
+  // Enabling blobs also leads to slower processing time.
+  bool UseBlobs = false;
 
   // How to estimate Ego-Motion (approximate relative motion since last frame).
   // The ego-motion step aims to give a fast and approximate initialization of
