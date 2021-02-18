@@ -177,10 +177,8 @@ void SpinningSensorKeypointExtractor::PrepareDataForNextFrame()
   Utils::CopyPointCloudMetadata(*this->pclCurrentFrame, *this->BlobsPoints);
 
   // Initialize the features vectors with the correct length
-  this->Angles.resize(this->NLasers);
-  this->Saliency.resize(this->NLasers);
-  this->DepthGap.resize(this->NLasers);
-  this->IntensityGap.resize(this->NLasers);
+  this->Curvature.resize(this->NLasers);
+  this->IntensityGrad.resize(this->NLasers);
   this->IsPointValid.resize(this->NLasers);
   this->Label.resize(this->NLasers);
 
@@ -191,10 +189,8 @@ void SpinningSensorKeypointExtractor::PrepareDataForNextFrame()
     size_t nbPoint = this->pclCurrentFrameByScan[scanLine]->size();
     this->IsPointValid[scanLine].assign(nbPoint, KeypointFlags().set());  // set all flags to 1
     this->Label[scanLine].assign(nbPoint, KeypointFlags().reset());  // set all flags to 0
-    this->Angles[scanLine].assign(nbPoint, 0.);
-    this->Saliency[scanLine].assign(nbPoint, 0.);
-    this->DepthGap[scanLine].assign(nbPoint, 0.);
-    this->IntensityGap[scanLine].assign(nbPoint, 0.);
+    this->Curvature[scanLine].assign(nbPoint, 0.);
+    this->IntensityGrad[scanLine].assign(nbPoint, 0.);
   }
 }
 
@@ -310,13 +306,8 @@ void SpinningSensorKeypointExtractor::InvalidPointWithBadCriteria()
 //-----------------------------------------------------------------------------
 void SpinningSensorKeypointExtractor::ComputeCurvature()
 {
-  const float sqDistToLineThreshold = this->DistToLineThreshold * this->DistToLineThreshold;  // [m²]
-  const float sqDepthDistCoeff = 0.25;
-  const float minDepthGapDist = 1.5;  // [m]
-
-  // loop over scans lines
-  #pragma omp parallel for num_threads(this->NbThreads) schedule(guided) \
-          firstprivate(sqDistToLineThreshold, sqDepthDistCoeff, minDepthGapDist)
+  // Loop over scans lines
+  #pragma omp parallel for num_threads(this->NbThreads) schedule(guided)
   for (int scanLine = 0; scanLine < static_cast<int>(this->NLasers); ++scanLine)
   {
     // Useful shortcuts
@@ -339,133 +330,21 @@ void SpinningSensorKeypointExtractor::ComputeCurvature()
         continue;
       }
 
-      // central point
-      const Point& currentPoint = scanLineCloud[index];
-      const Eigen::Vector3f centralPoint = currentPoint.getVector3fMap();
-
-      // compute intensity gap
+      // 1_ Compute intensity gradient
       // CHECK : do not use currentPoint.intensity?
       const Point& previousPoint = scanLineCloud[index - 1];
-      const Point& nextPoint = scanLineCloud[index + 1];
-      this->IntensityGap[scanLine][index] = std::abs(nextPoint.intensity - previousPoint.intensity);
+      const Point& nextPoint     = scanLineCloud[index + 1];
+      this->IntensityGrad[scanLine][index] = std::abs(nextPoint.intensity - previousPoint.intensity);
 
-      // We will compute the line that fits the neighbors located before the current point.
-      // We will do the same for the neighbors located after the current point.
-      // We will then compute the angle between these two lines as an approximation
-      // of the "sharpness" of the current point.
-      std::vector<int> leftNeighbors(this->NeighborWidth);
-      std::vector<int> rightNeighbors(this->NeighborWidth);
-      LineFitting leftLine, rightLine;
-
-      // Fill left and right neighborhoods, from central point to sides.
-      // /!\ The way the neighbors are added to the vectors matters,
-      // especially when computing the saliency
-      for (int j = index - 1; j >= index - this->NeighborWidth; --j)
-        leftNeighbors[index - 1 - j] = j;
-      for (int j = index + 1; j <= index + this->NeighborWidth; ++j)
-        rightNeighbors[j - index - 1] = j;
-
-      // Fit line on the left and right neighborhoods and
-      // Indicate if they are flat or not
-      const bool leftFlat = leftLine.FitPCAAndCheckConsistency(scanLineCloud, leftNeighbors);
-      const bool rightFlat = rightLine.FitPCAAndCheckConsistency(scanLineCloud, rightNeighbors);
-
-      // Measurement of the depth gap
-      float distLeft = 0., distRight = 0.;
-
-      // If both neighborhoods are flat, we can compute the angle between them
-      // as an approximation of the sharpness of the current point
-      if (leftFlat && rightFlat)
-      {
-        // We check that the current point is not too far from its
-        // neighborhood lines. This is because we don't want a point
-        // to be considered as an angle point if it is due to gap
-        distLeft = leftLine.SquaredDistanceToPoint(centralPoint);
-        distRight = rightLine.SquaredDistanceToPoint(centralPoint);
-
-        // If current point is not too far from estimated lines,
-        // save the sin of angle between these two lines
-        if ((distLeft < sqDistToLineThreshold) && (distRight < sqDistToLineThreshold))
-          this->Angles[scanLine][index] = (leftLine.Direction.cross(rightLine.Direction)).norm();
-      }
-
-      // Here one side of the neighborhood is non flat.
-      // Hence it is not worth to estimate the sharpness.
-      // Only the gap will be considered here.
-      // CHECK : looks strange to estimate depth gap without considering current point
-      else if (!leftFlat && rightFlat)
-      {
-        distLeft = std::numeric_limits<float>::max();
-        for (const auto& leftNeighborId: leftNeighbors)
-        {
-          const auto& leftNeighbor = scanLineCloud[leftNeighborId].getVector3fMap();
-          distLeft = std::min(distLeft, rightLine.SquaredDistanceToPoint(leftNeighbor));
-        }
-        distLeft *= sqDepthDistCoeff;
-      }
-      else if (leftFlat && !rightFlat)
-      {
-        distRight = std::numeric_limits<float>::max();
-        for (const auto& rightNeighborId: rightNeighbors)
-        {
-          const auto& rightNeighbor = scanLineCloud[rightNeighborId].getVector3fMap();
-          distRight = std::min(distRight, leftLine.SquaredDistanceToPoint(rightNeighbor));
-        }
-        distRight *= sqDepthDistCoeff;
-      }
-
-      // No neighborhood is flat.
-      // We will compute saliency of the current keypoint from its far neighbors.
-      else
-      {
-        // Compute salient point score
-        const float sqCurrDepth = centralPoint.squaredNorm();
-        bool hasLeftEncounteredDepthGap = false;
-        bool hasRightEncounteredDepthGap = false;
-
-        std::vector<int> farNeighbors;
-        farNeighbors.reserve(2 * this->NeighborWidth);
-
-        // The salient point score is the distance between the current point
-        // and the points that have a depth gap with the current point
-        // CHECK : consider only consecutive far neighbors, starting from the central point.
-        for (const auto& leftNeighborId: leftNeighbors)
-        {
-          // Left neighborhood depth gap computation
-          if (std::abs(scanLineCloud[leftNeighborId].getVector3fMap().squaredNorm() - sqCurrDepth) > minDepthGapDist)
-          {
-            hasLeftEncounteredDepthGap = true;
-            farNeighbors.emplace_back(leftNeighborId);
-          }
-          else if (hasLeftEncounteredDepthGap)
-            break;
-        }
-        for (const auto& rightNeighborId: rightNeighbors)
-        {
-          // Right neigborhood depth gap computation
-          if (std::abs(scanLineCloud[rightNeighborId].getVector3fMap().squaredNorm() - sqCurrDepth) > minDepthGapDist)
-          {
-            hasRightEncounteredDepthGap = true;
-            farNeighbors.emplace_back(rightNeighborId);
-          }
-          else if (hasRightEncounteredDepthGap)
-            break;
-        }
-
-        // If there are enough neighbors with a big depth gap,
-        // we propose to compute the saliency of the current point
-        // as the distance between the line that roughly fits the far neighbors
-        // with a depth gap and the current point
-        if (farNeighbors.size() > static_cast<unsigned int>(this->NeighborWidth))
-        {
-          LineFitting farNeighborsLine;
-          farNeighborsLine.FitPCA(scanLineCloud, farNeighbors);
-          this->Saliency[scanLine][index] = farNeighborsLine.SquaredDistanceToPoint(centralPoint);
-        }
-      }
-
-      // Store max depth gap
-      this->DepthGap[scanLine][index] = std::max(distLeft, distRight);
+      // 2_ Estimate curvature
+      // Init curvature value
+      this->Curvature[scanLine][index] = 0.f;
+      // Apply kernel [1 1 ... 1 1 -N 1 1 ... 1 1 ] (size N + 1) to neighborhood depths
+      // Loop over neighbors
+      for (int n = index - this->NeighborWidth; n <= index + this->NeighborWidth; ++n)
+        this->Curvature[scanLine][index] += scanLineCloud[n].getVector3fMap().norm();
+      this->Curvature[scanLine][index] -= (2 * this->NeighborWidth + 1) * scanLineCloud[index].getVector3fMap().norm();
+      this->Curvature[scanLine][index] = std::abs(this->Curvature[scanLine][index]);
     }
   }
 }
@@ -473,12 +352,8 @@ void SpinningSensorKeypointExtractor::ComputeCurvature()
 //-----------------------------------------------------------------------------
 void SpinningSensorKeypointExtractor::SetKeyPointsLabels()
 {
-  const float sqEdgeSaliencythreshold = this->EdgeSaliencyThreshold * this->EdgeSaliencyThreshold;
-  const float sqEdgeDepthGapThreshold = this->EdgeDepthGapThreshold * this->EdgeDepthGapThreshold;
-
-  // loop over the scan lines
-  #pragma omp parallel for num_threads(this->NbThreads) schedule(guided) \
-          firstprivate(sqEdgeSaliencythreshold, sqEdgeDepthGapThreshold)
+  // Loop over the scan lines
+  #pragma omp parallel for num_threads(this->NbThreads) schedule(guided)
   for (int scanLine = 0; scanLine < static_cast<int>(this->NLasers); ++scanLine)
   {
     const int Npts = this->pclCurrentFrameByScan[scanLine]->size();
@@ -489,14 +364,12 @@ void SpinningSensorKeypointExtractor::SetKeyPointsLabels()
       continue;
     }
 
-    // Sort the curvature score in a decreasing order
-    std::vector<size_t> sortedDepthGapIdx  = Utils::SortIdx(this->DepthGap[scanLine]);
-    std::vector<size_t> sortedAnglesIdx    = Utils::SortIdx(this->Angles[scanLine]);
-    std::vector<size_t> sortedSaliencyIdx  = Utils::SortIdx(this->Saliency[scanLine]);
-    std::vector<size_t> sortedIntensityGap = Utils::SortIdx(this->IntensityGap[scanLine]);
+    // Sort the curvature/intensity scores in a decreasing order
+    std::vector<size_t> sortedCurvatureIdx     = Utils::SortIdx(this->Curvature[scanLine]);
+    std::vector<size_t> sortedIntensityGradIdx = Utils::SortIdx(this->IntensityGrad[scanLine]);
 
-    // Add edge according to criterion
-    auto addEdgesUsingCriterion = [this, scanLine, Npts](const std::vector<size_t>& sortedValuesIdx,
+    // 1_ Set edge keypoints labels
+    auto labelEdgesUsingCriterion = [this, scanLine, Npts](const std::vector<size_t>& sortedValuesIdx,
                                                          const std::vector<std::vector<float>>& values,
                                                          float threshold,
                                                          int invalidNeighborhoodSize)
@@ -515,31 +388,28 @@ void SpinningSensorKeypointExtractor::SetKeyPointsLabels()
         // Else indicate that the point is an edge
         this->Label[scanLine][index].set(Keypoint::EDGE);
 
-        // Invalid its neighbors
+        // Invalidate the point and its neighbors for EDGE search
         const int indexBegin = std::max(0,        static_cast<int>(index - invalidNeighborhoodSize));
         const int indexEnd   = std::min(Npts - 1, static_cast<int>(index + invalidNeighborhoodSize));
         for (int j = indexBegin; j <= indexEnd; ++j)
           this->IsPointValid[scanLine][j].reset(Keypoint::EDGE);
+        // Invalidate the point for all future keypoints type search
+        this->IsPointValid[scanLine][index].reset();
       }
     };
 
-    // Edges using depth gap
-    addEdgesUsingCriterion(sortedDepthGapIdx, this->DepthGap, sqEdgeDepthGapThreshold, this->NeighborWidth - 1);
-    // Edges using angles
-    addEdgesUsingCriterion(sortedAnglesIdx, this->Angles, this->EdgeSinAngleThreshold, this->NeighborWidth);
-    // Edges using saliency
-    addEdgesUsingCriterion(sortedSaliencyIdx, this->Saliency, sqEdgeSaliencythreshold, this->NeighborWidth - 1);
-    // Edges using intensity
-    addEdgesUsingCriterion(sortedIntensityGap, this->IntensityGap, this->EdgeIntensityGapThreshold, 1);
-
-    // Planes (using angles)
-    for (int k = Npts - 1; k >= 0; --k)
+    // Extract edge keypoints using curvature
+    labelEdgesUsingCriterion(sortedCurvatureIdx, this->Curvature, this->EdgeCurvatureThreshold, this->NeighborWidth);
+    // Extract edge keypoints using intensity
+    labelEdgesUsingCriterion(sortedIntensityGradIdx, this->IntensityGrad, this->EdgeIntensityGradThreshold, 1);
+    
+    // 2_ Set plane keypoints label
+    for (int i = int(Npts - 1); i>= 0; --i)
     {
-      size_t index = sortedAnglesIdx[k];
-      const float sinAngle = this->Angles[scanLine][index];
-
-      // thresh
-      if (sinAngle > this->PlaneSinAngleThreshold)
+      int index = sortedCurvatureIdx[i];
+      // Check criterion threshold
+      // If criterion is not respected, break loop as indices are analysed in value increasing order.
+      if (this->Curvature[scanLine][index] > this->PlaneCurvatureThreshold)
         break;
 
       // if the point is invalid as plane, continue
@@ -549,26 +419,32 @@ void SpinningSensorKeypointExtractor::SetKeyPointsLabels()
       // else indicate that the point is a planar one
       this->Label[scanLine][index].set(Keypoint::PLANE);
 
-      // Invalid its neighbors so that we don't have too
-      // many planar keypoints in the same region. This is
-      // required because of the k-nearest search + plane
-      // approximation realized in the odometry part. Indeed,
-      // if all the planar points are on the same scan line the
-      // problem is degenerated since all the points are distributed
-      // on a line.
-      const int indexBegin = std::max(0,        static_cast<int>(index - 4));
-      const int indexEnd   = std::min(Npts - 1, static_cast<int>(index + 4));
+      // Invalidate the point and its neighbors for PLANE search
+      const int indexBegin = std::max(0,        static_cast<int>(index - this->NeighborWidth));
+      const int indexEnd   = std::min(Npts - 1, static_cast<int>(index + this->NeighborWidth));
       for (int j = indexBegin; j <= indexEnd; ++j)
         this->IsPointValid[scanLine][j].reset(Keypoint::PLANE);
+      // Invalidate the point for all future keypoints type search
+      this->IsPointValid[scanLine][index].reset();
     }
 
-    // Blobs Points
-    // CHECK : why using only 1 point over 3?
-    // TODO : disable blobs if not required
-    for (int index = 0; index < Npts; index += 3)
+    // 3_ Set blob keypoints labels
+    for (int index = 0; index < Npts; ++index)
     {
-      if (this->IsPointValid[scanLine][index][Keypoint::BLOB])
-        this->Label[scanLine][index].set(Keypoint::BLOB);
+      // If the point is invalid as blob, continue
+      if (!this->IsPointValid[scanLine][index][Keypoint::BLOB])
+        continue;
+
+      // Else indicate that the point is a blob
+      this->Label[scanLine][index].set(Keypoint::BLOB);
+
+      // Invalidate the point and its neighbors for BLOB search
+      const int indexBegin = std::max(0,        static_cast<int>(index - this->NeighborWidth));
+      const int indexEnd   = std::min(Npts - 1, static_cast<int>(index + this->NeighborWidth));
+      for (int j = indexBegin; j <= indexEnd; ++j)
+        this->IsPointValid[scanLine][j].reset(Keypoint::BLOB);
+      // Invalidate the point for all future keypoints type search
+      this->IsPointValid[scanLine][index].reset();
     }
   }
 
@@ -580,10 +456,7 @@ void SpinningSensorKeypointExtractor::SetKeyPointsLabels()
       for (unsigned int index = 0; index < scanLineCloud.size(); ++index)
       {
         if (this->Label[scanLine][index][type])
-        {
-          this->IsPointValid[scanLine][index].set(type);
           keypoints->push_back(scanLineCloud[index]);
-        }
       }
     }
   };
@@ -622,10 +495,8 @@ std::unordered_map<std::string, std::vector<float>> SpinningSensorKeypointExtrac
   }; // end of lambda expression
 
   std::unordered_map<std::string, std::vector<float>> map;
-  map["sin_angle"]      = get1DVector(this->Angles);
-  map["saliency"]       = get1DVector(this->Saliency);
-  map["depth_gap"]      = get1DVector(this->DepthGap);
-  map["intensity_gap"]  = get1DVector(this->IntensityGap);
+  map["curvature"]  = get1DVector(this->Curvature);
+  map["intensity_grad"]  = get1DVector(this->IntensityGrad);
   map["edge_keypoint"]  = get1DVectorFromFlag(this->Label, Keypoint::EDGE);
   map["plane_keypoint"] = get1DVectorFromFlag(this->Label, Keypoint::PLANE);
   map["blob_keypoint"]  = get1DVectorFromFlag(this->Label, Keypoint::BLOB);

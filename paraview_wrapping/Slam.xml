@@ -200,7 +200,7 @@
 
            - Trajectory : matching summary, localization error summary
 
-           - Output transformed frame : saliency, planarity, intensity gap, keypoint validity
+           - Output transformed frame : saliency, planarity, intensity grad, keypoint validity
 
            - Extracted keypoints : ICP matching results
 
@@ -1056,7 +1056,7 @@
           panel_visibility="advanced">
         <Documentation>
           Number of neighbors to use on each side of current point to estimate
-          the keypoints scores (curvature, planarity, depth gap, ...) in each
+          the keypoints scores (curvature, intensity grad, ...) in each
           scan line.
         </Documentation>
       </IntVectorProperty>
@@ -1075,71 +1075,41 @@
       </DoubleVectorProperty>
 
       <DoubleVectorProperty
-          name="Plane max sinus angle"
-          command="SetPlaneSinAngleThreshold"
-          default_values="0.5"
+          name="Plane max curvature"
+          command="SetPlaneCurvatureThreshold"
+          default_values="0.1"
           number_of_elements="1"
           panel_visibility="advanced">
         <Documentation>
-          One strategy to consider a point as a planar keypoint is to compute
-          the angle between the two lines that fit its previous and next neighborhoods.
-          If the angle is close enough to 0° or 180° (sin(Angle) low enough), we consider
-          the point as a planar keypoint.
+          One strategy to consider a point as a planar keypoint is to estimate the curvature
+          using a kernel on the neighborhood [1 1...1 1 -N 1 1...1 1 ].
+          If the curvature is low enough relatively to this threshold, the point is considered as a plane keypoint.
         </Documentation>
       </DoubleVectorProperty>
 
       <DoubleVectorProperty
-          name="Edge min sinus angle"
-          command="SetEdgeSinAngleThreshold"
-          default_values="0.86"
+          name="Edge min curvature"
+          command="SetEdgeCurvatureThreshold"
+          default_values="1"
           number_of_elements="1"
           panel_visibility="advanced">
         <Documentation>
-          One strategy to consider a point as an edge keypoint is to compute
-          the angle between the two lines that fit its previous and next neighborhoods.
-          If the angle is close enough to 90° (sin(Angle) high enough), we consider
-          the point as an edge keypoint.
+          One strategy to consider a point as a planar keypoint is to estimate the curvature
+          using a kernel on its neighborhood [1 1...1 1 -N 1 1...1 1 ]. 
+          If the curvature is high enough relatively to this threshold, the point is considered as an edge keypoint.
         </Documentation>
       </DoubleVectorProperty>
 
       <DoubleVectorProperty
-          name="Edge min saliency distance"
-          command="SetEdgeSaliencyThreshold"
-          default_values="1.5"
-          number_of_elements="1"
-          panel_visibility="advanced">
-        <Documentation>
-          One strategy to consider a point as an edge keypoint is to compute
-          the depth gap between the point and its far background neighborhood.
-          If the gap is big enough, we consider the point as an edge keypoint.
-        </Documentation>
-      </DoubleVectorProperty>
-
-      <DoubleVectorProperty
-          name="Edge min intensity gap"
-          command="SetEdgeIntensityGapThreshold"
+          name="Edge min intensity gradient"
+          command="SetEdgeIntensityGradThreshold"
           default_values="50."
           number_of_elements="1"
           panel_visibility="advanced">
         <Documentation>
-          One strategy to consider a point as an edge keypoint is to compute
-          the intensity gap between the point and its left and right neighbors.
-          If the gap is big enough, we consider the point as an edge keypoint.
-        </Documentation>
-      </DoubleVectorProperty>
-
-      <DoubleVectorProperty
-          name="Edge min depth gap"
-          command="SetEdgeDepthGapThreshold"
-          default_values="0.15"
-          number_of_elements="1"
-          panel_visibility="advanced">
-        <Documentation>
-          One strategy to consider a point as an edge keypoint is to compute
-          the gap between the point and its neighborhood, fitted by a line. Then
-          we compute the distance between the point and the fitted lines. If the
-          gap is big enough on at least one side, we consider the point as an
-          edge keypoint.
+          One strategy to consider a point as an edge keypoint is to compute its
+          intensity gradient.
+          If the gradient is high relatively to this threshold, the point is considered as an edge keypoint.
         </Documentation>
       </DoubleVectorProperty>
 
@@ -1153,18 +1123,16 @@
           Azimutal angle resolution of the Lidar sensor (radians). This angle
           resolution is used to compute an expected distance between two
           consecutives firings. From this expected distance, we can detect
-          if a point is a potential gap and start additional investigation.
+          if a point is a potential edge keypoint and start additional investigation.
         </Documentation>
       </DoubleVectorProperty>
 
       <PropertyGroup label="Spinning Sensor Keypoints Extractor parameters">
         <Property name="Neighborhood width" />
         <Property name="Min distance to sensor" />
-        <Property name="Plane max sinus angle" />
-        <Property name="Edge min sinus angle" />
-        <Property name="Edge min saliency distance" />
-        <Property name="Edge min intensity gap" />
-        <Property name="Edge min depth gap" />
+        <Property name="Plane max curvature" />
+        <Property name="Edge min curvature" />
+        <Property name="Edge min intensity gradient" />
         <Property name="Sensor's azimutal angle resolution" />
       </PropertyGroup>
 

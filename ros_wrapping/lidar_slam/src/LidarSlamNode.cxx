@@ -628,11 +628,9 @@ void LidarSlamNode::SetSlamParameters()
     SetKeypointsExtractorParam(int,   prefix + "neighbor_width", NeighborWidth)
     SetKeypointsExtractorParam(float, prefix + "min_distance_to_sensor", MinDistanceToSensor)
     SetKeypointsExtractorParam(float, prefix + "angle_resolution", AngleResolution)
-    SetKeypointsExtractorParam(float, prefix + "plane_sin_angle_threshold", PlaneSinAngleThreshold)
-    SetKeypointsExtractorParam(float, prefix + "edge_sin_angle_threshold", EdgeSinAngleThreshold)
-    SetKeypointsExtractorParam(float, prefix + "edge_depth_gap_threshold", EdgeDepthGapThreshold)
-    SetKeypointsExtractorParam(float, prefix + "edge_saliency_threshold", EdgeSaliencyThreshold)
-    SetKeypointsExtractorParam(float, prefix + "edge_intensity_gap_threshold", EdgeIntensityGapThreshold)
+    SetKeypointsExtractorParam(float, prefix + "plane_curvature_threshold", PlaneCurvatureThreshold)
+    SetKeypointsExtractorParam(float, prefix + "edge_curvature_threshold", EdgeCurvatureThreshold)
+    SetKeypointsExtractorParam(float, prefix + "edge_intensity_grad_threshold", EdgeIntensityGradThreshold)
   };
   // Multi-LiDAR devices
   std::vector<int> deviceIds;

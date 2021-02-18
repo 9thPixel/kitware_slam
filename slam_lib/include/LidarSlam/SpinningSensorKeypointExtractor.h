@@ -52,20 +52,14 @@ public:
   GetMacro(AngleResolution, float)
   SetMacro(AngleResolution, float)
 
-  GetMacro(PlaneSinAngleThreshold, float)
-  SetMacro(PlaneSinAngleThreshold, float)
+  GetMacro(PlaneCurvatureThreshold, float)
+  SetMacro(PlaneCurvatureThreshold, float)
 
-  GetMacro(EdgeSinAngleThreshold, float)
-  SetMacro(EdgeSinAngleThreshold, float)
+  GetMacro(EdgeCurvatureThreshold, float)
+  SetMacro(EdgeCurvatureThreshold, float)
 
-  GetMacro(EdgeDepthGapThreshold, float)
-  SetMacro(EdgeDepthGapThreshold, float)
-
-  GetMacro(EdgeSaliencyThreshold, float)
-  SetMacro(EdgeSaliencyThreshold, float)
-
-  GetMacro(EdgeIntensityGapThreshold, float)
-  SetMacro(EdgeIntensityGapThreshold, float)
+  GetMacro(EdgeIntensityGradThreshold, float)
+  SetMacro(EdgeIntensityGradThreshold, float)
 
   GetMacro(NLasers, int)
 
@@ -126,27 +120,13 @@ private:
   // (default value to VLP-16. We add an extra 20%)
   float AngleResolution = DEG2RAD(0.4);  // [rad]
 
-  // Sharpness threshold to select a planar keypoint
-  float PlaneSinAngleThreshold = 0.5;  // sin(30°) (selected if sin angle is less than threshold)
+  // Curvature threshold to select an edge keypoint (min curvature)
+  float EdgeCurvatureThreshold = 1.;
+  // Curvature threshold to select a plane keypoint (max curvature)
+  float PlaneCurvatureThreshold = 0.1;
 
-  // Sharpness threshold to select an edge keypoint
-  float EdgeSinAngleThreshold = 0.86;  // ~sin(60°) (selected, if sin angle is more than threshold)
-  float DistToLineThreshold = 0.20;  // [m]
-
-  // Threshold upon depth gap in neighborhood to select an edge keypoint
-  float EdgeDepthGapThreshold = 0.15;  // [m]
-
-  // Threshold upon saliency of a neighborhood to select an edge keypoint
-  float EdgeSaliencyThreshold = 1.5;  // [m]
-
-  // Threshold upon intensity gap to select an edge keypoint
-  float EdgeIntensityGapThreshold = 50.;
-
-  // Threshold upon sphericity of a neighborhood to select a blob point
-  float SphericityThreshold = 0.35;  // CHECK : unused
-
-  // Coef to apply to the incertitude radius of the blob neighborhood
-  float IncertitudeCoef = 3.0;  // CHECK : unused
+  // Threshold upon intensity gradient to select an edge keypoint
+  float EdgeIntensityGradThreshold = 50.;
 
   // ---------------------------------------------------------------------------
   //   Internal variables
@@ -160,10 +140,8 @@ private:
   using KeypointFlags = std::bitset<Keypoint::nKeypointTypes>;
 
   // Curvature and other differential operations (scan by scan, point by point)
-  std::vector<std::vector<float>> Angles;
-  std::vector<std::vector<float>> DepthGap;
-  std::vector<std::vector<float>> Saliency;
-  std::vector<std::vector<float>> IntensityGap;
+  std::vector<std::vector<float>> Curvature;
+  std::vector<std::vector<float>> IntensityGrad;
   std::vector<std::vector<KeypointFlags>> IsPointValid;
   std::vector<std::vector<KeypointFlags>> Label;
 

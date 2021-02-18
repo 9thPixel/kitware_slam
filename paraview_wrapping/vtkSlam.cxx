@@ -242,7 +242,7 @@ int vtkSlam::RequestData(vtkInformation* vtkNotUsed(request),
   {
     IF_VERBOSE(3, Utils::Timer::Init("vtkSlam : add advanced return arrays"));
 
-    // Keypoints extraction debug array (curvatures, depth gap, intensity gap...)
+    // Keypoints extraction debug array (curvature, intensity grad...)
     // Arrays added to WORLD transformed frame output
     auto* slamFrame = vtkPolyData::GetData(outputVector, SLAM_FRAME_OUTPUT_PORT);
     auto keypointsExtractionDebugArray = this->SlamAlgo->GetKeyPointsExtractor()->GetDebugArray();
@@ -418,14 +418,14 @@ void vtkSlam::IdentifyInputArrays(vtkPolyData* poly, vtkTable* calib)
     if (checkAndSetArrays("adjustedtime", "intensity", "laser_id", "verticalCorrection"))
     {
       this->TimeToSecondsFactor = 1e-6;
-      CheckKEParameter("Velodyne", EdgeIntensityGapThreshold, < 100);
+      CheckKEParameter("Velodyne", EdgeIntensityGradThreshold, < 100);
     }
 
     // Test if LiDAR data is Ouster
     else if (checkAndSetArrays("Raw Timestamp", "Signal Photons", "Channel", "Altitude Angles"))
     {
       this->TimeToSecondsFactor = 1e-9;
-      CheckKEParameter("Ouster", EdgeIntensityGapThreshold, >= 100);
+      CheckKEParameter("Ouster", EdgeIntensityGradThreshold, >= 100);
       CheckKEParameter("Ouster", NeighborWidth, > 4);
     }
 

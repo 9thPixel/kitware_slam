@@ -56,15 +56,11 @@ public:
 
   vtkCustomSetMacro(AngleResolution, float)
 
-  vtkCustomSetMacro(PlaneSinAngleThreshold, float)
+  vtkCustomSetMacro(EdgeCurvatureThreshold, float)
 
-  vtkCustomSetMacro(EdgeSinAngleThreshold, float)
+  vtkCustomSetMacro(PlaneCurvatureThreshold, float)
 
-  vtkCustomSetMacro(EdgeDepthGapThreshold, float)
-
-  vtkCustomSetMacro(EdgeSaliencyThreshold, float)
-
-  vtkCustomSetMacro(EdgeIntensityGapThreshold, float)
+  vtkCustomSetMacro(EdgeIntensityGradThreshold, float)
 
   std::shared_ptr<LidarSlam::SpinningSensorKeypointExtractor> GetExtractor() const { return Extractor; }
 
