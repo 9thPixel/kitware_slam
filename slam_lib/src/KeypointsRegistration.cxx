@@ -167,7 +167,7 @@ KeypointsRegistration::MatchingResults::MatchInfo KeypointsRegistration::BuildLi
     return { MatchingResults::MatchStatus::NOT_ENOUGH_NEIGHBORS, 0. };
   }
 
-  // If the nearest edges are too far from the current edge keypoint,
+  // If the farthest of the nearest edges is too far from the current edge keypoint,
   // we skip this point.
   if (knnSqDist.back() > this->Params.MaxDistanceForICPMatching * this->Params.MaxDistanceForICPMatching)
   {
@@ -199,7 +199,7 @@ KeypointsRegistration::MatchingResults::MatchInfo KeypointsRegistration::BuildLi
   // =============================================
   // Compute point-to-line optimization parameters
 
-  // n is the director vector of the line
+  // n is the unit vector of the line
   const Eigen::Vector3d& n = eigVecs.col(2);
 
   // A = (I-n*n.t).t * (I-n*n.t) = (I - n*n.t)^2
@@ -271,7 +271,7 @@ KeypointsRegistration::MatchingResults::MatchInfo KeypointsRegistration::BuildPl
     return { MatchingResults::MatchStatus::NOT_ENOUGH_NEIGHBORS, 0. };
   }
 
-  // If the nearest planar points are too far from the current keypoint,
+  // If the farthest of the nearest planar points is too far from the current keypoint,
   // we skip this point.
   if (knnSqDist.back() > this->Params.MaxDistanceForICPMatching * this->Params.MaxDistanceForICPMatching)
   {
@@ -526,9 +526,9 @@ void KeypointsRegistration::GetRansacLineNeighbors(const KDTree& kdtreePreviousE
   const Point& closest = previousEdgesPoints[knnIndices[0]];
   const auto P1 = closest.getVector3fMap();
 
-  // Loop over neighbors of the neighborhood. For each of them, compute the line
-  // between closest point and current point and compute the number of inliers
-  // that fit this line.
+  // Loop over remaining neighbors of the neighborhood. For each of them, compute the line
+  // that passes through the neighbor and the closest point (P1). Then, compute the number of inliers
+  // that this line fits.
   std::vector<std::vector<unsigned int>> inliersList;
   inliersList.reserve(neighborhoodSize - 1);
   for (unsigned int ptIndex = 1; ptIndex < neighborhoodSize; ++ptIndex)

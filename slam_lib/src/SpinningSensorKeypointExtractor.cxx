@@ -226,13 +226,12 @@ void SpinningSensorKeypointExtractor::ComputeCurvature()
     const PointCloud& scanLineCloud = *(this->pclCurrentFrameByScan[scanLine]);
     const int Npts = scanLineCloud.size();
 
-    // if the line is almost empty, skip it
+    // If the line is almost empty, skip it
     if (this->IsScanLineAlmostEmpty(Npts))
     {
       continue;
     }
-
-    // loop over points in the current scan line
+    // Loop over points in the current scan line
     // TODO : deal with spherical case : index=0 is neighbor of index=Npts-1
     for (int index = this->NeighborWidth; (index + this->NeighborWidth) < Npts; ++index)
     {
@@ -314,7 +313,7 @@ void SpinningSensorKeypointExtractor::SetKeyPointsLabels()
     labelEdgesUsingCriterion(sortedCurvatureIdx, this->Curvature, this->EdgeCurvatureThreshold, this->NeighborWidth);
     // Extract edge keypoints using intensity
     labelEdgesUsingCriterion(sortedIntensityGradIdx, this->IntensityGrad, this->EdgeIntensityGradThreshold, 1);
-    
+
     // 2_ Set plane keypoints label
     for (int i = int(Npts - 1); i>= 0; --i)
     {
@@ -324,11 +323,11 @@ void SpinningSensorKeypointExtractor::SetKeyPointsLabels()
       if (this->Curvature[scanLine][index] > this->PlaneCurvatureThreshold)
         break;
 
-      // if the point is invalid as plane, continue
+      // If the point is invalid as planar keypoint, continue
       if (!this->IsPointValid[scanLine][index][Keypoint::PLANE])
         continue;
 
-      // else indicate that the point is a planar one
+      // Else indicate that the point is on a plane
       this->Label[scanLine][index].set(Keypoint::PLANE);
 
       // Invalidate the point and its neighbors for PLANE search
