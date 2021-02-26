@@ -304,8 +304,6 @@ void SpinningSensorKeypointExtractor::SetKeyPointsLabels()
         const int indexEnd   = std::min(Npts - 1, static_cast<int>(index + invalidNeighborhoodSize));
         for (int j = indexBegin; j <= indexEnd; ++j)
           this->IsPointValid[scanLine][j].reset(Keypoint::EDGE);
-        // Invalidate the point for all future keypoints type search
-        this->IsPointValid[scanLine][index].reset();
       }
     };
 
@@ -335,8 +333,6 @@ void SpinningSensorKeypointExtractor::SetKeyPointsLabels()
       const int indexEnd   = std::min(Npts - 1, static_cast<int>(index + this->NeighborWidth));
       for (int j = indexBegin; j <= indexEnd; ++j)
         this->IsPointValid[scanLine][j].reset(Keypoint::PLANE);
-      // Invalidate the point for all future keypoints type search
-      this->IsPointValid[scanLine][index].reset();
     }
 
     // 3_ Set blob keypoints labels
@@ -354,8 +350,6 @@ void SpinningSensorKeypointExtractor::SetKeyPointsLabels()
       const int indexEnd   = std::min(Npts - 1, static_cast<int>(index + this->NeighborWidth));
       for (int j = indexBegin; j <= indexEnd; ++j)
         this->IsPointValid[scanLine][j].reset(Keypoint::BLOB);
-      // Invalidate the point for all future keypoints type search
-      this->IsPointValid[scanLine][index].reset();
     }
   }
 
