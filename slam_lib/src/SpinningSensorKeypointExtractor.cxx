@@ -48,11 +48,14 @@ struct LineFitting
   Eigen::Vector3f Direction;
   Eigen::Vector3f Position;
 
-  //! Max distance allowed from the farest point to estimated line to be considered as real line
-  float MaxDistance = 0.02;  // [m]
+  //! Max squared distance allowed from the farest point to estimated line to be considered as real line
+  float MaxSqDistance = 0.020 * 0.020;  // [m2]
 
-  //! Max angle allowed between consecutive segments in the neighborhood to be considered as line
-  float MaxAngle = DEG2RAD(40.);  // [rad]
+  //! Min cos of angle allowed between consecutive segments in the neighborhood to be considered as line
+  float MinCosAngle = std::cos(Utils::Deg2Rad(40.));
+
+  // Minimum linearity value (from 0 to 1, a perfect line being 1)
+  float MinLinearity = 0.7;
 };
 
 //-----------------------------------------------------------------------------
@@ -68,43 +71,39 @@ bool LineFitting::FitPCA(const SpinningSensorKeypointExtractor::PointCloud& clou
   // Get Direction as main eigen vector
   this->Direction = eigVecs.col(2);
 
-  // If a point of the neighborhood is too far from the fitted line,
-  // we consider the neighborhood as non flat
-  bool isLineFittingAccurate = true;
-  const float sqMaxDistance = this->MaxDistance * this->MaxDistance;
-  for (const auto& pointId: indices)
-  {
-    if (this->SquaredDistanceToPoint(cloud[pointId].getVector3fMap()) > sqMaxDistance)
-    {
-      isLineFittingAccurate = false;
-      break;
-    }
-  }
-  return isLineFittingAccurate;
+  // Check linearity score
+  float linearity = (eigVals(2) - eigVals(1)) / eigVals(2);
+  return linearity > this->MinLinearity;
 }
 
 //-----------------------------------------------------------------------------
 bool LineFitting::FitPCAAndCheckConsistency(const SpinningSensorKeypointExtractor::PointCloud& cloud,
                                             const std::vector<int>& indices)
 {
-  const float maxSinAngle = std::sin(this->MaxAngle);
-  bool isLineFittingAccurate = true;
+  // Compute the approximate line linking first and last points
+  const auto firstPoint = cloud[indices.front()].getVector3fMap();
+  const auto lastPoint = cloud[indices.back()].getVector3fMap();
+  const Eigen::Vector3f dir = (lastPoint - firstPoint).normalized();
 
-  // First check if the neighborhood is approximately straight
-  const Eigen::Vector3f U = (cloud[indices.back()].getVector3fMap() - cloud[indices.front()].getVector3fMap()).normalized();
+  // First check that the neighborhood is approximately straight
   for (unsigned int i = 0; i < indices.size() - 1; i++)
   {
-    const Eigen::Vector3f V = (cloud[indices[i + 1]].getVector3fMap() - cloud[indices[i]].getVector3fMap()).normalized();
-    const float sinAngle = (U.cross(V)).norm();
-    if (sinAngle > maxSinAngle)
-    {
-      isLineFittingAccurate = false;
-      break;
-    }
+    // Check that the current point is not too far from the global line
+    const auto currentPoint = cloud[indices[i]].getVector3fMap();
+    const float sqDist = ((currentPoint - firstPoint).cross(dir)).squaredNorm();
+    if (sqDist > this->MaxSqDistance)
+      return false;
+
+    // Check that the angle between the line and each local vector is not too important
+    const auto nextPoint = cloud[indices[i + 1]].getVector3fMap();
+    const Eigen::Vector3f V = (nextPoint - currentPoint).normalized();
+    const float cosAngle = dir.dot(V);
+    if (cosAngle < this->MinCosAngle)
+      return false;
   }
 
-  // Then fit with PCA (only if isLineFittingAccurate is true)
-  return isLineFittingAccurate && this->FitPCA(cloud, indices);
+  // Then fit with PCA (only if the first check did not abort)
+  return this->FitPCA(cloud, indices);
 }
 
 //-----------------------------------------------------------------------------
