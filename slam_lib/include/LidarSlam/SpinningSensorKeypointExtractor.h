@@ -110,8 +110,9 @@ private:
   // coordinates system, where the sensor is spinning around Z axis.
   void EstimateAzimuthalResolution();
 
-  // Check if scanLine is almost empty
-  inline bool IsScanLineAlmostEmpty(int nScanLinePts) const { return nScanLinePts < 2 * this->NeighborWidth + 1; }
+  // Extract valid neighbor points' indices on the same scan line within a given
+  // signed distance evaluated in number of neighbors
+  std::vector<int> GetNeighbors(int laserRing, int firingIndex, int nbNeighborsDist);
 
   // ---------------------------------------------------------------------------
   //   Parameters
@@ -153,34 +154,43 @@ private:
   // ---------------------------------------------------------------------------
 
   // Azimuthal (= horizontal angle) resolution of the spinning lidar sensor
-  // If it is less or equal to 0, it will be auto-estimated from next frame.
+  // If it is less or equal to 0, it will be auto-estimated from next input frame.
   // This angular resolution is used to compute an expected distance between two
   // consecutives firings.
   float AzimuthalResolution = 0.;  // [rad]
 
-  // Number of lasers scan lines composing the pointcloud
+  // Number of laser scan lines and firings per line composing the pointcloud
+  // TODO: check getters/setters
+  // TODO: use int
   unsigned int NbLaserRings = 0;
+  unsigned int NbFiringsPerLaserRing = 0;
 
   //! Label of a point as a keypoint
   //! We use binary flags as each point can have different keypoint labels.
   using KeypointFlags = std::underlying_type<Keypoint>::type;
 
+  // Projection of points properties on vertex maps
+  // (2D image of size NbLaserRings x NbFiringsPerLaserRing)
+  template<typename T>
+  using VertexMap = Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+
   // Curvature and other differential operations (scan by scan, point by point)
-  std::vector<std::vector<float>> Angles;
-  std::vector<std::vector<float>> DepthGap;
-  std::vector<std::vector<float>> Saliency;
-  std::vector<std::vector<float>> IntensityGap;
-  std::vector<std::vector<KeypointFlags>> IsPointValid;
-  std::vector<std::vector<KeypointFlags>> Label;
+  VertexMap<float> Angles;
+  VertexMap<float> DepthGap;
+  VertexMap<float> Saliency;
+  VertexMap<float> IntensityGap;
+  VertexMap<KeypointFlags> IsPointValid;
+  VertexMap<KeypointFlags> Label;
+
+  // Current point cloud stored in differents formats
+  PointCloud::Ptr Scan;    ///< Raw input scan
+  std::vector<PointCloud::Ptr> ScanLines;  ///< Input scan points sorted by scan lines
+  VertexMap<int> ScanIds;  ///< Indices of input scan points projected in vertex map
 
   // Extracted keypoints of current frame
   PointCloud::Ptr EdgesPoints;
   PointCloud::Ptr PlanarsPoints;
   PointCloud::Ptr BlobsPoints;
-
-  // Current point cloud stored in two differents formats
-  PointCloud::Ptr Scan;
-  std::vector<PointCloud::Ptr> ScanLines;
 };
 
 } // end of LidarSlam namespace

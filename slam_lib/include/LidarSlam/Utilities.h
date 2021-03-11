@@ -92,8 +92,8 @@ namespace Utils
  * @return The sorted indices such that the first index is the biggest input
  *         value and the last the smallest.
  */
-template<typename T>
-std::vector<size_t> SortIdx(const std::vector<T>& v, bool ascending=true)
+template<typename Array>
+std::vector<size_t> SortIdx(const Array& v, bool ascending=true)
 {
   // Initialize original index locations
   std::vector<size_t> idx(v.size());
