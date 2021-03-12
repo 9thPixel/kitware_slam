@@ -47,5 +47,6 @@ void vtkSpinningSensorKeypointExtractor::PrintSelf(std::ostream& os, vtkIndent i
   PrintParameter(EdgeIntensityGapThreshold)
 
   PrintParameter(NbLaserRings)
+  PrintParameter(NbFiringsPerLaserRing)
   PrintParameter(AzimuthalResolution)
 }

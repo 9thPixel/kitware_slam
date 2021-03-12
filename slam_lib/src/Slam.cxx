@@ -155,6 +155,13 @@ Slam::Slam()
 //-----------------------------------------------------------------------------
 void Slam::Reset(bool resetLog)
 {
+  // Reset SSKE auto-estimated parameters
+  for (const auto& sske : this->KeyPointsExtractors)
+  {
+    sske.second->SetNbLaserRings(0);
+    sske.second->SetNbFiringsPerLaserRing(0);
+  }
+
   // Reset keypoints maps
   this->ClearMaps();
 

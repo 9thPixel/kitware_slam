@@ -63,10 +63,13 @@ public:
   GetMacro(EdgeIntensityGapThreshold, float)
   SetMacro(EdgeIntensityGapThreshold, float)
 
-  GetMacro(AzimuthalResolution, float)
-  SetMacro(AzimuthalResolution, float)
-
   GetMacro(NbLaserRings, int)
+  SetMacro(NbLaserRings, int)
+
+  GetMacro(NbFiringsPerLaserRing, int)
+  SetMacro(NbFiringsPerLaserRing, int)
+
+  float GetAzimuthalResolution() const { return 2 * M_PI / this->NbFiringsPerLaserRing; }
 
   PointCloud::Ptr GetEdgePoints() const { return this->EdgesPoints; }
   PointCloud::Ptr GetPlanarPoints() const { return this->PlanarsPoints; }
@@ -84,13 +87,10 @@ public:
 
 private:
 
-  // Split the whole pointcloud into separate laser ring clouds,
-  // sorted by their vertical angles.
+  // Initialize the feature vectors and keypoint clouds,
+  // and project input points onto the vertex map.
   // This expects that the lowest/bottom laser ring is 0, and is increasing upward.
-  void ConvertAndSortScanLines();
-
-  // Reset all the features vectors and keypoints clouds
-  void PrepareDataForNextFrame();
+  void PrepareDataForNewFrame();
 
   // Invalid the points with bad criteria from the list of possible future keypoints.
   // These points correspond to planar surfaces roughly parallel to laser beam
@@ -100,15 +100,17 @@ private:
   // Compute the curvature and other features within each the scan line.
   // The curvature is not the one of the surface that intersects the lines but
   // the 1D curvature within each isolated scan line.
-  void ComputeCurvature();
+  void ComputeFeatures();
 
   // Labelize point to be a keypoints or not
   void SetKeyPointsLabels();
 
-  // Auto estimate azimuth angle resolution based on current ScanLines
+  // Auto estimate NbLaserRings and NbFiringsPerLaserRing from current scan.
+  // WARNING: This makes the assumption that the points in each scan line are
+  // already stored in sorted order, by increasing azimuth/timestamp.
   // WARNING: to be correct, the points need to be in the LIDAR sensor
   // coordinates system, where the sensor is spinning around Z axis.
-  void EstimateAzimuthalResolution();
+  void EstimateLaserRingsParameters();
 
   // Extract valid neighbor points' indices on the same scan line within a given
   // signed distance evaluated in number of neighbors
@@ -143,27 +145,26 @@ private:
   // Threshold upon intensity gap to select an edge keypoint
   float EdgeIntensityGapThreshold = 50.;
 
-  // Threshold upon sphericity of a neighborhood to select a blob point
-  float SphericityThreshold = 0.35;  // CHECK : unused
+  // ---------------------------------------------------------------------------
+  //   Laser rings parameters
+  // ---------------------------------------------------------------------------
 
-  // Coef to apply to the incertitude radius of the blob neighborhood
-  float IncertitudeCoef = 3.0;  // CHECK : unused
+  // Number of laser scan lines
+  // Common values: 16, 32, 64, 128
+  // If it is less or equal to 0, it will be auto-estimated from next input frame.
+  int NbLaserRings = 0;
+
+  // Number of laser firings per scan line for a full revolution.
+  // Common values: 900, 1800, 3600 or 512, 1024, 2048 depending on spinning frequency.
+  // If it is less or equal to 0, it will be auto-estimated from next input frame.
+  // This number is directly linked to the azimuthal resolution of the spinning
+  // device, which is the horizontal angle between two consecutive firings:
+  //   azimutalResolution = 2 * PI / NbFiringsPerLaserRing
+  int NbFiringsPerLaserRing = 0;
 
   // ---------------------------------------------------------------------------
   //   Internal variables
   // ---------------------------------------------------------------------------
-
-  // Azimuthal (= horizontal angle) resolution of the spinning lidar sensor
-  // If it is less or equal to 0, it will be auto-estimated from next input frame.
-  // This angular resolution is used to compute an expected distance between two
-  // consecutives firings.
-  float AzimuthalResolution = 0.;  // [rad]
-
-  // Number of laser scan lines and firings per line composing the pointcloud
-  // TODO: check getters/setters
-  // TODO: use int
-  unsigned int NbLaserRings = 0;
-  unsigned int NbFiringsPerLaserRing = 0;
 
   //! Label of a point as a keypoint
   //! We use binary flags as each point can have different keypoint labels.
@@ -184,7 +185,6 @@ private:
 
   // Current point cloud stored in differents formats
   PointCloud::Ptr Scan;    ///< Raw input scan
-  std::vector<PointCloud::Ptr> ScanLines;  ///< Input scan points sorted by scan lines
   VertexMap<int> ScanIds;  ///< Indices of input scan points projected in vertex map
 
   // Extracted keypoints of current frame
