@@ -26,7 +26,6 @@
 #include <pcl/point_cloud.h>
 
 #include <unordered_map>
-#include <bitset>
 
 #define SetMacro(name,type) void Set##name (type _arg) { name = _arg; }
 #define GetMacro(name,type) type Get##name () const { return name; }
@@ -164,7 +163,7 @@ private:
 
   //! Label of a point as a keypoint
   //! We use binary flags as each point can have different keypoint labels.
-  using KeypointFlags = std::bitset<Keypoint::nKeypointTypes>;
+  using KeypointFlags = std::underlying_type<Keypoint>::type;
 
   // Curvature and other differential operations (scan by scan, point by point)
   std::vector<std::vector<float>> Angles;

@@ -27,8 +27,19 @@
 namespace LidarSlam
 {
 
+namespace Utils
+{
 namespace
 {
+//-----------------------------------------------------------------------------
+using KeypointFlags = std::underlying_type<Keypoint>::type;
+// Check if kp is of a specific keypoint type
+inline bool Check(KeypointFlags kp, Keypoint type) { return kp & (1 << type); }
+// Set kp to be of specific type
+inline void Set(KeypointFlags& kp, Keypoint type) { kp |= (1 << type); }
+// Set kp to NOT be of specific type
+inline void Unset(KeypointFlags& kp, Keypoint type) { kp &= ~(1 << type); }
+
 //-----------------------------------------------------------------------------
 struct LineFitting
 {
@@ -113,6 +124,7 @@ inline float LineFitting::SquaredDistanceToPoint(Eigen::Vector3f const& point) c
   return ((point - this->Position).cross(this->Direction)).squaredNorm();
 }
 } // end of anonymous namespace
+} // end of Utils namespace
 
 //-----------------------------------------------------------------------------
 void SpinningSensorKeypointExtractor::ComputeKeyPoints(const PointCloud::Ptr& pc)
@@ -193,8 +205,8 @@ void SpinningSensorKeypointExtractor::PrepareDataForNextFrame()
   for (int scanLine = 0; scanLine < static_cast<int>(this->NbLaserRings); ++scanLine)
   {
     size_t nbPoint = this->ScanLines[scanLine]->size();
-    this->IsPointValid[scanLine].assign(nbPoint, KeypointFlags().set());  // set all flags to 1
-    this->Label[scanLine].assign(nbPoint, KeypointFlags().reset());  // set all flags to 0
+    this->IsPointValid[scanLine].assign(nbPoint, ~0);  // set all flags to 1
+    this->Label[scanLine].assign(nbPoint, 0);  // reset all flags to 0
     this->Angles[scanLine].assign(nbPoint, 0.);
     this->Saliency[scanLine].assign(nbPoint, 0.);
     this->DepthGap[scanLine].assign(nbPoint, 0.);
@@ -223,7 +235,7 @@ void SpinningSensorKeypointExtractor::InvalidateNotUsablePoints()
     if (this->IsScanLineAlmostEmpty(Npts))
     {
       for (int index = 0; index < Npts; ++index)
-        this->IsPointValid[scanLine][index].reset();
+        this->IsPointValid[scanLine][index] = 0;
       continue;
     }
 
@@ -231,8 +243,8 @@ void SpinningSensorKeypointExtractor::InvalidateNotUsablePoints()
     // first and last points can not be compared
     for (int index = 0; index < this->NeighborWidth; ++index)
     {
-      this->IsPointValid[scanLine][index].reset();
-      this->IsPointValid[scanLine][Npts - 1 - index].reset();
+      this->IsPointValid[scanLine][index] = 0;
+      this->IsPointValid[scanLine][Npts - 1 - index] = 0;
     }
 
     // Loop over remaining points of the scan line
@@ -243,7 +255,7 @@ void SpinningSensorKeypointExtractor::InvalidateNotUsablePoints()
       // Invalidate points which are too close from the sensor
       if (L < this->MinDistanceToSensor)
       {
-        this->IsPointValid[scanLine][index].reset();
+        this->IsPointValid[scanLine][index] = 0;
       }
 
       // Compute maximal acceptable distance of two consecutive neighbors
@@ -263,7 +275,7 @@ void SpinningSensorKeypointExtractor::InvalidateNotUsablePoints()
         // If current point is the closest, next part is invalidated, starting from next point
         if (L < nextPoint.norm())
         {
-          this->IsPointValid[scanLine][index + 1].reset();
+          this->IsPointValid[scanLine][index + 1] = 0;
           for (int i = index + 1; i < index + this->NeighborWidth; ++i)
           {
             const auto& Y  = scanLineCloud[i].getVector3fMap();
@@ -273,13 +285,13 @@ void SpinningSensorKeypointExtractor::InvalidateNotUsablePoints()
             if ((Yn - Y).squaredNorm() > sqMaxPosDiff)
               break;
             // Otherwise, the current neighbor point is disabled
-            this->IsPointValid[scanLine][i + 1].reset();
+            this->IsPointValid[scanLine][i + 1] = 0;
           }
         }
         // If current point is the farthest, invalidate previous part, starting from current point
         else
         {
-          this->IsPointValid[scanLine][index].reset();
+          this->IsPointValid[scanLine][index] = 0;
           for (int i = index - 1; i > index - this->NeighborWidth; --i)
           {
             const auto& Yp = scanLineCloud[i].getVector3fMap();
@@ -289,7 +301,7 @@ void SpinningSensorKeypointExtractor::InvalidateNotUsablePoints()
             if ((Y - Yp).squaredNorm() > sqMaxPosDiff)
               break;
             // Otherwise, the previous neighbor point is disabled
-            this->IsPointValid[scanLine][i].reset();
+            this->IsPointValid[scanLine][i] = 0;
           }
         }
       }
@@ -324,7 +336,7 @@ void SpinningSensorKeypointExtractor::ComputeCurvature()
     for (int index = this->NeighborWidth; (index + this->NeighborWidth) < Npts; ++index)
     {
       // Skip curvature computation for invalid points
-      if (this->IsPointValid[scanLine][index].none())
+      if (!this->IsPointValid[scanLine][index])
       {
         continue;
       }
@@ -345,7 +357,7 @@ void SpinningSensorKeypointExtractor::ComputeCurvature()
       // of the "sharpness" of the current point.
       std::vector<int> leftNeighbors(this->NeighborWidth);
       std::vector<int> rightNeighbors(this->NeighborWidth);
-      LineFitting leftLine, rightLine;
+      Utils::LineFitting leftLine, rightLine;
 
       // Fill left and right neighborhoods, from central point to sides.
       // /!\ The way the neighbors are added to the vectors matters,
@@ -448,7 +460,7 @@ void SpinningSensorKeypointExtractor::ComputeCurvature()
         // with a depth gap and the current point
         if (farNeighbors.size() > static_cast<unsigned int>(this->NeighborWidth))
         {
-          LineFitting farNeighborsLine;
+          Utils::LineFitting farNeighborsLine;
           farNeighborsLine.FitPCA(scanLineCloud, farNeighbors);
           this->Saliency[scanLine][index] = farNeighborsLine.SquaredDistanceToPoint(centralPoint);
         }
@@ -499,17 +511,17 @@ void SpinningSensorKeypointExtractor::SetKeyPointsLabels()
           break;
 
         // If the point is invalid as edge, continue
-        if (!this->IsPointValid[scanLine][index][Keypoint::EDGE])
+        if (!Utils::Check(this->IsPointValid[scanLine][index], Keypoint::EDGE))
           continue;
 
         // Else indicate that the point is an edge
-        this->Label[scanLine][index].set(Keypoint::EDGE);
+        Utils::Set(this->Label[scanLine][index], Keypoint::EDGE);
 
         // Invalid its neighbors
         const int indexBegin = std::max(0,        static_cast<int>(index - invalidNeighborhoodSize));
         const int indexEnd   = std::min(Npts - 1, static_cast<int>(index + invalidNeighborhoodSize));
         for (int j = indexBegin; j <= indexEnd; ++j)
-          this->IsPointValid[scanLine][j].reset(Keypoint::EDGE);
+          Utils::Unset(this->IsPointValid[scanLine][j], Keypoint::EDGE);
       }
     };
 
@@ -533,11 +545,11 @@ void SpinningSensorKeypointExtractor::SetKeyPointsLabels()
         break;
 
       // if the point is invalid as plane or sinAngle value is unset, continue
-      if (!this->IsPointValid[scanLine][index][Keypoint::PLANE] || sinAngle < 1e-6)
+      if (!Utils::Check(this->IsPointValid[scanLine][index], Keypoint::PLANE) || sinAngle < 1e-6)
         continue;
 
       // else indicate that the point is a planar one
-      this->Label[scanLine][index].set(Keypoint::PLANE);
+      Utils::Set(this->Label[scanLine][index], Keypoint::PLANE);
 
       // Invalid its neighbors so that we don't have too
       // many planar keypoints in the same region. This is
@@ -549,7 +561,7 @@ void SpinningSensorKeypointExtractor::SetKeyPointsLabels()
       const int indexBegin = std::max(0,        static_cast<int>(index - 4));
       const int indexEnd   = std::min(Npts - 1, static_cast<int>(index + 4));
       for (int j = indexBegin; j <= indexEnd; ++j)
-        this->IsPointValid[scanLine][j].reset(Keypoint::PLANE);
+        Utils::Unset(this->IsPointValid[scanLine][j], Keypoint::PLANE);
     }
 
     // Blobs Points
@@ -557,8 +569,8 @@ void SpinningSensorKeypointExtractor::SetKeyPointsLabels()
     // TODO : disable blobs if not required
     for (int index = 0; index < Npts; index += 3)
     {
-      if (this->IsPointValid[scanLine][index][Keypoint::BLOB])
-        this->Label[scanLine][index].set(Keypoint::BLOB);
+      if (Utils::Check(this->IsPointValid[scanLine][index], Keypoint::BLOB))
+        Utils::Set(this->Label[scanLine][index], Keypoint::BLOB);
     }
   }
 
@@ -569,9 +581,9 @@ void SpinningSensorKeypointExtractor::SetKeyPointsLabels()
       const PointCloud& scanLineCloud = *(this->ScanLines[scanLine]);
       for (unsigned int index = 0; index < scanLineCloud.size(); ++index)
       {
-        if (this->Label[scanLine][index][type])
+        if (Utils::Check(this->Label[scanLine][index], type))
         {
-          this->IsPointValid[scanLine][index].set(type);
+          Utils::Set(this->IsPointValid[scanLine][index], type);
           keypoints->push_back(scanLineCloud[index]);
         }
       }
@@ -638,14 +650,14 @@ std::unordered_map<std::string, std::vector<float>> SpinningSensorKeypointExtrac
     return v;
   }; // end of lambda expression
 
-  auto get1DVectorFromFlag = [this](auto const& vector2d, int flag)
+  auto get1DVectorFromFlag = [this](auto const& vector2d, Keypoint flag)
   {
     std::vector<float> v(this->Scan->size());
     std::vector<int> indexByScanLine(this->NbLaserRings, 0);
     for (unsigned int i = 0; i < this->Scan->size(); i++)
     {
       const auto& laserId = this->Scan->points[i].laser_id;
-      v[i] = vector2d[laserId][indexByScanLine[laserId]][flag];
+      v[i] = Utils::Check(vector2d[laserId][indexByScanLine[laserId]], flag);
       indexByScanLine[laserId]++;
     }
     return v;

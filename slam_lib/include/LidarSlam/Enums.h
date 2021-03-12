@@ -23,7 +23,8 @@ namespace LidarSlam
 
 //------------------------------------------------------------------------------
 //! Type of a keypoint
-enum Keypoint
+//! The underlying integer type must have at least nKeypointTypes bits.
+enum Keypoint : uint8_t
 {
   EDGE  = 0,   ///< edge keypoint (sharp local structure)
   PLANE = 1,   ///< plane keypoint (flat local structure)
