@@ -41,6 +41,13 @@ inline void Set(KeypointFlags& kp, Keypoint type) { kp |= (1 << type); }
 inline void Unset(KeypointFlags& kp, Keypoint type) { kp &= ~(1 << type); }
 
 //-----------------------------------------------------------------------------
+// Positive k % n modulo operation
+inline int Mod(int k, int n)
+{
+  return ((k %= n) < 0) ? k + n : k;
+}
+
+//-----------------------------------------------------------------------------
 struct LineFitting
 {
   //! Fitting using PCA
@@ -204,19 +211,11 @@ void SpinningSensorKeypointExtractor::InvalidateNotUsablePoints()
   #pragma omp parallel for num_threads(this->NbThreads) schedule(guided) firstprivate(maxPosDiffCoeff)
   for (int scanLine = 0; scanLine < this->NbLaserRings; ++scanLine)
   {
-    // Invalidate first and last points: because of undistortion, the depth of
-    // first and last points can not be compared
-    // TODO: this won't invalidate the correct points. Instead, we need to loop
-    // over scan line, check for timestamp gap, and invalidate points around this gap
-    for (int index = 0; index < this->NeighborWidth; ++index)
-    {
-      this->IsPointValid(scanLine, index) = 0;
-      this->IsPointValid(scanLine, this->NbFiringsPerLaserRing - 1 - index) = 0;
-    }
+    // Timestamp and index of the previous valid point
+    float lastValidPointTime = std::numeric_limits<float>::lowest();
+    int lastValidPointIdx = 0;
 
-    // Loop over remaining points of the scan line
-    // TODO: loop over entire scanLine
-    for (int index = this->NeighborWidth; index < this->NbFiringsPerLaserRing - this->NeighborWidth; ++index)
+    for (int index = 0; index < this->NbFiringsPerLaserRing; ++index)
     {
       // Check if we have a valid measurement, and get point
       const int ptIndex = this->ScanIds(scanLine, index);
@@ -225,8 +224,21 @@ void SpinningSensorKeypointExtractor::InvalidateNotUsablePoints()
         this->IsPointValid(scanLine, index) = 0;
         continue;
       }
-      const auto& currentPoint = this->Scan->at(ptIndex).getVector3fMap();
+      const Point& currentLidarPoint = this->Scan->at(ptIndex);
+      const auto& currentPoint = currentLidarPoint.getVector3fMap();
       const float L = currentPoint.norm();
+
+      // If a time gap is detected, this means that we have reached the end of
+      // the scanline. Because of rolling shutter distortion, the neighborhoods
+      // made by the points around this direction are invalid.
+      if (currentLidarPoint.time < lastValidPointTime)
+      {
+        int timeGapIdx = (index + lastValidPointIdx) / 2;
+        for (int i = -this->NeighborWidth; i <= this->NeighborWidth; ++i)
+          this->IsPointValid(scanLine, Utils::Mod(timeGapIdx + i, this->NbFiringsPerLaserRing)) = 0;
+      }
+      lastValidPointIdx = index;
+      lastValidPointTime = currentLidarPoint.time;
 
       // Invalidate points which are too close from the sensor
       if (L < this->MinDistanceToSensor)
@@ -277,7 +289,7 @@ void SpinningSensorKeypointExtractor::InvalidateNotUsablePoints()
               break;
             // Otherwise, the current neighbor point is disabled
             // NOTE: this is only valid as there is no missing points in the neighborhood
-            this->IsPointValid(scanLine, index + i + 1) = 0;
+            this->IsPointValid(scanLine, Utils::Mod(index + i + 1, this->NbFiringsPerLaserRing)) = 0;
           }
         }
         // If current point is the farthest, invalidate previous part, starting from current point
@@ -294,7 +306,7 @@ void SpinningSensorKeypointExtractor::InvalidateNotUsablePoints()
               break;
             // Otherwise, the previous neighbor point is disabled
             // NOTE: this is only valid as there is no missing points in the neighborhood
-            this->IsPointValid(scanLine, index - i - 1) = 0;
+            this->IsPointValid(scanLine, Utils::Mod(index - i - 1, this->NbFiringsPerLaserRing)) = 0;
           }
         }
       }
@@ -315,8 +327,7 @@ void SpinningSensorKeypointExtractor::ComputeFeatures()
   for (int scanLine = 0; scanLine < this->NbLaserRings; ++scanLine)
   {
     // Loop over points in the current scan line
-    // TODO : deal with spherical case : index=0 is neighbor of index=Npts-1
-    for (int index = this->NeighborWidth; index < this->NbFiringsPerLaserRing - this->NeighborWidth; ++index)
+    for (int index = 0; index < this->NbFiringsPerLaserRing; ++index)
     {
       // Skip curvature computation for invalid points
       if (!this->IsPointValid(scanLine, index))
@@ -470,7 +481,7 @@ void SpinningSensorKeypointExtractor::SetKeyPointsLabels()
                                                    float threshold,
                                                    int invalidNeighborhoodSize)
     {
-      for (const auto& index: sortedValuesIdx)
+      for (int index: sortedValuesIdx)
       {
         // Check criterion threshold
         // If criterion is not respected, break loop as indices are sorted in decreasing order.
@@ -485,10 +496,8 @@ void SpinningSensorKeypointExtractor::SetKeyPointsLabels()
         Utils::Set(this->Label(scanLine, index), Keypoint::EDGE);
 
         // Invalid its neighbors
-        const int indexBegin = std::max(0,                               static_cast<int>(index - invalidNeighborhoodSize));
-        const int indexEnd   = std::min(this->NbFiringsPerLaserRing - 1, static_cast<int>(index + invalidNeighborhoodSize));
-        for (int j = indexBegin; j <= indexEnd; ++j)
-          Utils::Unset(this->IsPointValid(scanLine, j), Keypoint::EDGE);
+        for (int j = index - invalidNeighborhoodSize; j <= index + invalidNeighborhoodSize; ++j)
+          Utils::Unset(this->IsPointValid(scanLine, Utils::Mod(j, this->NbFiringsPerLaserRing)), Keypoint::EDGE);
         Utils::Set(this->IsPointValid(scanLine, index), Keypoint::EDGE);
       }
     };
@@ -505,7 +514,7 @@ void SpinningSensorKeypointExtractor::SetKeyPointsLabels()
     // Planes (using angles)
     for (int k = this->NbFiringsPerLaserRing - 1; k >= 0; --k)
     {
-      size_t index = sortedAnglesIdx[k];
+      int index = sortedAnglesIdx[k];
       const float sinAngle = this->Angles(scanLine, index);
 
       // thresh
@@ -526,10 +535,8 @@ void SpinningSensorKeypointExtractor::SetKeyPointsLabels()
       // if all the planar points are on the same scan line the
       // problem is degenerated since all the points are distributed
       // on a line.
-      const int indexBegin = std::max(0,                               static_cast<int>(index - 4));
-      const int indexEnd   = std::min(this->NbFiringsPerLaserRing - 1, static_cast<int>(index + 4));
-      for (int j = indexBegin; j <= indexEnd; ++j)
-        Utils::Unset(this->IsPointValid(scanLine, j), Keypoint::PLANE);
+      for (int j = index - 4; j <= index + 4; ++j)
+        Utils::Unset(this->IsPointValid(scanLine, Utils::Mod(j, this->NbFiringsPerLaserRing)), Keypoint::PLANE);
       Utils::Set(this->IsPointValid(scanLine, index), Keypoint::PLANE);
     }
 
@@ -563,7 +570,7 @@ std::vector<int> SpinningSensorKeypointExtractor::GetNeighbors(int laserRing, in
   const int direction = (nbNeighborsDist > 0) ? 1 : -1;
   for (int firingIdxOffset = 1; firingIdxOffset <= std::abs(nbNeighborsDist); ++firingIdxOffset)
   {
-    const int ptIndex = this->ScanIds(laserRing, firingIdx + direction * firingIdxOffset);
+    const int ptIndex = this->ScanIds(laserRing, Utils::Mod(firingIdx + direction * firingIdxOffset, this->NbFiringsPerLaserRing));
     if (ptIndex >= 0)
       neighbors.push_back(ptIndex);
   }
