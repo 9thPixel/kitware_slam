@@ -581,55 +581,56 @@ std::vector<int> SpinningSensorKeypointExtractor::GetNeighbors(int laserRing, in
 void SpinningSensorKeypointExtractor::EstimateLaserRingsParameters()
 {
   // Separate pointcloud into different scan lines
-  std::vector<PointCloud::Ptr> scanLines;
-  for (const Point& point : *this->Scan)
+  // and compute azimuth (= horizontal angle) of each point
+  // WARNING: to get a correct azimuth, the points need to be in the LIDAR
+  // sensor coordinates system, where the sensor is spinning around Z axis.
+  std::vector<std::vector<float>> azimuthsPerScanLine;
+  for (const Point& pt : *this->Scan)
   {
     // Ensure that there are enough available scan lines
-    while (point.laser_id >= scanLines.size())
-      scanLines.emplace_back(new PointCloud);
-
-    // Copy the current point to its corresponding laser scan
-    scanLines[point.laser_id]->push_back(point);
+    while (pt.laser_id >= azimuthsPerScanLine.size())
+      azimuthsPerScanLine.emplace_back();
+    // Compute clockwise azimuth angle and add it to its corresponding laser scan
+    float azimuth = M_PI - std::atan2(pt.y, pt.x);
+    azimuthsPerScanLine[pt.laser_id].push_back(azimuth);
   }
 
   // Compute horizontal angle values between successive points
-  // WARNING: This makes the assumption that the points in each scan line are
-  // already stored in sorted order, by increasing azimuth/timestamp.
-  std::vector<float> angles;
-  angles.reserve(this->Scan->size());
-  for (const PointCloud::Ptr& scanLine : scanLines)
+  std::vector<float> azimuthDiffs;
+  azimuthDiffs.reserve(this->Scan->size());
+  for (auto& azimuths : azimuthsPerScanLine)
   {
-    for (unsigned int index = 1; index < scanLine->size(); ++index)
-    {
-      // Compute horizontal angle between two measurements
-      // WARNING: to be correct, the points need to be in the LIDAR sensor
-      // coordinates system, where the sensor is spinning around Z axis.
-      Eigen::Map<const Eigen::Vector2f> p1(scanLine->at(index - 1).data);
-      Eigen::Map<const Eigen::Vector2f> p2(scanLine->at(index).data);
-      float angle = std::abs(std::acos(p1.dot(p2) / (p1.norm() * p2.norm())));
+    // Sort each scan line by increasing clockwise azimuth angle to ensure
+    // getting successive points
+    std::sort(azimuths.begin(), azimuths.end());
 
+    // Compute horizontal angle difference between two measurements
+    for (unsigned int index = 1; index < azimuths.size(); ++index)
+    {
+      float azimuthDiff = std::abs(azimuths[index] - azimuths[index - 1]);
       // Keep only angles greater than 0 to avoid dual return issues
-      if (angle > 1e-4)
-        angles.push_back(angle);
+      if (azimuthDiff > 1e-4)
+        azimuthDiffs.push_back(azimuthDiff);
     }
   }
 
   // Estimate azimuthal resolution from these angles
-  std::sort(angles.begin(), angles.end());
-  unsigned int maxInliersIdx = angles.size();
+  std::sort(azimuthDiffs.begin(), azimuthDiffs.end());
+  unsigned int maxInliersIdx = azimuthDiffs.size();
   float maxAngle = Utils::Deg2Rad(5.);
   float medianAngle = 0.;
   // Iterate until only angles between direct LiDAR beam neighbors remain.
   // The max resolution angle is decreased at each iteration.
   while (maxAngle > 1.8 * medianAngle)
   {
-    maxInliersIdx = std::upper_bound(angles.begin(), angles.begin() + maxInliersIdx, maxAngle) - angles.begin();
-    medianAngle = angles[maxInliersIdx / 2];
+    maxInliersIdx = std::upper_bound(azimuthDiffs.begin(), azimuthDiffs.begin() + maxInliersIdx, maxAngle)
+                    - azimuthDiffs.begin();
+    medianAngle = azimuthDiffs[maxInliersIdx / 2];
     maxAngle = std::min(medianAngle * 2., maxAngle / 1.8);
   }
 
   // Save the computed parameters
-  this->NbLaserRings = scanLines.size();
+  this->NbLaserRings = azimuthsPerScanLine.size();
   this->NbFiringsPerLaserRing = std::ceil(2 * M_PI / medianAngle);
   std::cout << "Estimated spinning LiDAR sensor mode : "
             << this->NbLaserRings << " x " << this->NbFiringsPerLaserRing

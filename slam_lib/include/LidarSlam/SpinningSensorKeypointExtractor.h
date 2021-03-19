@@ -106,8 +106,6 @@ private:
   void SetKeyPointsLabels();
 
   // Auto estimate NbLaserRings and NbFiringsPerLaserRing from current scan.
-  // WARNING: This makes the assumption that the points in each scan line are
-  // already stored in sorted order, by increasing azimuth/timestamp.
   // WARNING: to be correct, the points need to be in the LIDAR sensor
   // coordinates system, where the sensor is spinning around Z axis.
   void EstimateLaserRingsParameters();
