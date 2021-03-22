@@ -32,83 +32,53 @@ namespace
 //-----------------------------------------------------------------------------
 struct LineFitting
 {
-  //! Fitting using PCA
-  bool FitPCA(const SpinningSensorKeypointExtractor::PointCloud& cloud,
-              const std::vector<int>& indices);
-
-  //! Fitting using very local line and check if this local line is consistent
-  //! in a more global neighborhood
-  bool FitPCAAndCheckConsistency(const SpinningSensorKeypointExtractor::PointCloud& cloud,
-                                 const std::vector<int>& indices);
+  //! Fit mean line
+  bool FitLine(const SpinningSensorKeypointExtractor::PointCloud& cloud,
+               const std::vector<int>& indices);
 
   //! Compute the squared distance of a point to the fitted line
-  inline float SquaredDistanceToPoint(Eigen::Vector3f const& point) const;
+  template<typename Vec>
+  inline float SquaredDistanceToPoint(const Vec& point) const;
 
-  // Direction and position
+  //! Direction and position
   Eigen::Vector3f Direction;
   Eigen::Vector3f Position;
 
-  //! Max distance allowed from the farest point to estimated line to be considered as real line
-  float MaxDistance = 0.02;  // [m]
-
-  //! Max angle allowed between consecutive segments in the neighborhood to be considered as line
-  float MaxAngle = DEG2RAD(40.);  // [rad]
+  //! Max distance allowed from the farthest point to estimated line to be
+  //! considered as real line
+  float SqMaxDistance = 0.02 * 0.02;  // [m2]
 };
 
 //-----------------------------------------------------------------------------
-bool LineFitting::FitPCA(const SpinningSensorKeypointExtractor::PointCloud& cloud,
+bool LineFitting::FitLine(const SpinningSensorKeypointExtractor::PointCloud& cloud,
                          const std::vector<int>& indices)
 {
-  // Compute PCA to determine best line approximation of the points distribution
-  // and save points centroid in Position
-  Eigen::Vector3f eigVals;
-  Eigen::Matrix3f eigVecs;
-  Utils::ComputeMeanAndPCA(cloud, indices, this->Position, eigVecs, eigVals);
-
-  // Get Direction as main eigen vector
-  this->Direction = eigVecs.col(2);
+  // Compute the average of all possible lines formed by the points
+  this->Position.setZero();
+  this->Direction.setZero();
+  for(unsigned int i = 0; i < indices.size(); ++i)
+  {
+    pcl::Vector3fMapConst pt = cloud[indices[i]].getVector3fMap();
+    this->Position += pt;
+    for(unsigned int j = i + 1; j < indices.size(); ++j)
+      this->Direction += (pt - cloud[indices[j]].getVector3fMap()).normalized();
+  }
+  this->Position /= indices.size();
+  this->Direction.normalize();
 
   // If a point of the neighborhood is too far from the fitted line,
   // we consider the neighborhood as non flat
-  bool isLineFittingAccurate = true;
-  const float sqMaxDistance = this->MaxDistance * this->MaxDistance;
   for (const auto& pointId: indices)
   {
-    if (this->SquaredDistanceToPoint(cloud[pointId].getVector3fMap()) > sqMaxDistance)
-    {
-      isLineFittingAccurate = false;
-      break;
-    }
+    if (this->SquaredDistanceToPoint(cloud[pointId].getVector3fMap()) > this->SqMaxDistance)
+      return false;
   }
-  return isLineFittingAccurate;
+  return true;
 }
 
 //-----------------------------------------------------------------------------
-bool LineFitting::FitPCAAndCheckConsistency(const SpinningSensorKeypointExtractor::PointCloud& cloud,
-                                            const std::vector<int>& indices)
-{
-  const float maxSinAngle = std::sin(this->MaxAngle);
-  bool isLineFittingAccurate = true;
-
-  // First check if the neighborhood is approximately straight
-  const Eigen::Vector3f U = (cloud[indices.back()].getVector3fMap() - cloud[indices.front()].getVector3fMap()).normalized();
-  for (unsigned int i = 0; i < indices.size() - 1; i++)
-  {
-    const Eigen::Vector3f V = (cloud[indices[i + 1]].getVector3fMap() - cloud[indices[i]].getVector3fMap()).normalized();
-    const float sinAngle = (U.cross(V)).norm();
-    if (sinAngle > maxSinAngle)
-    {
-      isLineFittingAccurate = false;
-      break;
-    }
-  }
-
-  // Then fit with PCA (only if isLineFittingAccurate is true)
-  return isLineFittingAccurate && this->FitPCA(cloud, indices);
-}
-
-//-----------------------------------------------------------------------------
-inline float LineFitting::SquaredDistanceToPoint(Eigen::Vector3f const& point) const
+template<typename Vec>
+inline float LineFitting::SquaredDistanceToPoint(const Vec& point) const
 {
   return ((point - this->Position).cross(this->Direction)).squaredNorm();
 }
@@ -356,8 +326,8 @@ void SpinningSensorKeypointExtractor::ComputeCurvature()
 
       // Fit line on the left and right neighborhoods and
       // Indicate if they are flat or not
-      const bool leftFlat = leftLine.FitPCAAndCheckConsistency(scanLineCloud, leftNeighbors);
-      const bool rightFlat = rightLine.FitPCAAndCheckConsistency(scanLineCloud, rightNeighbors);
+      const bool leftFlat = leftLine.FitLine(scanLineCloud, leftNeighbors);
+      const bool rightFlat = rightLine.FitLine(scanLineCloud, rightNeighbors);
 
       // Measurement of the depth gap
       float distLeft = 0., distRight = 0.;
@@ -448,7 +418,7 @@ void SpinningSensorKeypointExtractor::ComputeCurvature()
         if (farNeighbors.size() > static_cast<unsigned int>(this->NeighborWidth))
         {
           LineFitting farNeighborsLine;
-          farNeighborsLine.FitPCA(scanLineCloud, farNeighbors);
+          farNeighborsLine.FitLine(scanLineCloud, farNeighbors);
           this->Saliency[scanLine][index] = farNeighborsLine.SquaredDistanceToPoint(centralPoint);
         }
       }
