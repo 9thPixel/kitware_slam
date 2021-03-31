@@ -15,7 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //==============================================================================
-
+#if 0
 #include "LidarSlam/Utilities.h"
 #include "LidarSlam/PoseGraphOptimization.h"
 #include "LidarSlam/GlobalTrajectoriesRegistration.h"
@@ -27,7 +27,6 @@
 
 namespace LidarSlam
 {
-
 namespace Utils
 {
 namespace
@@ -285,3 +284,4 @@ void PoseGraphOptimization::BuildPoseGraph(const std::vector<Transform>& slamPos
 }
 
 } // end of LidarSlam namespace
+#endif

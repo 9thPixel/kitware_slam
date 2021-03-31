@@ -16,6 +16,7 @@
 // limitations under the License.
 //==============================================================================
 
+#if 0
 #pragma once
 
 #include "LidarSlam/Transform.h"
@@ -77,3 +78,4 @@ private:
 };
 
 } // end of LidarSlam namespace
+#endif

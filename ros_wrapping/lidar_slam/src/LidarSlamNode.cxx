@@ -195,6 +195,7 @@ void LidarSlamNode::SecondaryScanCallback(const CloudS::Ptr cloudS_ptr)
 //------------------------------------------------------------------------------
 void LidarSlamNode::GpsCallback(const nav_msgs::Odometry& msg)
 {
+  #if 0
   // If GPS/SLAM calibration is needed, save GPS pose for later use
   if (this->UseGps)
   {
@@ -222,6 +223,7 @@ void LidarSlamNode::GpsCallback(const nav_msgs::Odometry& msg)
     // Get the latest transform (we expect a static transform, so timestamp does not matter)
     Utils::Tf2LookupTransform(this->BaseToGpsOffset, this->TfBuffer, this->TrackingFrameId, msg.child_frame_id);
   }
+  #endif
 }
 
 //------------------------------------------------------------------------------
@@ -245,6 +247,7 @@ void LidarSlamNode::SlamCommandCallback(const lidar_slam::SlamCommand& msg)
   // Parse command
   switch(msg.command)
   {
+    #if 0
     // Run GPS/SLAM calibration
     case lidar_slam::SlamCommand::GPS_SLAM_CALIBRATION:
       this->GpsSlamCalibration();
@@ -279,6 +282,8 @@ void LidarSlamNode::SlamCommandCallback(const lidar_slam::SlamCommand& msg)
       ROS_WARN_STREAM("SLAM pose set from GPS pose to :\n" << odomToBase.matrix());
       break;
     }
+
+    #endif
 
     // Enable SLAM maps update
     case lidar_slam::SlamCommand::ENABLE_SLAM_MAP_UPDATE:
@@ -329,6 +334,7 @@ void LidarSlamNode::SlamCommandCallback(const lidar_slam::SlamCommand& msg)
 //------------------------------------------------------------------------------
 void LidarSlamNode::GpsSlamCalibration()
 {
+  #if 0
   if (!this->UseGps)
   {
     ROS_ERROR_STREAM("Cannot run GPS/SLAM calibration as GPS logging has not been enabled. "
@@ -421,11 +427,13 @@ void LidarSlamNode::GpsSlamCalibration()
   ROS_INFO_STREAM(BOLD_GREEN("Global transform from '" << gpsFrameId << "' to '" << this->OdometryFrameId << "' " <<
                   "successfully estimated to :\n" << worldToOdom.matrix() << "\n" <<
                   "(tf2 static transform : " << xyz.transpose() << " " << ypr.transpose() << " " << gpsFrameId << " " << this->OdometryFrameId << ")"));
+  #endif // GPS compilation
 }
 
 //------------------------------------------------------------------------------
 void LidarSlamNode::PoseGraphOptimization()
 {
+  #if 0
   if (!this->UseGps)
   {
     ROS_ERROR_STREAM("Cannot run pose graph optimization as GPS logging has not been enabled. "
@@ -469,6 +477,7 @@ void LidarSlamNode::PoseGraphOptimization()
 
   // Update display
   this->PublishOutput();
+  #endif // Compilation of poseGraph
 }
 
 //==============================================================================
