@@ -461,9 +461,6 @@ private:
 
   // **** LOCALIZATION ****
 
-  // Global transformation to map the current pointcloud to the previous one
-  Eigen::Isometry3d Trelative;
-
   // Transformation to map the current pointcloud in the world coordinates
   // This pose is the pose of BASE in WORLD coordinates, at the time
   // corresponding to the timestamp in the header of input Lidar scan.

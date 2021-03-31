@@ -170,7 +170,6 @@ void Slam::Reset(bool resetLog)
   // n-DoF parameters
   this->Tworld = Eigen::Isometry3d::Identity();
   this->PreviousTworld = Eigen::Isometry3d::Identity();
-  this->Trelative = Eigen::Isometry3d::Identity();
   this->WithinFrameMotion.SetTransforms(Eigen::Isometry3d::Identity(), Eigen::Isometry3d::Identity());
 
   // Reset pose uncertainty
@@ -244,11 +243,13 @@ void Slam::AddFrames(const std::vector<PointCloud::Ptr>& frames)
   this->ExtractKeypoints();
   IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Keypoints extraction"));
 
-  // Estimate Trelative by extrapolating new pose with a constant velocity model
+  // Estimate an init Tworld by extrapolating new pose with a constant velocity model
   // and/or registering current frame on previous one
   IF_VERBOSE(3, Utils::Timer::Init("Ego-Motion"));
   this->ComputeEgoMotion();
   IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Ego-Motion"));
+
+  Eigen::Isometry3d EgoMotionTworld = this->Tworld;
 
   if (this->WheelOdomManager.CanBeUsed() || this->ImuManager.CanBeUsed())
   {
@@ -300,8 +301,8 @@ void Slam::AddFrames(const std::vector<PointCloud::Ptr>& frames)
                    " rotation    = [" << Utils::Rad2Deg(Utils::RotationMatrixToRPY(motion.linear())).transpose() << "] °\n";
     }
     std::cout << "Ego-Motion:\n"
-                 " translation = [" << this->Trelative.translation().transpose()                                        << "] m\n"
-                 " rotation    = [" << Utils::Rad2Deg(Utils::RotationMatrixToRPY(this->Trelative.linear())).transpose() << "] °\n"
+                 " translation = [" << EgoMotionTworld.translation().transpose()                                        << "] m\n"
+                 " rotation    = [" << Utils::Rad2Deg(Utils::RotationMatrixToRPY(EgoMotionTworld.linear())).transpose() << "] °\n"
                  "Localization:\n"
                  " position    = [" << this->Tworld.translation().transpose()                                        << "] m\n"
                  " orientation = [" << Utils::Rad2Deg(Utils::RotationMatrixToRPY(this->Tworld.linear())).transpose() << "] °" << std::endl;
@@ -797,7 +798,7 @@ void Slam::ComputeEgoMotion()
   PRINT_VERBOSE(2, "========== Ego-Motion ==========");
 
   // Reset ego-motion
-  this->Trelative = Eigen::Isometry3d::Identity();
+  Eigen::Isometry3d Trelative = Eigen::Isometry3d::Identity();
 
   // Linearly extrapolate previous motion to estimate new pose
   if (this->LogTrajectory.size() >= 2 &&
@@ -813,7 +814,7 @@ void Slam::ComputeEgoMotion()
     else
     {
       Eigen::Isometry3d nextTworldEstimation = LinearInterpolation(this->PreviousTworld, this->Tworld, t, t0, t1);
-      this->Trelative = this->Tworld.inverse() * nextTworldEstimation;
+      Trelative = this->Tworld.inverse() * nextTworldEstimation;
     }
   }
 
@@ -888,7 +889,7 @@ void Slam::ComputeEgoMotion()
       // At each ICP iteration, the outliers removal is refined to be stricter
       double iterRatio = icpIter / static_cast<double>(this->EgoMotionICPMaxIter - 1);
       matchingParams.SaturationDistance = (1 - iterRatio) * this->EgoMotionInitSaturationDistance + iterRatio * this->EgoMotionFinalSaturationDistance;
-      KeypointsMatcher matcher(matchingParams, this->Trelative);
+      KeypointsMatcher matcher(matchingParams, Trelative);
 
       // Loop over keypoints to build the residuals
       for (auto k : {EDGE, PLANE})
@@ -912,7 +913,8 @@ void Slam::ComputeEgoMotion()
       // Init the optimizer with initial pose and parameters
       LocalOptimizer optimizer;
       optimizer.SetTwoDMode(this->TwoDMode);
-      optimizer.SetPosePrior(this->Trelative);
+      optimizer.SetPosePrior(Trelative);
+
       optimizer.SetLMMaxIter(this->EgoMotionLMMaxIter);
       optimizer.SetNbThreads(this->NbThreads);
 
@@ -925,7 +927,7 @@ void Slam::ComputeEgoMotion()
       PRINT_VERBOSE(4, summary.BriefReport());
 
       // Get back optimized Trelative
-      this->Trelative = optimizer.GetOptimizedPose();
+      Trelative = optimizer.GetOptimizedPose();
 
       IF_VERBOSE(3, Utils::Timer::StopAndDisplay("  Ego-Motion : LM optim"));
 
@@ -947,11 +949,15 @@ void Slam::ComputeEgoMotion()
     }
   }
 
+  // Init Tworld with ego motion result for Localization step
+  this->PreviousTworld = this->Tworld;
+  this->Tworld = this->PreviousTworld * Trelative;
+
   // Print EgoMotion results
   SET_COUT_FIXED_PRECISION(3);
   PRINT_VERBOSE(2, "Estimated Ego-Motion (motion since last frame):\n"
-                   " translation = [" << this->Trelative.translation().transpose() << "] m\n"
-                   " rotation    = [" << Utils::Rad2Deg(Utils::RotationMatrixToRPY(this->Trelative.linear())).transpose() << "] °");
+                   " translation = [" << Trelative.translation().transpose() << "] m\n"
+                   " rotation    = [" << Utils::Rad2Deg(Utils::RotationMatrixToRPY(Trelative.linear())).transpose() << "] °");
   RESET_COUT_FIXED_PRECISION;
 }
 
@@ -959,10 +965,6 @@ void Slam::ComputeEgoMotion()
 void Slam::Localization()
 {
   PRINT_VERBOSE(2, "========== Localization ==========");
-
-  // Integrate the relative motion to the world transformation
-  this->PreviousTworld = this->Tworld;
-  this->Tworld = this->PreviousTworld * this->Trelative;
 
   // Init undistorted keypoints clouds from raw points
   this->CurrentUndistortedKeypoints = this->CurrentRawKeypoints;
@@ -1076,7 +1078,6 @@ void Slam::Localization()
     if (this->TotalMatchedKeypoints < this->MinNbMatchedKeypoints)
     {
       // Reset state to previous one to avoid instability
-      this->Trelative = Eigen::Isometry3d::Identity();
       this->Tworld = this->PreviousTworld;
       if (this->Undistortion)
         this->WithinFrameMotion.SetTransforms(Eigen::Isometry3d::Identity(), Eigen::Isometry3d::Identity());
@@ -1114,7 +1115,6 @@ void Slam::Localization()
 
     // Update Tworld and Trelative from optimization results
     this->Tworld = optimizer.GetOptimizedPose();
-    this->Trelative = this->PreviousTworld.inverse() * this->Tworld;
 
     // Optionally refine undistortion
     if (this->Undistortion == UndistortionMode::REFINED)
