@@ -19,6 +19,7 @@ set(LidarSlam_PUBLIC_HEADERS
   include/LidarSlam/PointCloudStorage.h
   include/LidarSlam/RollingGrid.h
   include/LidarSlam/SensorConstraints.h
+  include/LidarSlam/SharedList.h
   include/LidarSlam/Slam.h
   include/LidarSlam/SpinningSensorKeypointExtractor.h
   include/LidarSlam/Transform.h
