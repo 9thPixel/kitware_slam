@@ -95,6 +95,59 @@
 namespace LidarSlam
 {
 
+// Structure containing one state
+// States are stored in a list for further global optimization processing
+// They will be kept as long as they fit the buffer size
+struct State
+{
+  using Point = LidarPoint;
+  using PCStoragePtr = std::shared_ptr<PointCloudStorage<Point>>;
+
+  State() = default;
+  State(const Eigen::Isometry3d& isometry, double time = 0.)
+    : Isometry(isometry),
+      Time(time)
+  {}
+  // Pose transform in world coordinates
+  Eigen::Isometry3d Isometry = Eigen::Isometry3d::Identity();
+  // Covariance of current pose
+  std::array<double, 36> Covariance = {};
+  // [s] Timestamp of current pose
+  double Time = 0.;
+  // Name of the frame coordinates the transform represents or is represented into.
+  std::string FrameId;
+  // Keypoints extracted at current pose, undistorted and expressed in BASE coordinates
+  std::map<Keypoint, PCStoragePtr> Keypoints;
+};
+
+// Structure containing all publishable info
+// These data are stored in a list for an external publishing
+// They must be removed after being published
+struct Publishable
+{
+  using Point = LidarPoint;
+  using PCStoragePtr = std::shared_ptr<PointCloudStorage<Point>>;
+
+  State CurrentState;
+  // Undistorted keypoints expressed in World coordinates
+  std::map<Keypoint, PCStoragePtr> KeypointsWorld;
+  // Local keypoint maps (edges/planes/blobs)
+  std::map<Keypoint, PCStoragePtr> Maps;
+  // Debug array
+  std::unordered_map<std::string, std::vector<double>> DebugArray;
+  // Debug array provided by the keypoints extractor
+  std::unordered_map<std::string, std::vector<float>> KEDebugArray;
+  // Debug information
+  std::unordered_map<std::string, double> DebugInformation;
+  // Current frames registered in map
+  PCStoragePtr OutputFrames;
+  // Pose relative to publish time
+  // It corresponds to the computed pose corrected by latency time with ego motion model
+  Eigen::Isometry3d LatencyCorrectedIsometry = Eigen::Isometry3d::Identity();
+  // Number of the frame processed since last reset
+  int IdxFrame = 0;
+};
+
 class Slam
 {
 public:
@@ -106,6 +159,8 @@ public:
   using Point = LidarPoint;
   using PointCloud = pcl::PointCloud<Point>;
   using KeypointExtractorPtr = std::shared_ptr<SpinningSensorKeypointExtractor>;
+  using PCStorage = PointCloudStorage<LidarPoint>;
+  using PCStoragePtr = std::shared_ptr<PCStorage>;
 
   // Initialization
   Slam();
