@@ -84,13 +84,14 @@
 #include "LidarSlam/RollingGrid.h"
 #include "LidarSlam/PointCloudStorage.h"
 #include "LidarSlam/SensorConstraints.h"
+#include "LidarSlam/SharedList.h"
 
 #include <Eigen/Geometry>
 
 #include <deque>
 
-#define SetMacro(name,type) void Set##name (type _arg) { name = _arg; }
-#define GetMacro(name,type) type Get##name () const { return name; }
+#define SetProtectedMacro(name,type) void Set##name (type _arg) {std::unique_lock<std::shared_timed_mutex> lock(this->ParamsMutex); name = _arg;}
+#define GetProtectedMacro(name,type) type Get##name () const { std::shared_lock<std::shared_timed_mutex> lock(this->ParamsMutex); return name;}
 
 namespace LidarSlam
 {
@@ -140,12 +141,16 @@ struct Publishable
   // Debug information
   std::unordered_map<std::string, double> DebugInformation;
   // Current frames registered in map
-  PCStoragePtr OutputFrames;
+  PCStoragePtr RegisteredFrame;
   // Pose relative to publish time
   // It corresponds to the computed pose corrected by latency time with ego motion model
   Eigen::Isometry3d LatencyCorrectedIsometry = Eigen::Isometry3d::Identity();
   // Number of the frame processed since last reset
   int IdxFrame = 0;
+  // Confidence estimators to evaluate pose output
+  float Overlap = -1;
+  bool ComplyMotionLimits = true;
+  int NbMatchedKeypoints = 0;
 };
 
 class Slam
@@ -164,6 +169,16 @@ public:
 
   // Initialization
   Slam();
+
+  // Destructor to free all threads depending on shared lists
+  // and to stop local Slam thread
+  ~Slam();
+  
+  // Ending of the SLAM,
+  // It frees the front end and back end threads and join them
+  // if stopPublishing is set, it frees the output depending threads too.
+  void Stop(bool stopPublishing = true);
+
   // Reset internal state : maps and trajectory are cleared
   // and current pose is set back to origin.
   // This keeps parameters and sensor data unchanged.
@@ -173,16 +188,16 @@ public:
   //   Main SLAM use
   // ---------------------------------------------------------------------------
 
-  // Add a new frame to SLAM process.
-  // This will trigger the following sequential steps:
+  // Process a new frame.
+  // This triggers the following sequential steps:
   // - keypoints extraction: extract interesting keypoints to lower problem dimensionality
   // - ego-motion: estimate motion since last pose to init localization step
   // - localization: estimate global pose of current frame in map
   // - maps update: update maps using current registered frame
-  void AddFrame(const PointCloud::Ptr& pc) { this->AddFrames({pc}); }
+  void ProcessFrame(const PointCloud::Ptr& pc) { this->ProcessFrames({pc}); }
 
-  // Add a set of frames to SLAM process.
-  // This will trigger the following sequential steps:
+  // Process a set of new frames.
+  // This triggers the following sequential steps:
   // - keypoints extraction: extract interesting keypoints from each frame to
   //   lower problem dimensionality, then aggregate them.
   // - ego-motion: estimate motion since last pose to init localization step
@@ -190,43 +205,7 @@ public:
   // - maps update: update maps using current registered frame
   // This first frame will be considered as 'main': its timestamp will be the
   // current pose time, its frame id will be used if no other is specified, ...
-  void AddFrames(const std::vector<PointCloud::Ptr>& frames);
-
-  // Get the computed world transform so far (current BASE pose in WORLD coordinates)
-  Transform GetWorldTransform() const;
-  // Get the computed world transform so far, but compensating SLAM computation duration latency.
-  Transform GetLatencyCompensatedWorldTransform() const;
-  // Get the covariance of the last localization step (registering the current frame to the last map)
-  // DoF order : X, Y, Z, rX, rY, rZ
-  std::array<double, 36> GetTransformCovariance() const;
-
-  // Get the whole trajectory and covariances of each step (aggregated WorldTransforms and TransformCovariances).
-  // (buffer of temporal length LoggingTimeout)
-  std::vector<Transform> GetTrajectory() const;
-  std::vector<std::array<double, 36>> GetCovariances() const;
-
-  // Get keypoints maps
-  PointCloud::Ptr GetMap(Keypoint k) const;
-
-  // Get extracted and optionally undistorted keypoints from current frame.
-  // If worldCoordinates=false, it returns keypoints in BASE coordinates,
-  // If worldCoordinates=true, it returns keypoints in WORLD coordinates.
-  // NOTE: The requested keypoints are lazy-transformed: if the requested WORLD
-  // keypoints are not directly available in case they have not already been
-  // internally transformed, this will be done on first call of this method. 
-  PointCloud::Ptr GetKeypoints(Keypoint k, bool worldCoordinates = false);
-
-  // Get current registered (and optionally undistorted) input points.
-  // All frames from all devices are aggregated.
-  PointCloud::Ptr GetRegisteredFrame();
-
-  // Get current number of frames already processed
-  GetMacro(NbrFrameProcessed, unsigned int)
-
-  // Get general information about ICP and optimization
-  std::unordered_map<std::string, double> GetDebugInformation() const;
-  // Get information for each keypoint of the current frame (used/rejected keypoints, ...)
-  std::unordered_map<std::string, std::vector<double>> GetDebugArray() const;
+  void ProcessFrames(const std::vector<PointCloud::Ptr>& frames);
 
   // Run pose graph optimization using GPS trajectory to improve SLAM maps and trajectory.
   // Each GPS position must have an associated precision covariance.
@@ -245,43 +224,63 @@ public:
   // Load keypoints maps from disk (and reset SLAM maps)
   void LoadMapsFromPCD(const std::string& filePrefix, bool resetMaps = true);
 
+  // Get current number of frames already processed
+  GetProtectedMacro(NbrFrameProcessed, unsigned int)
+
+  // ---------------------------------------------------------------------------
+  //   Multithreading relative functions
+  // ---------------------------------------------------------------------------
+
+  // Add new scan to the waiting list
+  // This must be performed by the external main thread receiving Lidar sensor data
+  // It will be used by the front end thread
+  void AddScans(const std::vector<PointCloud::Ptr>& scans);
+
+  // Get the oldest waiting result
+  // This must be performed by an external publisher thread
+  // It is published by the front end thread
+  // WARNING: this function is locking a mutex with a conditional variable,
+  // Once called, it will block the thread until some result appear or until the end
+  // of the waiting is required by the external main thread.
+  bool GetResult(Publishable& toPublish);
+
   // ---------------------------------------------------------------------------
   //   General parameters
   // ---------------------------------------------------------------------------
 
-  GetMacro(NbThreads, int)
+  GetProtectedMacro(NbThreads, int)
   void SetNbThreads(int n);
 
-  SetMacro(Verbosity, int)
-  GetMacro(Verbosity, int)
+  SetProtectedMacro(Verbosity, int)
+  GetProtectedMacro(Verbosity, int)
 
-  void SetUseBlobs(bool ub) { this->UseKeypoints[BLOB] = ub; }
-  bool GetUseBlobs() const { return this->UseKeypoints.at(BLOB); }
+  void SetUseBlobs(bool ub) { std::unique_lock<std::shared_timed_mutex> lock(this->ParamsMutex); this->UseKeypoints[BLOB] = ub; }
+  bool GetUseBlobs() const { std::shared_lock<std::shared_timed_mutex> lock(this->ParamsMutex); return this->UseKeypoints.at(BLOB); }
 
-  SetMacro(EgoMotion, EgoMotionMode)
-  GetMacro(EgoMotion, EgoMotionMode)
+  SetProtectedMacro(EgoMotion, EgoMotionMode)
+  GetProtectedMacro(EgoMotion, EgoMotionMode)
 
-  SetMacro(Undistortion, UndistortionMode)
-  GetMacro(Undistortion, UndistortionMode)
+  SetProtectedMacro(Undistortion, UndistortionMode)
+  GetProtectedMacro(Undistortion, UndistortionMode)
 
-  SetMacro(LoggingTimeout, double)
-  GetMacro(LoggingTimeout, double)
+  void SetLoggingMax(int lMax);
+  int GetLoggingMax() const;
 
-  SetMacro(LoggingStorage, PointCloudStorageType)
-  GetMacro(LoggingStorage, PointCloudStorageType)
+  SetProtectedMacro(LoggingStorage, PointCloudStorageType)
+  GetProtectedMacro(LoggingStorage, PointCloudStorageType)
 
-  SetMacro(UpdateMap, bool)
-  GetMacro(UpdateMap, bool)
+  SetProtectedMacro(UpdateMap, bool)
+  GetProtectedMacro(UpdateMap, bool)
 
   // ---------------------------------------------------------------------------
   //   Coordinates systems parameters
   // ---------------------------------------------------------------------------
 
-  SetMacro(BaseFrameId, std::string const&)
-  GetMacro(BaseFrameId, std::string)
+  SetProtectedMacro(BaseFrameId, std::string const&)
+  GetProtectedMacro(BaseFrameId, std::string)
 
-  SetMacro(WorldFrameId, std::string const&)
-  GetMacro(WorldFrameId, std::string)
+  SetProtectedMacro(WorldFrameId, std::string const&)
+  GetProtectedMacro(WorldFrameId, std::string)
 
   // ---------------------------------------------------------------------------
   //   Keypoints extraction
@@ -305,102 +304,102 @@ public:
   //   Optimization parameters
   // ---------------------------------------------------------------------------
 
-  GetMacro(TwoDMode, bool)
-  SetMacro(TwoDMode, bool)
+  GetProtectedMacro(TwoDMode, bool)
+  SetProtectedMacro(TwoDMode, bool)
 
   // Get/Set EgoMotion
-  GetMacro(EgoMotionLMMaxIter, unsigned int)
-  SetMacro(EgoMotionLMMaxIter, unsigned int)
+  GetProtectedMacro(EgoMotionLMMaxIter, unsigned int)
+  SetProtectedMacro(EgoMotionLMMaxIter, unsigned int)
 
-  GetMacro(EgoMotionICPMaxIter, unsigned int)
-  SetMacro(EgoMotionICPMaxIter, unsigned int)
+  GetProtectedMacro(EgoMotionICPMaxIter, unsigned int)
+  SetProtectedMacro(EgoMotionICPMaxIter, unsigned int)
 
-  GetMacro(EgoMotionMaxNeighborsDistance, double)
-  SetMacro(EgoMotionMaxNeighborsDistance, double)
+  GetProtectedMacro(EgoMotionMaxNeighborsDistance, double)
+  SetProtectedMacro(EgoMotionMaxNeighborsDistance, double)
 
-  GetMacro(EgoMotionEdgeNbNeighbors, unsigned int)
-  SetMacro(EgoMotionEdgeNbNeighbors, unsigned int)
+  GetProtectedMacro(EgoMotionEdgeNbNeighbors, unsigned int)
+  SetProtectedMacro(EgoMotionEdgeNbNeighbors, unsigned int)
 
-  GetMacro(EgoMotionEdgeMinNbNeighbors, unsigned int)
-  SetMacro(EgoMotionEdgeMinNbNeighbors, unsigned int)
+  GetProtectedMacro(EgoMotionEdgeMinNbNeighbors, unsigned int)
+  SetProtectedMacro(EgoMotionEdgeMinNbNeighbors, unsigned int)
 
-  GetMacro(EgoMotionEdgePcaFactor, double)
-  SetMacro(EgoMotionEdgePcaFactor, double)
+  GetProtectedMacro(EgoMotionEdgePcaFactor, double)
+  SetProtectedMacro(EgoMotionEdgePcaFactor, double)
 
-  GetMacro(EgoMotionPlaneNbNeighbors, unsigned int)
-  SetMacro(EgoMotionPlaneNbNeighbors, unsigned int)
+  GetProtectedMacro(EgoMotionPlaneNbNeighbors, unsigned int)
+  SetProtectedMacro(EgoMotionPlaneNbNeighbors, unsigned int)
 
-  GetMacro(EgoMotionPlanePcaFactor1, double)
-  SetMacro(EgoMotionPlanePcaFactor1, double)
+  GetProtectedMacro(EgoMotionPlanePcaFactor1, double)
+  SetProtectedMacro(EgoMotionPlanePcaFactor1, double)
 
-  GetMacro(EgoMotionPlanePcaFactor2, double)
-  SetMacro(EgoMotionPlanePcaFactor2, double)
+  GetProtectedMacro(EgoMotionPlanePcaFactor2, double)
+  SetProtectedMacro(EgoMotionPlanePcaFactor2, double)
 
-  GetMacro(EgoMotionEdgeMaxModelError, double)
-  SetMacro(EgoMotionEdgeMaxModelError, double)
+  GetProtectedMacro(EgoMotionEdgeMaxModelError, double)
+  SetProtectedMacro(EgoMotionEdgeMaxModelError, double)
 
-  GetMacro(EgoMotionPlaneMaxModelError, double)
-  SetMacro(EgoMotionPlaneMaxModelError, double)
+  GetProtectedMacro(EgoMotionPlaneMaxModelError, double)
+  SetProtectedMacro(EgoMotionPlaneMaxModelError, double)
 
-  GetMacro(EgoMotionInitSaturationDistance, double)
-  SetMacro(EgoMotionInitSaturationDistance, double)
+  GetProtectedMacro(EgoMotionInitSaturationDistance, double)
+  SetProtectedMacro(EgoMotionInitSaturationDistance, double)
 
-  GetMacro(EgoMotionFinalSaturationDistance, double)
-  SetMacro(EgoMotionFinalSaturationDistance, double)
+  GetProtectedMacro(EgoMotionFinalSaturationDistance, double)
+  SetProtectedMacro(EgoMotionFinalSaturationDistance, double)
 
   // Get/Set Localization
-  GetMacro(LocalizationLMMaxIter, unsigned int)
-  SetMacro(LocalizationLMMaxIter, unsigned int)
+  GetProtectedMacro(LocalizationLMMaxIter, unsigned int)
+  SetProtectedMacro(LocalizationLMMaxIter, unsigned int)
 
-  GetMacro(LocalizationICPMaxIter, unsigned int)
-  SetMacro(LocalizationICPMaxIter, unsigned int)
+  GetProtectedMacro(LocalizationICPMaxIter, unsigned int)
+  SetProtectedMacro(LocalizationICPMaxIter, unsigned int)
 
-  GetMacro(LocalizationMaxNeighborsDistance, double)
-  SetMacro(LocalizationMaxNeighborsDistance, double)
+  GetProtectedMacro(LocalizationMaxNeighborsDistance, double)
+  SetProtectedMacro(LocalizationMaxNeighborsDistance, double)
 
-  GetMacro(LocalizationEdgeNbNeighbors, unsigned int)
-  SetMacro(LocalizationEdgeNbNeighbors, unsigned int)
+  GetProtectedMacro(LocalizationEdgeNbNeighbors, unsigned int)
+  SetProtectedMacro(LocalizationEdgeNbNeighbors, unsigned int)
 
-  GetMacro(LocalizationEdgeMinNbNeighbors, unsigned int)
-  SetMacro(LocalizationEdgeMinNbNeighbors, unsigned int)
+  GetProtectedMacro(LocalizationEdgeMinNbNeighbors, unsigned int)
+  SetProtectedMacro(LocalizationEdgeMinNbNeighbors, unsigned int)
 
-  GetMacro(LocalizationEdgePcaFactor, double)
-  SetMacro(LocalizationEdgePcaFactor, double)
+  GetProtectedMacro(LocalizationEdgePcaFactor, double)
+  SetProtectedMacro(LocalizationEdgePcaFactor, double)
 
-  GetMacro(LocalizationPlaneNbNeighbors, unsigned int)
-  SetMacro(LocalizationPlaneNbNeighbors, unsigned int)
+  GetProtectedMacro(LocalizationPlaneNbNeighbors, unsigned int)
+  SetProtectedMacro(LocalizationPlaneNbNeighbors, unsigned int)
 
-  GetMacro(LocalizationPlanePcaFactor1, double)
-  SetMacro(LocalizationPlanePcaFactor1, double)
+  GetProtectedMacro(LocalizationPlanePcaFactor1, double)
+  SetProtectedMacro(LocalizationPlanePcaFactor1, double)
 
-  GetMacro(LocalizationPlanePcaFactor2, double)
-  SetMacro(LocalizationPlanePcaFactor2, double)
+  GetProtectedMacro(LocalizationPlanePcaFactor2, double)
+  SetProtectedMacro(LocalizationPlanePcaFactor2, double)
 
-  GetMacro(LocalizationEdgeMaxModelError, double)
-  SetMacro(LocalizationEdgeMaxModelError, double)
+  GetProtectedMacro(LocalizationEdgeMaxModelError, double)
+  SetProtectedMacro(LocalizationEdgeMaxModelError, double)
 
-  GetMacro(LocalizationPlaneMaxModelError, double)
-  SetMacro(LocalizationPlaneMaxModelError, double)
+  GetProtectedMacro(LocalizationPlaneMaxModelError, double)
+  SetProtectedMacro(LocalizationPlaneMaxModelError, double)
 
-  GetMacro(LocalizationBlobNbNeighbors, unsigned int)
-  SetMacro(LocalizationBlobNbNeighbors, unsigned int)
+  GetProtectedMacro(LocalizationBlobNbNeighbors, unsigned int)
+  SetProtectedMacro(LocalizationBlobNbNeighbors, unsigned int)
 
-  GetMacro(LocalizationInitSaturationDistance, double)
-  SetMacro(LocalizationInitSaturationDistance, double)
+  GetProtectedMacro(LocalizationInitSaturationDistance, double)
+  SetProtectedMacro(LocalizationInitSaturationDistance, double)
 
-  GetMacro(LocalizationFinalSaturationDistance, double)
-  SetMacro(LocalizationFinalSaturationDistance, double)
+  GetProtectedMacro(LocalizationFinalSaturationDistance, double)
+  SetProtectedMacro(LocalizationFinalSaturationDistance, double)
 
   // Sensor parameters
-  void SetWheelOdomWeight(double weight) {this->WheelOdomManager.SetWeight(weight);} 
-  double GetWheelOdomWeight() const {return this->WheelOdomManager.GetWeight();}
+  void SetWheelOdomWeight(double weight);
+  double GetWheelOdomWeight() const;
 
-  void SetGravityWeight(double weight) {this->ImuManager.SetWeight(weight);} 
-  double GetGravityWeight() const {return this->ImuManager.GetWeight();}
+  void SetGravityWeight(double weight);
+  double GetGravityWeight() const;
 
   // The time offset must be computed as FrameFirstPointTimestamp - FrameReceptionPOSIXTime
   void SetSensorTimeOffset(double timeOffset);
-  double GetSensorTimeOffset() const {return this->ImuManager.GetTimeOffset();}
+  double GetSensorTimeOffset() const;
 
   void AddGravityMeasurement(const SensorConstraints::GravityMeasurement& gm);
   void AddWheelOdomMeasurement(const SensorConstraints::WheelOdomMeasurement& om);
@@ -408,44 +407,36 @@ public:
 
   // ---------------------------------------------------------------------------
   //   Key frames and Maps parameters
-  // ---------------------------------------------------------------------------
+  GetProtectedMacro(KfDistanceThreshold, double)
+  SetProtectedMacro(KfDistanceThreshold, double)
 
-  GetMacro(KfDistanceThreshold, double)
-  SetMacro(KfDistanceThreshold, double)
+  GetProtectedMacro(KfAngleThreshold, double)
+  SetProtectedMacro(KfAngleThreshold, double)
 
-  GetMacro(KfAngleThreshold, double)
-  SetMacro(KfAngleThreshold, double)
-
-  // Set RollingGrid Parameters
   void ClearMaps();
   void SetVoxelGridLeafSize(Keypoint k, double size);
   void SetVoxelGridSize(int size);
   void SetVoxelGridResolution(double resolution);
 
+  GetProtectedMacro(DebugInfoFields, std::vector<std::string>)
+  SetProtectedMacro(DebugInfoFields, const std::vector<std::string>&)
+
   // ---------------------------------------------------------------------------
   //   Confidence estimation
   // ---------------------------------------------------------------------------
-
   // Overlap
-  GetMacro(OverlapSamplingRatio, float)
-  void SetOverlapSamplingRatio(float _arg);
-
-  GetMacro(OverlapEstimation, float)
-
-  // Matches
-  GetMacro(TotalMatchedKeypoints, int)
-
+  GetProtectedMacro(OverlapSamplingRatio, float)
+  void SetOverlapSamplingRatio (float _arg);
+  
   // Motion constraints
-  GetMacro(AccelerationLimits, Eigen::Array2f)
-  SetMacro(AccelerationLimits, const Eigen::Array2f&)
+  GetProtectedMacro(AccelerationLimits, Eigen::Array2f)
+  SetProtectedMacro(AccelerationLimits, const Eigen::Array2f&)
 
-  GetMacro(VelocityLimits, Eigen::Array2f)
-  SetMacro(VelocityLimits, const Eigen::Array2f&)
+  GetProtectedMacro(VelocityLimits, Eigen::Array2f)
+  SetProtectedMacro(VelocityLimits, const Eigen::Array2f&)
 
-  GetMacro(TimeWindowDuration, float)
-  SetMacro(TimeWindowDuration, float)
-
-  GetMacro(ComplyMotionLimits, bool)
+  GetProtectedMacro(WindowWidth, int)
+  SetProtectedMacro(WindowWidth, int)
 
 private:
 
@@ -479,18 +470,6 @@ private:
   // 5: 4 + logging/maps memory usage
   int Verbosity = 0;
 
-  // Optional log of computed pose, localization covariance and keypoints of each
-  // processed frame.
-  // - A value of 0. will disable logging.
-  // - A negative value will log all incoming data, without any timeout.
-  // - A positive value will keep only the most recent data, forgetting all
-  //   previous data older than LoggingTimeout seconds.
-  // WARNING : A big value of LoggingTimeout may lead to an important memory
-  //           consumption if SLAM is run for a long time.
-  // WARNING : the value must be greater than the duration of the time window
-  // in order to comply with this required value.
-  double LoggingTimeout = 0.;
-
   // Wether to use octree compression during keypoints logging.
   // This reduces about 5 times the memory consumption, but slows down logging (and PGO).
   PointCloudStorageType LoggingStorage = PointCloudStorageType::PCL_CLOUD;
@@ -503,6 +482,69 @@ private:
 
   // Number of frames that have been processed by SLAM (number of poses in trajectory)
   unsigned int NbrFrameProcessed = 0;
+
+  // ---------------------------------------------------------------------------
+  //   Multithreading relative variables
+  // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
+  // Shared lists
+
+  // Log info on each pose
+  // It may be shared by 2 threads : 
+  // the local SLAM optimization and the global optimization.
+  // It is filled by the local SLAM optimization until it reaches
+  // a maximum size.
+  // Default maximum size is fixed to 100 (cf. constructor),
+  // and can be parameterized (cf. LoggingMax)
+  SharedList<State> LogStates;
+
+  // List of publishable info (local Slam results)
+  // It may be shared between the local SLAM optimization
+  // and an external publisher.
+  // If no publisher is popping on this list or if the publisher is long,
+  // this list may increase.
+  // Default maximum size is fixed to 10 (cf. constructor)
+  SharedList<Publishable> OutputResults;
+
+  // Current waiting frames
+  // It is shared between the local Slam thread and a supplier thread.
+  // This list may increase if an external event disturb local slam process
+  // (e.g. the log list or the publishable objects list are locked,
+  // the number of keypoints is very large for one frame...)
+  // Default maximum size is fixed to 10 (cf. constructor)
+  SharedList<std::vector<PointCloud::Ptr>> InputScans;
+
+  // ---------------------------------------------------------------------------
+  // Threads
+
+  // Front end process of the SLAM
+  // New scan processing and localization
+  // relatively to the current map
+  // Output a local pose
+  std::thread LocalSlam;
+
+  // Add back end thread here
+
+  // ---------------------------------------------------------------------------
+  // Mutexes
+
+  // Mutex to protect local variables : Tworld, maps and logged States
+  // from front end thread, back end thread and main thread (user) modifications
+  // Used in front end (ProcessFrames() -> reading / writing in all steps),
+  // in back end (while updating LogStates / Maps), 
+  // LoadMapsFromPCD() and SetWorldTransformFromGuess()
+  // NOTE: shared_timed_mutex should be replaced by shared_mutex
+  // when upgrading to C++17
+  mutable std::shared_timed_mutex LocalVariablesMutex;
+
+  // Mutex to protect parameters
+  // from main thread (user modifications)
+  // while allowing front end / back end threads to use getters
+  // Used in setters/getters and ProcessFrames()
+  // NOTE: shared_timed_mutex should be replaced by shared_mutex
+  // when upgrading to C++17
+  mutable std::shared_timed_mutex ParamsMutex;
 
   // ---------------------------------------------------------------------------
   //   Trajectory, transforms and undistortion
@@ -520,7 +562,6 @@ private:
   // This pose is the pose of BASE in WORLD coordinates, at the time
   // corresponding to the timestamp in the header of input Lidar scan.
   Eigen::Isometry3d Tworld;
-  Eigen::Isometry3d PreviousTworld;
 
   // [s] SLAM computation duration of last processed frame (~Tworld delay)
   // used to compute latency compensated pose
@@ -535,14 +576,6 @@ private:
   // This will use the point-wise 'time' field, representing the time offset
   // in seconds to add to the frame header timestamp.
   LinearTransformInterpolator<double> WithinFrameMotion;
-
-  // **** LOGGING ****
-
-  // Computed trajectory of the sensor (the list of past computed poses,
-  // covariances and keypoints of each frame).
-  std::deque<Transform> LogTrajectory;
-  std::deque<std::array<double, 36>> LogCovariances;
-  std::map<Keypoint, std::deque<PointCloudStorage<Point>>> LogKeypoints;
 
   // ---------------------------------------------------------------------------
   //   Keypoints extraction
@@ -734,12 +767,10 @@ private:
   // Local acceleration thresholds in BASE
   Eigen::Array2f AccelerationLimits = {FLT_MAX, FLT_MAX};
 
-  // Duration on which to estimate the local velocity
+  // Number of poses on which to estimate the local velocity
   // This window is used to smooth values to get a more accurate velocity estimation
   // If 0, motion limits won't be checked.
-  // WARNING : the logging time out must be greater
-  // in order to comply with this required value.
-  float TimeWindowDuration = 0.f;
+  int WindowWidth = 0;
 
   // ---------------------------------------------------------------------------
   //   Main sub-problems and methods
@@ -770,7 +801,44 @@ private:
   void UpdateMapsUsingTworld();
 
   // Log current frame processing results : pose, covariance and keypoints.
-  void LogCurrentFrameState(double time, const std::string& frameId);
+  void LogCurrentFrameState(double time);
+
+  // ---------------------------------------------------------------------------
+  //  Results
+  // ---------------------------------------------------------------------------
+
+  // Main front end function
+  // Wait for a new frame in waiting list and process it
+  // The loop stops when the scans waiting list closes
+  void GetAndProcessFrames();
+
+  // Get the computed world transform so far, but compensating SLAM computation duration latency.
+  Eigen::Isometry3d GetLatencyCompensatedWorldTransform() const;
+  // Get the covariance of the last localization step (registering the current frame to the last map)
+  // DoF order : X, Y, Z, rX, rY, rZ
+  std::array<double, 36> GetTransformCovariance() const;
+
+  // Get keypoints maps
+  PointCloud::Ptr GetMap(Keypoint k) const;
+
+  // Get extracted and optionally undistorted keypoints from current frame.
+  // If worldCoordinates=false, it returns keypoints in BASE coordinates,
+  // If worldCoordinates=true, it returns keypoints in WORLD coordinates.
+  // NOTE: The requested keypoints are lazy-transformed: if the requested WORLD
+  // keypoints are not directly available in case they have not already been
+  // internally transformed, this will be done on first call of this method. 
+  PointCloud::Ptr GetKeypoints(Keypoint k, bool worldCoordinates = false);
+
+  // Get current registered (and optionally undistorted) input points.
+  // All frames from all devices are aggregated.
+  PointCloud::Ptr GetRegisteredFrame();
+
+  // Get general information about ICP and optimization
+  std::unordered_map<std::string, double> GetDebugInformation() const;
+  // Get information for each keypoint of the current frame (used/rejected keypoints, ...)
+  std::unordered_map<std::string, std::vector<double>> GetDebugArray() const;
+  // Names of the fields output in debugInfo
+  std::vector<std::string> DebugInfoFields;
 
   // ---------------------------------------------------------------------------
   //   Undistortion helpers
