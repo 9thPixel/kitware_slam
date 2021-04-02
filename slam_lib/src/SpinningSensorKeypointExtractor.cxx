@@ -249,7 +249,7 @@ void SpinningSensorKeypointExtractor::InvalidateNotUsablePoints()
       // aquired by the same laser, considering they lay on the same plane which
       // is not too oblique relatively to Lidar ray.
       // Check that this expected distance is not below range measurements noise.
-      const float maxPosDiff = std::max(L * maxPosDiffCoeff, 0.02f);
+      const float maxPosDiff = std::max(L * maxPosDiffCoeff, 1.f);
       const float sqMaxPosDiff = maxPosDiff * maxPosDiff;
 
       // Invalidate occluded points due to depth gap or parallel beam.

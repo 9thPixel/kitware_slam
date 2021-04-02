@@ -77,9 +77,12 @@ Eigen::Matrix<T, 3, 3> RotationMatrixFromRPY(const T& rx, const T& ry, const T& 
  * cost(x) = (x - P)^T C^{-1} (x - P) where, P is a mean and C is a covariance matrix,
  * then, A = C^{-1/2}, i.e the matrix A is the square root of the inverse of the covariance, 
  * also known as the stiffness matrix.
+ *
  * This function takes one 6D parameters block :
  *   - 3 first parameters to encode translation : X, Y, Z
  *   - 3 last parameters to encode rotation with euler angles : rX, rY, rZ
+ *
+ * It outputs a 3D residual block.
  */
 struct MahalanobisDistanceAffineIsometryResidual
 {
@@ -121,6 +124,16 @@ struct MahalanobisDistanceAffineIsometryResidual
     return true;
   }
 
+  // Factory to hide the construction of the CostFunction object from
+  // the client code.
+  static ceres::CostFunction* Create(const Eigen::Matrix3d& argA,
+                                     const Eigen::Vector3d& argP,
+                                     const Eigen::Vector3d& argX)
+  {
+    return (new ceres::AutoDiffCostFunction<MahalanobisDistanceAffineIsometryResidual, 3, 6>(
+      new MahalanobisDistanceAffineIsometryResidual(argA, argP, argX)));
+  }
+
 private:
   const Eigen::Matrix3d A;
   const Eigen::Vector3d P;
@@ -139,6 +152,7 @@ private:
  * cost(x) = (x - P)^T C^{-1} (x - P) where, P is a mean vector and C is a covariance matrix,
  * then, A = C^{-1/2}, i.e the matrix A is the square root of the inverse of the covariance, 
  * also known as the stiffness matrix.
+ *
  * This function takes two 6D parameters blocks :
  *  1) First isometry H0 :
  *   - 3 parameters (0, 1, 2) to encode translation T0 : X, Y, Z
@@ -146,6 +160,8 @@ private:
  *  2) Second isometry H1 :
  *   - 3 parameters (6, 7, 8) to encode translation T1 : X, Y, Z
  *   - 3 parameters (9, 10, 11) to encode rotation R1 with euler angles : rX, rY, rZ
+ *
+ * It outputs a 3D residual block.
  */
 struct MahalanobisDistanceInterpolatedMotionResidual
 {
@@ -207,11 +223,119 @@ struct MahalanobisDistanceInterpolatedMotionResidual
     return true;
   }
 
+  // Factory to hide the construction of the CostFunction object from
+  // the client code.
+  static ceres::CostFunction* Create(const Eigen::Matrix3d& argA,
+                                     const Eigen::Vector3d& argP,
+                                     const Eigen::Vector3d& argX,
+                                     double argTime)
+  {
+    return (new ceres::AutoDiffCostFunction<MahalanobisDistanceInterpolatedMotionResidual, 3, 6, 6>(
+      new MahalanobisDistanceInterpolatedMotionResidual(argA, argP, argX, argTime)));
+  }
+
 private:
   const Eigen::Matrix3d A;
   const Eigen::Vector3d P;
   const Eigen::Vector3d X;
   const double Time;
+};
+
+
+//------------------------------------------------------------------------------
+/**
+ * \class OdometerDistanceResidual
+ * \brief TODO
+ *
+ * This function takes one 6D parameters block :
+ *   - 3 first parameters to encode translation : X, Y, Z
+ *   - [unused] 3 last parameters to encode rotation with euler angles : rX, rY, rZ
+ * 
+ * It outputs a 1D residual block.
+ */
+struct OdometerDistanceResidual
+{
+  OdometerDistanceResidual(const Eigen::Vector3d& previousPos,
+                           double distanceToPreviousPose)
+    : PreviousPos(previousPos)
+    , DistanceToPreviousPose(distanceToPreviousPose)
+  {}
+
+  template <typename T>
+  bool operator()(const T* const t, T* residual) const
+  {
+    // Get translation part
+    using Vector3T = Eigen::Matrix<T, 3, 1>;
+    Eigen::Map<const Vector3T> pos(t);
+
+    // Compute residual
+    T motionSqNorm = (pos - PreviousPos).squaredNorm();
+    T motionNorm = (motionSqNorm < 1e-6) ? T(0) : ceres::sqrt(motionSqNorm);
+    residual[0] = motionNorm - DistanceToPreviousPose;
+    return true;
+  }
+
+  // Factory to hide the construction of the CostFunction object from
+  // the client code.
+  static ceres::CostFunction* Create(const Eigen::Vector3d& previousPos,
+                                     double distanceToPreviousPose)
+  {
+    return (new ceres::AutoDiffCostFunction<OdometerDistanceResidual, 1, 6>(
+      new OdometerDistanceResidual(previousPos, distanceToPreviousPose)));
+  }
+
+private:
+  const Eigen::Vector3d PreviousPos;
+  const double DistanceToPreviousPose;
+};
+
+//------------------------------------------------------------------------------
+/**
+ * \class ImuGravityAlignmentResidual
+ * \brief TODO
+ *
+ * This function takes one 6D parameters block :
+ *   - [unused] 3 first parameters to encode translation : X, Y, Z
+ *   - 3 last parameters to encode rotation with euler angles : rX, rY, rZ
+ * 
+ * It outputs a 3D residual block.
+ */
+struct ImuGravityAlignmentResidual
+{
+  ImuGravityAlignmentResidual(const Eigen::Vector3d& initialGravityDirection,
+                              const Eigen::Vector3d& currentGravityDirection)
+    : InitialGravityDirection(initialGravityDirection)
+    , CurrentGravityDirection(currentGravityDirection)
+  {}
+
+  template <typename T>
+  bool operator()(const T* const w, T* residual) const
+  {
+    using Matrix3T = Eigen::Matrix<T, 3, 3>;
+    using Vector3T = Eigen::Matrix<T, 3, 1>;
+
+    // Get rotation part 
+    Matrix3T rot = Utils::RotationMatrixFromRPY(w[3], w[4], w[5]);
+
+    // Compute residual
+    Eigen::Map<Vector3T> residualVec(residual);
+    residualVec = rot * CurrentGravityDirection - InitialGravityDirection;
+
+    return true;
+  }
+
+  // Factory to hide the construction of the CostFunction object from
+  // the client code.
+  static ceres::CostFunction* Create(const Eigen::Vector3d& initialGravityDirection,
+                                     const Eigen::Vector3d& currentGravityDirection)
+  {
+    return (new ceres::AutoDiffCostFunction<ImuGravityAlignmentResidual, 3, 6>(
+      new ImuGravityAlignmentResidual(initialGravityDirection, currentGravityDirection)));
+  }
+
+private:
+  const Eigen::Vector3d InitialGravityDirection;
+  const Eigen::Vector3d CurrentGravityDirection;
 };
 
 } // end of namespace CeresCostFunctions

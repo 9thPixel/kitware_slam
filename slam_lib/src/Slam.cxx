@@ -149,6 +149,45 @@ Slam::Slam()
 
   // Reset SLAM internal state
   this->Reset();
+
+  // ###########################################################################
+  // DEBUG
+
+  // std::string csvPath = "/home/nicolas/data/Caelivision/2020-03-caelivision-b14882/17-03-2021_14-03-33_rec-imu-pos.poses";
+  std::string csvPath = "/home/nicolas/data/Caelivision/2020-03-caelivision-b14882/17-03-2021_14-03-33_rec-imu-pos-posix.csv";
+  double timeOffset = 4435169098 * 1e-6 - 1615986214.198827;
+
+  ifstream csvFile;
+  csvFile.open(csvPath.c_str());
+  if (!csvFile.is_open())
+    std::cerr << "Failed to read csv!" << endl;
+
+  std::string line;
+  std::vector<std::string> vec;
+  std::getline(csvFile, line); // skip the 1st line
+  while (std::getline(csvFile,line))
+  {
+    if (line.empty()) // skip empty lines:
+      continue;
+
+    std::istringstream iss(line);
+    std::string lineStream;
+    std::string::size_type sz;
+    std::vector<double> vals;
+    while (std::getline(iss, lineStream, ';'))
+      vals.push_back(std::stod(lineStream, &sz)); // convert to double
+
+    this->OdomTimes.push_back(vals[0] + timeOffset);
+    this->OdomDistances.push_back(vals[1]);
+    this->ImuTimes.push_back(vals[0] + timeOffset);
+    this->ImuAccs.emplace_back(vals[2], vals[3], vals[4]);
+
+    // std::cout << "time=" << this->OdomTimes.back() << ", "
+    //           << "odom=" << this->OdomDistances.back() << ", "
+    //           << "imu_acc=" << this->ImuAccs.back().transpose() << "\n";           
+  }
+
+  // ###########################################################################
 }
 
 //-----------------------------------------------------------------------------
@@ -790,6 +829,76 @@ void Slam::ComputeEgoMotion()
   // Reset ego-motion
   this->Trelative = Eigen::Isometry3d::Identity();
 
+  double currLidarTime = Utils::PclStampToSec(this->CurrentFrames[0]->header.stamp);
+
+  // Get wheel odometry motion
+  static int prevOdomIdx = 0;
+  static double prevOdomDist = 0.;
+  this->UseOdom = false;
+  if (this->OdomWeight > 0 && this->OdomTimes.front() < currLidarTime && currLidarTime < this->OdomTimes.back())
+  {
+    // Reset if needed
+    if (this->OdomTimes[prevOdomIdx] > currLidarTime)
+    {
+      prevOdomIdx = 0;
+      prevOdomDist = 0.;
+    }
+
+    // Get index of odometry measurement just before LiDAR time
+    while (this->OdomTimes[prevOdomIdx] <= currLidarTime)
+      prevOdomIdx++;
+    prevOdomIdx--;
+
+    // Interpolate odometry measurement at LiDAR timestamp
+    double rt = (this->OdomTimes[prevOdomIdx + 1] - currLidarTime) / (this->OdomTimes[prevOdomIdx + 1] - this->OdomTimes[prevOdomIdx]);
+    double currOdomDist = rt * this->OdomDistances[prevOdomIdx] + (1 - rt) * this->OdomDistances[prevOdomIdx + 1];
+
+    // Build odometry residual
+    double odomDistDiff = std::abs(currOdomDist - prevOdomDist);
+    prevOdomDist = currOdomDist;
+    this->OdomResidual.Cost = CeresCostFunctions::OdometerDistanceResidual::Create(this->PreviousTworld.translation(), odomDistDiff);
+    this->OdomResidual.Robustifier = new ceres::ScaledLoss(NULL, this->OdomWeight, ceres::TAKE_OWNERSHIP);
+    this->UseOdom = true;
+    std::cout << "Adding odometry residual : " << odomDistDiff << " m travelled since last frame." << std::endl;
+  }
+
+  // Get IMU gravity constraint
+  static int prevImuIdx = 0;
+  static Eigen::Vector3d initGravityDirection = Eigen::Vector3d::Zero();
+  this->UseGravity = false;
+  if (this->GravityWeight > 0 && this->ImuTimes.front() < currLidarTime && currLidarTime < this->ImuTimes.back())
+  {
+    // Reset if needed
+    if (this->ImuTimes[prevImuIdx] > currLidarTime)
+    {
+      prevImuIdx = 0;
+      initGravityDirection = Eigen::Vector3d::Zero();
+    }
+
+    // Get index of IMU measurement just before LiDAR time
+    Eigen::Vector3d gravityDirection = this->ImuAccs[prevImuIdx].normalized();
+    while (this->ImuTimes[prevImuIdx] <= currLidarTime)
+    {
+      prevImuIdx++;
+      gravityDirection += this->ImuAccs[prevImuIdx].normalized();
+    }
+    prevImuIdx--;
+    gravityDirection.normalize();
+
+    // Reset initial gravity direction if invalid
+    if (initGravityDirection.norm() < 1.)
+    {
+      initGravityDirection = gravityDirection;
+      PRINT_COLOR(MAGENTA, "initGravityDirection reset to " << initGravityDirection.transpose());
+    }
+
+    // Build gravity constraint
+    this->GravityResidual.Cost = CeresCostFunctions::ImuGravityAlignmentResidual::Create(initGravityDirection, gravityDirection);
+    this->GravityResidual.Robustifier = new ceres::ScaledLoss(NULL, this->GravityWeight, ceres::TAKE_OWNERSHIP);
+    this->UseGravity = true;
+    std::cout << "Adding IMU gravity residual." << std::endl;
+  }
+
   // Linearly extrapolate previous motion to estimate new pose
   if (this->LogTrajectory.size() >= 2 &&
       (this->EgoMotion == EgoMotionMode::MOTION_EXTRAPOLATION ||
@@ -1079,7 +1188,13 @@ void Slam::Localization()
     for (auto k : KeypointTypes)
       optimizer.AddResiduals(this->LocalizationMatchingResults[k].Residuals);
 
-    // *********************Add sensor constraints here*********************
+    // Add odometry constraint
+    if (this->UseOdom)
+      optimizer.AddResidual(this->OdomResidual);
+
+    // Add gravity alignment constraint
+    if (this->UseGravity)
+      optimizer.AddResidual(this->GravityResidual);
 
     // Run LM optimization
     ceres::Solver::Summary summary = optimizer.Solve();

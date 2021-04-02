@@ -79,8 +79,7 @@ CeresTools::Residual KeypointsMatcher::BuildResidual(const Eigen::Matrix3d& A, c
 {
   CeresTools::Residual res;
   // Create the point-to-line/plane/blob cost function
-  using Distance = CeresCostFunctions::MahalanobisDistanceAffineIsometryResidual;
-  res.Cost = new ceres::AutoDiffCostFunction<Distance, 3, 6>(new Distance(A, P, X));
+  res.Cost = CeresCostFunctions::MahalanobisDistanceAffineIsometryResidual::Create(A, P, X);
 
   // Use a robustifier to limit the contribution of an outlier match
   auto* robustifier = new ceres::TukeyLoss(std::sqrt(this->Params.SaturationDistance));

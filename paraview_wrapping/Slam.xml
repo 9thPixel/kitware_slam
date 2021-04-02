@@ -668,6 +668,28 @@
 
       <!-- ==================== Localization Parameters ==================== -->
 
+      <DoubleVectorProperty
+          name="Odometry weight"
+          command="SetOdomWeight"
+          default_values="200"
+          number_of_elements="1"
+          panel_visibility="advanced">
+        <Documentation>
+          Wheel odometry weight.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty
+          name="IMU gravity weight"
+          command="SetGravityWeight"
+          default_values="10"
+          number_of_elements="1"
+          panel_visibility="advanced">
+        <Documentation>
+          IMU grvaity alignment weight.
+        </Documentation>
+      </DoubleVectorProperty>
+
       <IntVectorProperty
           name="ICP-Optimization iterations"
           command="SetLocalizationICPMaxIter"
@@ -837,6 +859,8 @@
       </DoubleVectorProperty>
 
       <PropertyGroup label="Localization ICP matching and optimization parameters">
+        <Property name="Odometry weight" />
+        <Property name="IMU gravity weight" />
         <Property name="ICP-Optimization iterations" />
         <Property name="Lev-Mardt max iterations" />
         <Property name="Nb edges neighbors minimum after Ransac" />

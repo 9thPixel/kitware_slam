@@ -322,6 +322,12 @@ public:
   GetMacro(LocalizationFinalSaturationDistance, double)
   SetMacro(LocalizationFinalSaturationDistance, double)
 
+  SetMacro(OdomWeight, double)
+  GetMacro(OdomWeight, double)
+
+  SetMacro(GravityWeight, double)
+  GetMacro(GravityWeight, double)
+
   // ---------------------------------------------------------------------------
   //   Rolling grid parameters
   // ---------------------------------------------------------------------------
@@ -477,6 +483,24 @@ private:
   // Variance-Covariance matrix that estimates the localization error about the
   // 6-DoF parameters (DoF order : X, Y, Z, rX, rY, rZ)
   LocalOptimizer::RegistrationError LocalizationUncertainty;
+
+  // Odometry residual
+  bool UseOdom = false;
+  double OdomWeight = 1.;
+  CeresTools::Residual OdomResidual;
+
+  // Odometry measurements
+  std::vector<double> OdomTimes;
+  std::vector<double> OdomDistances;
+
+  // Gravity measurements
+  bool UseGravity = false;
+  double GravityWeight = 1.;
+  CeresTools::Residual GravityResidual;
+
+  // IMU acceleration measurements for detecting gravity
+  std::vector<double> ImuTimes;
+  std::vector<Eigen::Vector3d> ImuAccs;
 
   // ---------------------------------------------------------------------------
   //   Optimization parameters

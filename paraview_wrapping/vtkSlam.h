@@ -202,6 +202,12 @@ public:
   vtkCustomGetMacro(LocalizationFinalSaturationDistance, double)
   vtkCustomSetMacro(LocalizationFinalSaturationDistance, double)
 
+  vtkCustomGetMacro(OdomWeight, double)
+  vtkCustomSetMacro(OdomWeight, double)
+
+  vtkCustomGetMacro(GravityWeight, double)
+  vtkCustomSetMacro(GravityWeight, double)
+
   // ---------------------------------------------------------------------------
   //   Rolling grid parameters and Keypoints extractor
   // ---------------------------------------------------------------------------
