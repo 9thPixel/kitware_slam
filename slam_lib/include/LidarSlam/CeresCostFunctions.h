@@ -34,6 +34,13 @@ struct Residual
 {
   ceres::CostFunction* Cost = nullptr;
   ceres::LossFunction* Robustifier = nullptr;
+  void Clear()
+  {
+    if (this->Cost != nullptr)
+      delete this->Cost;
+    if (this->Robustifier != nullptr)
+      delete this->Robustifier;
+  }
 };
 }
 namespace CeresCostFunctions

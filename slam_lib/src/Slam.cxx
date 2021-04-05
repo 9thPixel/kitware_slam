@@ -1217,7 +1217,20 @@ void Slam::Localization()
     if ((summary.num_successful_steps == 1) || (icpIter == this->LocalizationICPMaxIter - 1))
     {
       this->LocalizationUncertainty = optimizer.EstimateRegistrationError();
+      this->OdomResidual.Clear();
+      this->GravityResidual.Clear();
+      for (auto k : KeypointTypes)
+      {
+        for (CeresTools::Residual& res : this->LocalizationMatchingResults[k].Residuals)
+          res.Clear();
+      }
       break;
+    }
+
+    for (auto k : KeypointTypes)
+    {
+      for (CeresTools::Residual& res : this->LocalizationMatchingResults[k].Residuals)
+        res.Clear();
     }
   }
 
