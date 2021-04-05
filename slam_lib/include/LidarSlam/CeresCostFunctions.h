@@ -32,15 +32,8 @@ namespace CeresTools
 {
 struct Residual
 {
-  ceres::CostFunction* Cost = nullptr;
-  ceres::LossFunction* Robustifier = nullptr;
-  void Clear()
-  {
-    if (this->Cost != nullptr)
-      delete this->Cost;
-    if (this->Robustifier != nullptr)
-      delete this->Robustifier;
-  }
+  std::shared_ptr<ceres::CostFunction> Cost = nullptr;
+  std::shared_ptr<ceres::LossFunction> Robustifier = nullptr;
 };
 }
 namespace CeresCostFunctions
@@ -133,12 +126,15 @@ struct MahalanobisDistanceAffineIsometryResidual
 
   // Factory to hide the construction of the CostFunction object from
   // the client code.
-  static ceres::CostFunction* Create(const Eigen::Matrix3d& argA,
+  static std::shared_ptr<ceres::CostFunction> Create(const Eigen::Matrix3d& argA,
                                      const Eigen::Vector3d& argP,
                                      const Eigen::Vector3d& argX)
   {
-    return (new ceres::AutoDiffCostFunction<MahalanobisDistanceAffineIsometryResidual, 3, 6>(
-      new MahalanobisDistanceAffineIsometryResidual(argA, argP, argX)));
+    return std::shared_ptr<ceres::AutoDiffCostFunction<MahalanobisDistanceAffineIsometryResidual, 3, 6>>(
+              new ceres::AutoDiffCostFunction<MahalanobisDistanceAffineIsometryResidual, 3, 6> (
+                new MahalanobisDistanceAffineIsometryResidual(argA, argP, argX)
+              )
+            );
   }
 
 private:
@@ -232,13 +228,16 @@ struct MahalanobisDistanceInterpolatedMotionResidual
 
   // Factory to hide the construction of the CostFunction object from
   // the client code.
-  static ceres::CostFunction* Create(const Eigen::Matrix3d& argA,
+  static std::shared_ptr<ceres::CostFunction> Create(const Eigen::Matrix3d& argA,
                                      const Eigen::Vector3d& argP,
                                      const Eigen::Vector3d& argX,
                                      double argTime)
   {
-    return (new ceres::AutoDiffCostFunction<MahalanobisDistanceInterpolatedMotionResidual, 3, 6, 6>(
-      new MahalanobisDistanceInterpolatedMotionResidual(argA, argP, argX, argTime)));
+    return std::shared_ptr<ceres::AutoDiffCostFunction<MahalanobisDistanceInterpolatedMotionResidual, 3, 6, 6>>(
+              new ceres::AutoDiffCostFunction<MahalanobisDistanceInterpolatedMotionResidual, 3, 6, 6> (
+                new MahalanobisDistanceInterpolatedMotionResidual(argA, argP, argX, argTime)
+              )
+            );
   }
 
 private:
@@ -282,13 +281,16 @@ struct OdometerDistanceResidual
     return true;
   }
 
-  // Factory to hide the construction of the CostFunction object from
-  // the client code.
-  static ceres::CostFunction* Create(const Eigen::Vector3d& previousPos,
+  // Factory to hide the construction of the CostFunction
+  // object from the client code.
+  static std::shared_ptr<ceres::CostFunction> Create(const Eigen::Vector3d& previousPos,
                                      double distanceToPreviousPose)
   {
-    return (new ceres::AutoDiffCostFunction<OdometerDistanceResidual, 1, 6>(
-      new OdometerDistanceResidual(previousPos, distanceToPreviousPose)));
+    return std::shared_ptr<ceres::AutoDiffCostFunction<OdometerDistanceResidual, 1, 6>>(
+              new ceres::AutoDiffCostFunction<OdometerDistanceResidual, 1, 6> (
+                new OdometerDistanceResidual(previousPos, distanceToPreviousPose)
+              )
+            );
   }
 
 private:
@@ -333,11 +335,14 @@ struct ImuGravityAlignmentResidual
 
   // Factory to hide the construction of the CostFunction object from
   // the client code.
-  static ceres::CostFunction* Create(const Eigen::Vector3d& initialGravityDirection,
+  static std::shared_ptr<ceres::CostFunction> Create(const Eigen::Vector3d& initialGravityDirection,
                                      const Eigen::Vector3d& currentGravityDirection)
   {
-    return (new ceres::AutoDiffCostFunction<ImuGravityAlignmentResidual, 3, 6>(
-      new ImuGravityAlignmentResidual(initialGravityDirection, currentGravityDirection)));
+    return std::shared_ptr<ceres::AutoDiffCostFunction<ImuGravityAlignmentResidual, 3, 6>>(
+              new ceres::AutoDiffCostFunction<ImuGravityAlignmentResidual, 3, 6> (
+                new ImuGravityAlignmentResidual(initialGravityDirection, currentGravityDirection)
+              )
+            );
   }
 
 private:

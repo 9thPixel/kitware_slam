@@ -84,7 +84,7 @@ CeresTools::Residual KeypointsMatcher::BuildResidual(const Eigen::Matrix3d& A, c
   // Use a robustifier to limit the contribution of an outlier match
   auto* robustifier = new ceres::TukeyLoss(std::sqrt(this->Params.SaturationDistance));
   // Weight the contribution of the given match by its reliability
-  res.Robustifier = new ceres::ScaledLoss(robustifier, weight, ceres::TAKE_OWNERSHIP);
+  res.Robustifier = std::shared_ptr<ceres::ScaledLoss>(new ceres::ScaledLoss(robustifier, weight, ceres::TAKE_OWNERSHIP));
   return res;
 }
 

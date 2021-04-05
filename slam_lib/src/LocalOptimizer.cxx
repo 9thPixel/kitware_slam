@@ -77,7 +77,7 @@ ceres::Solver::Summary LocalOptimizer::Solve()
   for (const CeresTools::Residual& res : this->Residuals)
   {
     if (res.Cost)
-      this->Problem->AddResidualBlock(res.Cost, res.Robustifier, this->PoseArray.data());
+      this->Problem->AddResidualBlock(res.Cost.get(), res.Robustifier.get(), this->PoseArray.data());
   }
 
   // LM solver options

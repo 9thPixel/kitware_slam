@@ -857,7 +857,7 @@ void Slam::ComputeEgoMotion()
     double odomDistDiff = std::abs(currOdomDist - prevOdomDist);
     prevOdomDist = currOdomDist;
     this->OdomResidual.Cost = CeresCostFunctions::OdometerDistanceResidual::Create(this->PreviousTworld.translation(), odomDistDiff);
-    this->OdomResidual.Robustifier = new ceres::ScaledLoss(NULL, this->OdomWeight, ceres::TAKE_OWNERSHIP);
+    this->OdomResidual.Robustifier = std::shared_ptr<ceres::ScaledLoss>(new ceres::ScaledLoss(NULL, this->OdomWeight, ceres::TAKE_OWNERSHIP));
     this->UseOdom = true;
     std::cout << "Adding odometry residual : " << odomDistDiff << " m travelled since last frame." << std::endl;
   }
@@ -894,7 +894,7 @@ void Slam::ComputeEgoMotion()
 
     // Build gravity constraint
     this->GravityResidual.Cost = CeresCostFunctions::ImuGravityAlignmentResidual::Create(initGravityDirection, gravityDirection);
-    this->GravityResidual.Robustifier = new ceres::ScaledLoss(NULL, this->GravityWeight, ceres::TAKE_OWNERSHIP);
+    this->GravityResidual.Robustifier = std::shared_ptr<ceres::ScaledLoss>(new ceres::ScaledLoss(NULL, this->GravityWeight, ceres::TAKE_OWNERSHIP));
     this->UseGravity = true;
     std::cout << "Adding IMU gravity residual." << std::endl;
   }
@@ -1217,20 +1217,7 @@ void Slam::Localization()
     if ((summary.num_successful_steps == 1) || (icpIter == this->LocalizationICPMaxIter - 1))
     {
       this->LocalizationUncertainty = optimizer.EstimateRegistrationError();
-      this->OdomResidual.Clear();
-      this->GravityResidual.Clear();
-      for (auto k : KeypointTypes)
-      {
-        for (CeresTools::Residual& res : this->LocalizationMatchingResults[k].Residuals)
-          res.Clear();
-      }
       break;
-    }
-
-    for (auto k : KeypointTypes)
-    {
-      for (CeresTools::Residual& res : this->LocalizationMatchingResults[k].Residuals)
-        res.Clear();
     }
   }
 
