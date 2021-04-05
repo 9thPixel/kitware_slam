@@ -154,7 +154,7 @@ Slam::Slam()
   // DEBUG
 
   // std::string csvPath = "/home/nicolas/data/Caelivision/2020-03-caelivision-b14882/17-03-2021_14-03-33_rec-imu-pos.poses";
-  std::string csvPath = "/home/nicolas/data/Caelivision/2020-03-caelivision-b14882/17-03-2021_14-03-33_rec-imu-pos-posix.csv";
+  std::string csvPath = "/home/julia/Documents/Scanline/17-03-2021_14-03-33_rec-imu-pos-posix.csv";
   double timeOffset = 4435169098 * 1e-6 - 1615986214.198827;
 
   ifstream csvFile;
@@ -174,7 +174,7 @@ Slam::Slam()
     std::string lineStream;
     std::string::size_type sz;
     std::vector<double> vals;
-    while (std::getline(iss, lineStream, ';'))
+    while (std::getline(iss, lineStream, ','))
       vals.push_back(std::stod(lineStream, &sz)); // convert to double
 
     this->OdomTimes.push_back(vals[0] + timeOffset);
