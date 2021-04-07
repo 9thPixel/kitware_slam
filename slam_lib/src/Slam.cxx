@@ -177,15 +177,18 @@ Slam::Slam()
     while (std::getline(iss, lineStream, ','))
       vals.push_back(std::stod(lineStream, &sz)); // convert to double
 
-    this->OdomTimes.push_back(vals[0] + timeOffset);
-    this->OdomDistances.push_back(vals[1]);
-    this->ImuTimes.push_back(vals[0] + timeOffset);
-    this->ImuAccs.emplace_back(vals[2], vals[3], vals[4]);
+    WheelOdomMeasurement odomMeasurement;
+    odomMeasurement.Time = vals[0] + timeOffset;
+    odomMeasurement.Distance = vals[1];
+    this->OdomMeasurements.emplace_back(odomMeasurement);
 
-    // std::cout << "time=" << this->OdomTimes.back() << ", "
-    //           << "odom=" << this->OdomDistances.back() << ", "
-    //           << "imu_acc=" << this->ImuAccs.back().transpose() << "\n";           
+    GravityMeasurement gravityMeasurement;
+    gravityMeasurement.Time = vals[0] + timeOffset;
+    gravityMeasurement.Acceleration = {vals[2], vals[3], vals[4]};
+    this->GravityMeasurements.emplace_back(gravityMeasurement);
   }
+
+  this->GravityRef = SensorConstraints::ComputeGravityRef(this->GravityMeasurements, 5*M_PI/180);
 
   // ###########################################################################
 }
@@ -269,6 +272,10 @@ void Slam::AddFrames(const std::vector<PointCloud::Ptr>& frames)
   this->ComputeEgoMotion();
   IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Ego-Motion"));
 
+  IF_VERBOSE(3, Utils::Timer::Init("Sensor constraints computation"));
+  this->ComputeSensorConstraints();
+  IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Sensor constraints computation"));
+
   // Perform Localization : update Tworld from map and current frame keypoints
   // and optionally undistort keypoints clouds based on ego-motion
   IF_VERBOSE(3, Utils::Timer::Init("Localization"));
@@ -335,6 +342,30 @@ void Slam::AddFrames(const std::vector<PointCloud::Ptr>& frames)
   this->Latency = Utils::Timer::Stop("SLAM frame processing");
   this->NbrFrameProcessed++;
   IF_VERBOSE(1, Utils::Timer::StopAndDisplay("SLAM frame processing"));
+}
+
+//-----------------------------------------------------------------------------
+void Slam::ComputeSensorConstraints()
+{
+  double currLidarTime = Utils::PclStampToSec(this->CurrentFrames[0]->header.stamp);
+
+  if(this->OdomWeight > 1e-6)
+  {
+    if (!SensorConstraints::GetWheelAbsoluteConstraint(currLidarTime, this->OdomWeight, this->OdomMeasurements, this->OdomResidual))
+    {
+      std::cout << "Can not use odometry measurements" << std::endl;
+      this->OdomWeight = 0.;
+    }
+  }
+
+  if (this->GravityWeight > 1e-6)
+  {
+    if (!SensorConstraints::GetGravityConstraint(currLidarTime, this->GravityWeight, this->GravityMeasurements, this->GravityRef, this->GravityResidual))
+    {
+      std::cout << "Can not use IMU measurements" << std::endl;
+      this->GravityWeight = 0.;
+    }
+  }
 }
 
 //-----------------------------------------------------------------------------
@@ -829,76 +860,6 @@ void Slam::ComputeEgoMotion()
   // Reset ego-motion
   this->Trelative = Eigen::Isometry3d::Identity();
 
-  double currLidarTime = Utils::PclStampToSec(this->CurrentFrames[0]->header.stamp);
-
-  // Get wheel odometry motion
-  static int prevOdomIdx = 0;
-  static double prevOdomDist = 0.;
-  this->UseOdom = false;
-  if (this->OdomWeight > 0 && this->OdomTimes.front() < currLidarTime && currLidarTime < this->OdomTimes.back())
-  {
-    // Reset if needed
-    if (this->OdomTimes[prevOdomIdx] > currLidarTime)
-    {
-      prevOdomIdx = 0;
-      prevOdomDist = 0.;
-    }
-
-    // Get index of odometry measurement just before LiDAR time
-    while (this->OdomTimes[prevOdomIdx] <= currLidarTime)
-      prevOdomIdx++;
-    prevOdomIdx--;
-
-    // Interpolate odometry measurement at LiDAR timestamp
-    double rt = (this->OdomTimes[prevOdomIdx + 1] - currLidarTime) / (this->OdomTimes[prevOdomIdx + 1] - this->OdomTimes[prevOdomIdx]);
-    double currOdomDist = rt * this->OdomDistances[prevOdomIdx] + (1 - rt) * this->OdomDistances[prevOdomIdx + 1];
-
-    // Build odometry residual
-    double odomDistDiff = std::abs(currOdomDist - prevOdomDist);
-    prevOdomDist = currOdomDist;
-    this->OdomResidual.Cost = CeresCostFunctions::OdometerDistanceResidual::Create(this->PreviousTworld.translation(), odomDistDiff);
-    this->OdomResidual.Robustifier = std::shared_ptr<ceres::ScaledLoss>(new ceres::ScaledLoss(NULL, this->OdomWeight, ceres::TAKE_OWNERSHIP));
-    this->UseOdom = true;
-    std::cout << "Adding odometry residual : " << odomDistDiff << " m travelled since last frame." << std::endl;
-  }
-
-  // Get IMU gravity constraint
-  static int prevImuIdx = 0;
-  static Eigen::Vector3d initGravityDirection = Eigen::Vector3d::Zero();
-  this->UseGravity = false;
-  if (this->GravityWeight > 0 && this->ImuTimes.front() < currLidarTime && currLidarTime < this->ImuTimes.back())
-  {
-    // Reset if needed
-    if (this->ImuTimes[prevImuIdx] > currLidarTime)
-    {
-      prevImuIdx = 0;
-      initGravityDirection = Eigen::Vector3d::Zero();
-    }
-
-    // Get index of IMU measurement just before LiDAR time
-    Eigen::Vector3d gravityDirection = this->ImuAccs[prevImuIdx].normalized();
-    while (this->ImuTimes[prevImuIdx] <= currLidarTime)
-    {
-      prevImuIdx++;
-      gravityDirection += this->ImuAccs[prevImuIdx].normalized();
-    }
-    prevImuIdx--;
-    gravityDirection.normalize();
-
-    // Reset initial gravity direction if invalid
-    if (initGravityDirection.norm() < 1.)
-    {
-      initGravityDirection = gravityDirection;
-      PRINT_COLOR(MAGENTA, "initGravityDirection reset to " << initGravityDirection.transpose());
-    }
-
-    // Build gravity constraint
-    this->GravityResidual.Cost = CeresCostFunctions::ImuGravityAlignmentResidual::Create(initGravityDirection, gravityDirection);
-    this->GravityResidual.Robustifier = std::shared_ptr<ceres::ScaledLoss>(new ceres::ScaledLoss(NULL, this->GravityWeight, ceres::TAKE_OWNERSHIP));
-    this->UseGravity = true;
-    std::cout << "Adding IMU gravity residual." << std::endl;
-  }
-
   // Linearly extrapolate previous motion to estimate new pose
   if (this->LogTrajectory.size() >= 2 &&
       (this->EgoMotion == EgoMotionMode::MOTION_EXTRAPOLATION ||
@@ -1189,11 +1150,11 @@ void Slam::Localization()
       optimizer.AddResiduals(this->LocalizationMatchingResults[k].Residuals);
 
     // Add odometry constraint
-    if (this->UseOdom)
+    if (this->OdomWeight > 1e-6)
       optimizer.AddResidual(this->OdomResidual);
 
     // Add gravity alignment constraint
-    if (this->UseGravity)
+    if (this->GravityWeight > 1e-6)
       optimizer.AddResidual(this->GravityResidual);
 
     // Run LM optimization

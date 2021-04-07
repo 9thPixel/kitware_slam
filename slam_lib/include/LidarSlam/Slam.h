@@ -84,6 +84,7 @@
 #include "LidarSlam/MotionModel.h"
 #include "LidarSlam/RollingGrid.h"
 #include "LidarSlam/PointCloudStorage.h"
+#include "LidarSlam/SensorConstraints.h"
 
 #include <Eigen/Geometry>
 
@@ -484,23 +485,22 @@ private:
   // 6-DoF parameters (DoF order : X, Y, Z, rX, rY, rZ)
   LocalOptimizer::RegistrationError LocalizationUncertainty;
 
+  // Odometry measurements
+  std::vector<WheelOdomMeasurement> OdomMeasurements;
+  // Odometry weight (default is 0. : odometry is not used)
+  double OdomWeight = 0.;
   // Odometry residual
-  bool UseOdom = false;
-  double OdomWeight = 1.;
   CeresTools::Residual OdomResidual;
 
-  // Odometry measurements
-  std::vector<double> OdomTimes;
-  std::vector<double> OdomDistances;
-
   // Gravity measurements
-  bool UseGravity = false;
-  double GravityWeight = 1.;
-  CeresTools::Residual GravityResidual;
-
   // IMU acceleration measurements for detecting gravity
-  std::vector<double> ImuTimes;
-  std::vector<Eigen::Vector3d> ImuAccs;
+  std::vector<GravityMeasurement> GravityMeasurements;
+  // Reference gravity
+  Eigen::Vector3d GravityRef = {0, 0, 1};
+  // Gravity weight (default is 0. : gravity is not used)
+  double GravityWeight = 0.;
+  // Gravity residual
+  CeresTools::Residual GravityResidual;
 
   // ---------------------------------------------------------------------------
   //   Optimization parameters
@@ -580,6 +580,9 @@ private:
   // Extract keypoints from input pointclouds,
   // and transform them from LIDAR to BASE coordinate system.
   void ExtractKeypoints();
+
+  // Compute constraints provided by external sensors
+  void ComputeSensorConstraints();  
 
   // Estimate the ego motion since last frame.
   // Extrapolate new pose with a constant velocity model and/or
