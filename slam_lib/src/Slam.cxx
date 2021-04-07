@@ -1199,6 +1199,17 @@ void Slam::Localization()
               << std::endl;
     RESET_COUT_FIXED_PRECISION;
   }
+  
+  Eigen::Vector3d position = this->Tworld.translation();
+  Eigen::Matrix3d axes = this->Tworld.linear();
+
+  std::ofstream fout;
+  fout.open("/home/julia/Desktop/frame.csv", std::ofstream::out | std::ofstream::app);
+  fout << position(0) << " " << position(1)  << " " << position(2) << " "
+       << axes(0, 0) << " " << axes(0, 1) << " " << axes(0, 2) << " "
+       << axes(1, 0) << " " << axes(1, 1) << " " << axes(1, 2) << " "
+       << axes(2, 0) << " " << axes(2, 1) << " " << axes(2, 2) << "\n";
+  fout.close();
 }
 
 //-----------------------------------------------------------------------------

@@ -90,6 +90,8 @@
 
 #include <deque>
 
+#include <fstream> 
+
 #define SetMacro(name,type) void Set##name (type _arg) { name = _arg; }
 #define GetMacro(name,type) type Get##name () const { return name; }
 
