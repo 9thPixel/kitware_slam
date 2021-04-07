@@ -311,10 +311,10 @@ private:
  */
 struct ImuGravityAlignmentResidual
 {
-  ImuGravityAlignmentResidual(const Eigen::Vector3d& initialGravityDirection,
-                              const Eigen::Vector3d& currentGravityDirection)
-    : InitialGravityDirection(initialGravityDirection)
-    , CurrentGravityDirection(currentGravityDirection)
+  ImuGravityAlignmentResidual(const Eigen::Vector3d& refGravityDir,
+                              const Eigen::Vector3d& currGravityDir)
+    : referenceGravityDirection(refGravityDir)
+    , CurrentGravityDirection(currGravityDir)
   {}
 
   template <typename T>
@@ -328,25 +328,25 @@ struct ImuGravityAlignmentResidual
 
     // Compute residual
     Eigen::Map<Vector3T> residualVec(residual);
-    residualVec = rot * CurrentGravityDirection - InitialGravityDirection;
+    residualVec = rot * CurrentGravityDirection - referenceGravityDirection;
 
     return true;
   }
 
   // Factory to hide the construction of the CostFunction object from
   // the client code.
-  static std::shared_ptr<ceres::CostFunction> Create(const Eigen::Vector3d& initialGravityDirection,
+  static std::shared_ptr<ceres::CostFunction> Create(const Eigen::Vector3d& referenceGravityDirection,
                                      const Eigen::Vector3d& currentGravityDirection)
   {
     return std::shared_ptr<ceres::AutoDiffCostFunction<ImuGravityAlignmentResidual, 3, 6>>(
               new ceres::AutoDiffCostFunction<ImuGravityAlignmentResidual, 3, 6> (
-                new ImuGravityAlignmentResidual(initialGravityDirection, currentGravityDirection)
+                new ImuGravityAlignmentResidual(referenceGravityDirection, currentGravityDirection)
               )
             );
   }
 
 private:
-  const Eigen::Vector3d InitialGravityDirection;
+  const Eigen::Vector3d referenceGravityDirection;
   const Eigen::Vector3d CurrentGravityDirection;
 };
 
