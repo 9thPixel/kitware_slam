@@ -183,10 +183,31 @@ int vtkSlam::RequestData(vtkInformation* vtkNotUsed(request),
   IF_VERBOSE(3, Utils::Timer::Init("vtkSlam : basic output conversions"));
 
   // Wait for result and publish it
+  // Result must exist, we can't return before because the front end works continuously
+  // independently of the wrapping thread
   // Should be done in another thread ?
   LidarSlam::Publishable output;
   if (!this->SlamAlgo->GetResult(output))
     return 1;
+
+  if (output.CurrentState.Time < 0)
+  {
+    auto* slamTrajectory = vtkPolyData::GetData(outputVector, SLAM_TRAJECTORY_OUTPUT_PORT);
+    slamTrajectory->ShallowCopy(this->Trajectory);
+    auto* slamFrame = vtkPolyData::GetData(outputVector, SLAM_FRAME_OUTPUT_PORT);
+    slamFrame->ShallowCopy(input);
+    auto* edgeMap = vtkPolyData::GetData(outputVector, EDGE_MAP_OUTPUT_PORT);
+    edgeMap->ShallowCopy(vtkPolyData::New());
+    // Output : Planar points map
+    auto* planarMap = vtkPolyData::GetData(outputVector, PLANE_MAP_OUTPUT_PORT);
+    planarMap->ShallowCopy(vtkPolyData::New());
+    // Output : Blob points map
+    auto* blobMap = vtkPolyData::GetData(outputVector, BLOB_MAP_OUTPUT_PORT);
+    blobMap->ShallowCopy(vtkPolyData::New());
+    IF_VERBOSE(3, Utils::Timer::StopAndDisplay("vtkSlam : basic output conversions"));
+    IF_VERBOSE(1, Utils::Timer::StopAndDisplay("vtkSlam"));
+    return 1;
+  }
 
   // Update Trajectory with new SLAM pose
   this->AddCurrentPoseToTrajectory(output.CurrentState);

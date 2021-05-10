@@ -291,8 +291,10 @@ void Slam::ProcessFrames(const std::vector<PointCloud::Ptr>& frames)
 
   // Check that input frames are correct and can be processed
   if (!this->CheckFrames(frames))
-  {
-    this->Stop();
+  { 
+    Publishable toPublish;
+    toPublish.CurrentState.Time = -1;
+    this->OutputResults.EmplaceBack(toPublish);
     return;
   }
 
