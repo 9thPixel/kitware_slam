@@ -25,7 +25,7 @@
 #ifndef PCL_NO_PRECOMPILE
 #define PCL_NO_PRECOMPILE
 #endif
-#include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/uniform_sampling.h>
 
 namespace LidarSlam
 {
@@ -326,8 +326,8 @@ void RollingGrid::Add(const PointCloud::Ptr& pointcloud, bool roll)
   }
 
   // Filter the modified pointCloud
-  pcl::VoxelGrid<Point> downSizeFilter;
-  downSizeFilter.setLeafSize(this->LeafSize, this->LeafSize, this->LeafSize);
+  pcl::UniformSampling<Point> downSizeFilter;
+  downSizeFilter.setRadiusSearch (this->LeafSize);
   for (int x = 0; x < this->GridSize; x++)
   {
     for (int y = 0; y < this->GridSize; y++)
@@ -336,10 +336,8 @@ void RollingGrid::Add(const PointCloud::Ptr& pointcloud, bool roll)
       {
         if (voxelToFilter[x][y][z])
         {
-          PointCloud::Ptr tmp(new PointCloud);
           downSizeFilter.setInputCloud(this->Grid[x][y][z]);
-          downSizeFilter.filter(*tmp);
-          this->Grid[x][y][z] = tmp;
+          downSizeFilter.filter(*this->Grid[x][y][z]);
         }
       }
     }
