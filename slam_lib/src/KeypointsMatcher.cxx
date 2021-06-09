@@ -75,7 +75,7 @@ KeypointsMatcher::MatchingResults KeypointsMatcher::BuildMatchResiduals(const Po
 
 
 //----------------------------------------------------------------------------
-CeresTools::Residual KeypointsMatcher::BuildResidual(const Eigen::Matrix3d& A, const Eigen::Vector3d& P, const Eigen::Vector3d& X)
+CeresTools::Residual KeypointsMatcher::BuildResidual(const Eigen::Matrix3d& A, const Eigen::Vector3d& P, const Eigen::Vector3d& X, const float saturationThreshold)
 {
   CeresTools::Residual res;
   // Create the point-to-line/plane/blob cost function
@@ -87,7 +87,7 @@ CeresTools::Residual KeypointsMatcher::BuildResidual(const Eigen::Matrix3d& A, c
   //   rho(residual^2) = a^2 / 3                                      for residual^2 >  a^2.
   // a is the scaling parameter of the function
   // See http://ceres-solver.org/nnls_modeling.html#theory for details
-  res.Robustifier.reset(new ceres::TukeyLoss(this->Params.SaturationDistance));
+  res.Robustifier.reset(new ceres::TukeyLoss(saturationThreshold));
   return res;
 }
 
@@ -194,9 +194,7 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildLineMatch(co
   A *= 1.f / sigmaEdge;
 
   // Compute residual
-  this->Params.SaturationDistance /= sigmaEdge;
-  CeresTools::Residual res = this->BuildResidual(A, mean, localPoint);
-  this->Params.SaturationDistance *= sigmaEdge;
+  CeresTools::Residual res = this->BuildResidual(A, mean, localPoint, this->Params.SaturationDistance / sigmaEdge);
   return { MatchingResults::MatchStatus::SUCCESS, 1.f / sigmaEdge, res };
 }
 
@@ -292,9 +290,7 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildPlaneMatch(c
   A *= 1.f / sigmaPlane;
 
   // Compute residual
-  this->Params.SaturationDistance /= sigmaPlane;
-  CeresTools::Residual res = this->BuildResidual(A, mean, localPoint);
-  this->Params.SaturationDistance *= sigmaPlane;
+  CeresTools::Residual res = this->BuildResidual(A, mean, localPoint, this->Params.SaturationDistance / sigmaPlane);
   return { MatchingResults::MatchStatus::SUCCESS, 1.f / sigmaPlane, res };
 }
 

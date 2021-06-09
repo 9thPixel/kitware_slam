@@ -161,7 +161,7 @@ private:
   //    * A = C^{-1/2} is the squared information matrix, aka stiffness matrix, where 
   //      C is the covariance matrix encoding the shape of the neighborhood for a blob.
   // - weight attenuates the distance function for outliers
-  CeresTools::Residual BuildResidual(const Eigen::Matrix3d& A, const Eigen::Vector3d& P, const Eigen::Vector3d& X);
+  CeresTools::Residual BuildResidual(const Eigen::Matrix3d& A, const Eigen::Vector3d& P, const Eigen::Vector3d& X, const float saturationThreshold = 1e6);
 
   // Match the current keypoint with its neighborhood in the map / previous
   MatchingResults::MatchInfo BuildLineMatch(const KDTree& kdtreePreviousEdges, const Point& p);
@@ -185,7 +185,7 @@ private:
 
 private:
 
-  Parameters Params;
+  const Parameters Params;
 
   // Initialization of DoF to optimize
   const Eigen::Isometry3d PosePrior;  ///< Initial guess of the pose to optimize
