@@ -82,7 +82,12 @@ CeresTools::Residual KeypointsMatcher::BuildResidual(const Eigen::Matrix3d& A, c
   res.Cost = CeresCostFunctions::MahalanobisDistanceAffineIsometryResidual::Create(A, P, X);
 
   // Use a robustifier to limit the contribution of an outlier match
-  auto* robustifier = new ceres::TukeyLoss(std::sqrt(this->Params.SaturationDistance));
+  // Tukey loss applied on residual square:
+  //   rho(residual^2) = a^2 / 3 * ( 1 - (1 - residual^2 / a^2)^3 )   for residual^2 <= a^2,
+  //   rho(residual^2) = a^2 / 3                                      for residual^2 >  a^2.
+  // a is the scaling parameter of the function
+  // See http://ceres-solver.org/nnls_modeling.html#theory for details
+  auto* robustifier = new ceres::TukeyLoss(this->Params.SaturationDistance);
   // Weight the contribution of the given match by its reliability
   res.Robustifier.reset(new ceres::ScaledLoss(robustifier, weight, ceres::TAKE_OWNERSHIP));
   return res;
@@ -303,7 +308,6 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildBlobMatch(co
   // ===================================================
   // Get neighboring points in previous set of keypoints
 
-  // double maxDist = this->MaxDistanceForICPMatching;  //< maximum distance between keypoints and its neighbors
   float maxDiameter = 4.;
 
   std::vector<int> knnIndices;
