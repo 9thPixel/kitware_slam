@@ -21,6 +21,22 @@
 
 namespace LidarSlam
 {
+// Helper to check the maximum neighbor distance
+bool CheckMSE(const pcl::PointCloud<LidarPoint>& points, const std::vector<int>& indices, const Eigen::Matrix3d& information, const Eigen::Vector3d& mean, const double maxDistance)
+{
+  // Evaluate the distance from the fitted line distribution of the neighborhood
+  double squaredMaxDist = maxDistance * maxDistance;
+  for (unsigned int nearestPointIndex: indices)
+  {
+    const LidarPoint& pt = points[nearestPointIndex];
+    Eigen::Vector3d Xtemp(pt.x, pt.y, pt.z);
+    double squaredDist = (Xtemp - mean).transpose() * information * (Xtemp - mean);
+    // CHECK invalidate all neighborhood even if only one point is bad?
+    if (squaredDist > squaredMaxDist)
+      return false;
+  }
+  return true;
+}
 
 //-----------------------------------------------------------------------------
 KeypointsMatcher::KeypointsMatcher(const KeypointsMatcher::Parameters& params,
@@ -172,18 +188,8 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildLineMatch(co
   }
 
   // Evaluate the distance from the fitted line distribution of the neighborhood
-  double squaredMaxDist = this->Params.MaxLineDistance * this->Params.MaxLineDistance;
-  for (unsigned int nearestPointIndex: knnIndices)
-  {
-    const Point& pt = previousEdgesPoints[nearestPointIndex];
-    Eigen::Vector3d Xtemp(pt.x, pt.y, pt.z);
-    double squaredDist = (Xtemp - mean).transpose() * A * (Xtemp - mean);
-    // CHECK invalidate all neighborhood even if only one point is bad?
-    if (squaredDist > squaredMaxDist)
-    {
+  if (!CheckMSE(previousEdgesPoints, knnIndices, A, mean, this->Params.MaxLineDistance))
       return { MatchingResults::MatchStatus::MSE_TOO_LARGE, 0., CeresTools::Residual() };
-    }
-  }
 
   // ===========================================
   // Add valid parameters for later optimization
@@ -268,18 +274,8 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildPlaneMatch(c
   }
 
   // Evaluate the distance from the fitted plane distribution of the neighborhood
-  double squaredMaxDist = this->Params.MaxPlaneDistance * this->Params.MaxPlaneDistance;
-  for (unsigned int nearestPointIndex: knnIndices)
-  {
-    const Point& pt = previousPlanesPoints[nearestPointIndex];
-    Eigen::Vector3d Xtemp(pt.x, pt.y, pt.z);
-    double squaredDist = (Xtemp - mean).transpose() * A * (Xtemp - mean);
-    // CHECK invalidate all neighborhood even if only one point is bad?
-    if (squaredDist > squaredMaxDist)
-    {
-      return { MatchingResults::MatchStatus::MSE_TOO_LARGE, 0., CeresTools::Residual() };
-    }
-  }
+  if (!CheckMSE(previousPlanesPoints, knnIndices, A, mean, this->Params.MaxLineDistance))
+    return { MatchingResults::MatchStatus::MSE_TOO_LARGE, 0., CeresTools::Residual() };
 
   // ===========================================
   // Add valid parameters for later optimization

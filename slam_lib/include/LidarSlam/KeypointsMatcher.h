@@ -31,6 +31,9 @@
 namespace LidarSlam
 {
 
+// Helper to check the maximum neighbor distance
+bool CheckMSE(const pcl::PointCloud<LidarPoint>& points, const std::vector<int>& indices, const Eigen::Matrix3d& information, const Eigen::Vector3d& mean, const double maxDistance);
+
 // Helper class to match edge/planar/blob keypoints and build ceres residuals
 class KeypointsMatcher
 {
