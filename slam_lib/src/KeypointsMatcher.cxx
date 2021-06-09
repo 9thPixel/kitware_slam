@@ -194,7 +194,8 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildLineMatch(co
   // Add valid parameters for later optimization
 
   // Scale covariance
-  float sigmaEdge = 0.3; // 30 cm
+  float sigmaEdge = std::sqrt(eigVals(0) + eigVals(1));
+  sigmaEdge = std::max(0.1f, sigmaEdge);
   A *= 1.f / sigmaEdge;
 
   // Quality score of the point-to-line match
@@ -295,7 +296,8 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildPlaneMatch(c
   // Add valid parameters for later optimization
 
   // Scale covariance
-  float sigmaPlane = 0.1; // 10cm
+  float sigmaPlane = std::sqrt(eigVals(0));
+  sigmaPlane = std::max(0.01f, sigmaPlane);
   A *= 1.f / sigmaPlane;
 
   // Quality score of the point-to-plane match
