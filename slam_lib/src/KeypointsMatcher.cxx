@@ -140,7 +140,8 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildLineMatch(co
   // If the first eigen value is significantly higher than the second one,
   // it means that the sourrounding points are distributed on an edge line.
   // Otherwise, discard this bad unstructured neighborhood.
-  if (eigVals(2) < this->Params.LineDistancefactor * eigVals(1))
+  if ((eigVals.array() <= 0.).any() ||
+      eigVals(2) < this->Params.LineDistancefactor * eigVals(1))
   {
     return { MatchingResults::MatchStatus::BAD_PCA_STRUCTURE, 0., CeresTools::Residual() };
   }
@@ -241,7 +242,8 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildPlaneMatch(c
   // If the second eigen value is close to the highest one and bigger than the
   // smallest one, it means that the points are distributed along a plane.
   // Otherwise, discard this bad unstructured neighborhood.
-  if (this->Params.PlaneDistancefactor2 * eigVals(1) < eigVals(2) ||
+  if ((eigVals.array() <= 0.).any() ||
+      this->Params.PlaneDistancefactor2 * eigVals(1) < eigVals(2) ||
       eigVals(1) < this->Params.PlaneDistancefactor1 * eigVals(0))
   {
     return { MatchingResults::MatchStatus::BAD_PCA_STRUCTURE, 0., CeresTools::Residual() };
