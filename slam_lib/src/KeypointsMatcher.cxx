@@ -75,7 +75,7 @@ KeypointsMatcher::MatchingResults KeypointsMatcher::BuildMatchResiduals(const Po
 
 
 //----------------------------------------------------------------------------
-CeresTools::Residual KeypointsMatcher::BuildResidual(const Eigen::Matrix3d& A, const Eigen::Vector3d& P, const Eigen::Vector3d& X, double weight)
+CeresTools::Residual KeypointsMatcher::BuildResidual(const Eigen::Matrix3d& A, const Eigen::Vector3d& P, const Eigen::Vector3d& X)
 {
   CeresTools::Residual res;
   // Create the point-to-line/plane/blob cost function
@@ -87,9 +87,7 @@ CeresTools::Residual KeypointsMatcher::BuildResidual(const Eigen::Matrix3d& A, c
   //   rho(residual^2) = a^2 / 3                                      for residual^2 >  a^2.
   // a is the scaling parameter of the function
   // See http://ceres-solver.org/nnls_modeling.html#theory for details
-  auto* robustifier = new ceres::TukeyLoss(this->Params.SaturationDistance);
-  // Weight the contribution of the given match by its reliability
-  res.Robustifier.reset(new ceres::ScaledLoss(robustifier, weight, ceres::TAKE_OWNERSHIP));
+  res.Robustifier.reset(new ceres::TukeyLoss(this->Params.SaturationDistance));
   return res;
 }
 
@@ -174,7 +172,6 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildLineMatch(co
   }
 
   // Evaluate the distance from the fitted line distribution of the neighborhood
-  double meanSquaredDist = 0.;
   double squaredMaxDist = this->Params.MaxLineDistance * this->Params.MaxLineDistance;
   for (unsigned int nearestPointIndex: knnIndices)
   {
@@ -186,9 +183,7 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildLineMatch(co
     {
       return { MatchingResults::MatchStatus::MSE_TOO_LARGE, 0., CeresTools::Residual() };
     }
-    meanSquaredDist += squaredDist;
   }
-  meanSquaredDist /= static_cast<double>(neighborhoodSize);
 
   // ===========================================
   // Add valid parameters for later optimization
@@ -198,12 +193,11 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildLineMatch(co
   sigmaEdge = std::max(0.1f, sigmaEdge);
   A *= 1.f / sigmaEdge;
 
-  // Quality score of the point-to-line match
-  double fitQualityCoeff = 1.0 - std::sqrt(meanSquaredDist / squaredMaxDist);
+  // Compute residual
   this->Params.SaturationDistance /= sigmaEdge;
-  CeresTools::Residual res = this->BuildResidual(A, mean, localPoint, fitQualityCoeff);
+  CeresTools::Residual res = this->BuildResidual(A, mean, localPoint);
   this->Params.SaturationDistance *= sigmaEdge;
-  return { MatchingResults::MatchStatus::SUCCESS, fitQualityCoeff, res };
+  return { MatchingResults::MatchStatus::SUCCESS, 1.f / sigmaEdge, res };
 }
 
 //-----------------------------------------------------------------------------
@@ -276,7 +270,6 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildPlaneMatch(c
   }
 
   // Evaluate the distance from the fitted plane distribution of the neighborhood
-  double meanSquaredDist = 0.;
   double squaredMaxDist = this->Params.MaxPlaneDistance * this->Params.MaxPlaneDistance;
   for (unsigned int nearestPointIndex: knnIndices)
   {
@@ -288,9 +281,7 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildPlaneMatch(c
     {
       return { MatchingResults::MatchStatus::MSE_TOO_LARGE, 0., CeresTools::Residual() };
     }
-    meanSquaredDist += squaredDist;
   }
-  meanSquaredDist /= static_cast<double>(neighborhoodSize);
 
   // ===========================================
   // Add valid parameters for later optimization
@@ -300,12 +291,11 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildPlaneMatch(c
   sigmaPlane = std::max(0.01f, sigmaPlane);
   A *= 1.f / sigmaPlane;
 
-  // Quality score of the point-to-plane match
-  double fitQualityCoeff = 1.0 - std::sqrt(meanSquaredDist / squaredMaxDist);
+  // Compute residual
   this->Params.SaturationDistance /= sigmaPlane;
-  CeresTools::Residual res = this->BuildResidual(A, mean, localPoint, fitQualityCoeff);
+  CeresTools::Residual res = this->BuildResidual(A, mean, localPoint);
   this->Params.SaturationDistance *= sigmaPlane;
-  return { MatchingResults::MatchStatus::SUCCESS, fitQualityCoeff, res };
+  return { MatchingResults::MatchStatus::SUCCESS, 1.f / sigmaPlane, res };
 }
 
 //-----------------------------------------------------------------------------
@@ -397,11 +387,10 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildBlobMatch(co
   // ===========================================
   // Add valid parameters for later optimization
 
-  // Quality score of the point-to-blob match
-  // The aim is to prevent wrong matching pulling the pointcloud in a bad direction.
-  double fitQualityCoeff = 1.0;//1.0 - knnSqDist.back() / maxDist;
-  CeresTools::Residual res = this->BuildResidual(A, mean, localPoint, fitQualityCoeff);
-  return { MatchingResults::MatchStatus::SUCCESS, fitQualityCoeff, res };
+  float sigma = std::sqrt(eigVals(0) + eigVals(1) + eigVals(2));
+  CeresTools::Residual res = this->BuildResidual(A, mean, localPoint);
+  // Compute residual
+  return { MatchingResults::MatchStatus::SUCCESS, 1.f / sigma, res };
 }
 
 //-----------------------------------------------------------------------------
