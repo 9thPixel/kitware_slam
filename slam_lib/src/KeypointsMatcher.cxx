@@ -308,8 +308,6 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildBlobMatch(co
   // ===================================================
   // Get neighboring points in previous set of keypoints
 
-  float maxDiameter = 4.;
-
   std::vector<int> knnIndices;
   std::vector<float> knnSqDist;
   unsigned int neighborhoodSize = kdtreePreviousBlobs.KnnSearch(worldPoint.data(), this->Params.BlobDistanceNbrNeighbors, knnIndices, knnSqDist);
@@ -330,28 +328,6 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildBlobMatch(co
   // Shortcut to keypoints cloud
   const PointCloud& previousBlobsPoints = *kdtreePreviousBlobs.GetInputCloud();
 
-  // ======================================
-  // Check the diameter of the neighborhood
-
-  // If the diameter is too big, we don't want to keep this blob.
-  // We must do that since the fitted ellipsoid assumes to encode the local
-  // shape of the neighborhood.
-  float squaredDiameter = 0.;
-  for (unsigned int nearestPointIndexI: knnIndices)
-  {
-    const Point& ptI = previousBlobsPoints[nearestPointIndexI];
-    for (unsigned int nearestPointIndexJ: knnIndices)
-    {
-      const Point& ptJ = previousBlobsPoints[nearestPointIndexJ];
-      float squaredDistanceIJ = (ptI.getVector3fMap() - ptJ.getVector3fMap()).squaredNorm();
-      squaredDiameter = std::max(squaredDiameter, squaredDistanceIJ);
-    }
-  }
-  if (squaredDiameter > maxDiameter * maxDiameter)
-  {
-    return { MatchingResults::MatchStatus::MSE_TOO_LARGE, 0., CeresTools::Residual() };
-  }
-
   // ======================================================
   // Compute point-to-blob optimization parameters with PCA
 
@@ -363,19 +339,21 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildBlobMatch(co
   Eigen::Matrix3d eigVecs;
   Utils::ComputeMeanAndPCA(previousBlobsPoints, knnIndices, mean, eigVecs, eigVals);
 
-  // TODO: check PCA structure
-  // if (PCA shape isn't OK)
-  // {
-  //   return { MatchingResults::MatchStatus::BAD_PCA_STRUCTURE, 0. };
-  // }
+  // Check PCA structure
+  if ((eigVals.array() <= 0.).any())
+  {
+    return { MatchingResults::MatchStatus::BAD_PCA_STRUCTURE, 0., CeresTools::Residual()};
+  }
 
   // The inverse of the covariance matrix encodes the mahalanobis distance.
   // The residual vector is A*(pt - mean) with A = Covariance^(-1/2)
   Eigen::Vector3d eigValsSqrtInv = eigVals.array().rsqrt();
   Eigen::Matrix3d A = eigVecs * eigValsSqrtInv.asDiagonal() * eigVecs.transpose();
 
-  // Check the determinant of the matrix
-  if (!std::isfinite(eigValsSqrtInv.prod()))
+  // Check parameters validity:
+  // It would be the case if P1 = P2, for instance if the sensor has some dual
+  // returns that hit the same point.
+  if (!std::isfinite(A(0, 0)) || !std::isfinite(eigValsSqrtInv.prod()))
   {
     return { MatchingResults::MatchStatus::INVALID_NUMERICAL, 0., CeresTools::Residual() };
   }
@@ -383,7 +361,7 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildBlobMatch(co
   // ===========================================
   // Add valid parameters for later optimization
 
-  float sigma = std::sqrt(eigVals(0) + eigVals(1) + eigVals(2));
+  float sigma = std::sqrt(eigVals.sum());
   CeresTools::Residual res = this->BuildResidual(A, mean, localPoint);
   // Compute residual
   return { MatchingResults::MatchStatus::SUCCESS, 1.f / sigma, res };
