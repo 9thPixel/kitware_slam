@@ -193,9 +193,15 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildLineMatch(co
   // ===========================================
   // Add valid parameters for later optimization
 
+  // Scale covariance
+  float sigmaEdge = 0.3; // 30 cm
+  A *= 1.f / sigmaEdge;
+
   // Quality score of the point-to-line match
   double fitQualityCoeff = 1.0 - std::sqrt(meanSquaredDist / squaredMaxDist);
+  this->Params.SaturationDistance /= sigmaEdge;
   CeresTools::Residual res = this->BuildResidual(A, mean, localPoint, fitQualityCoeff);
+  this->Params.SaturationDistance *= sigmaEdge;
   return { MatchingResults::MatchStatus::SUCCESS, fitQualityCoeff, res };
 }
 
@@ -288,9 +294,15 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildPlaneMatch(c
   // ===========================================
   // Add valid parameters for later optimization
 
+  // Scale covariance
+  float sigmaPlane = 0.1; // 10cm
+  A *= 1.f / sigmaPlane;
+
   // Quality score of the point-to-plane match
   double fitQualityCoeff = 1.0 - std::sqrt(meanSquaredDist / squaredMaxDist);
+  this->Params.SaturationDistance /= sigmaPlane;
   CeresTools::Residual res = this->BuildResidual(A, mean, localPoint, fitQualityCoeff);
+  this->Params.SaturationDistance *= sigmaPlane;
   return { MatchingResults::MatchStatus::SUCCESS, fitQualityCoeff, res };
 }
 

@@ -185,7 +185,7 @@ private:
 
 private:
 
-  const Parameters Params;
+  Parameters Params;
 
   // Initialization of DoF to optimize
   const Eigen::Isometry3d PosePrior;  ///< Initial guess of the pose to optimize
