@@ -60,14 +60,14 @@ public:
     unsigned int EdgeMinNbNeighbors = 4; ///< [>=2] Min number of resulting filtered edge neighbors to approximate the corresponding line model
     double EdgePcaFactor = 5.0;          ///< To check the line neighborhood shape, the PCA eigenvalues must respect: factor * V1 <= V2
     double EdgeMinModelError = 0.01;     ///< [m] Min RMSE used between target neighborhood and its fitted line model (to limit too high weights)
-    double EdgeMaxModelError = 0.2;      ///< [m] Max RMSE allowed between target neighborhood and its fitted line model (to reject bad matches)
+    double EdgeMaxModelError = 0.1;      ///< [m] Max RMSE allowed between target neighborhood and its fitted line model (to reject bad matches)
 
     // Plane keypoints matching: point-to-plane distance
     unsigned int PlaneNbNeighbors = 5;   ///< [>=3] Number of plane neighbors to extract to approximate the corresponding plane model
     double PlanePcaFactor1 = 35.0;       ///< To check the plane neighborhood shape, the PCA eigenvalues must respect:
     double PlanePcaFactor2 = 8.0;        ///<     factor1 * V0 <= V1 and V2 <= factor2 * V1
     double PlaneMinModelError = 0.01;    ///< [m] Min RMSE used between target neighborhood and its fitted plane model (to limit too high weights)
-    double PlaneMaxModelError = 0.2;     ///< [m] Max RMSE allowed between target neighborhood and its fitted plane model (to reject bad matches)
+    double PlaneMaxModelError = 0.1;     ///< [m] Max RMSE allowed between target neighborhood and its fitted plane model (to reject bad matches)
 
     // Blob keypoints matching: point-to-ellipsoid distance
     unsigned int BlobNbNeighbors = 10;   ///< [>=4] Number of blob neighbors to extract to approximate the corresponding ellipsoid model

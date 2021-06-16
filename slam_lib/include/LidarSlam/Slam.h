@@ -610,21 +610,21 @@ private:
   unsigned int EgoMotionEdgeNbNeighbors = 8;
   unsigned int EgoMotionEdgeMinNbNeighbors = 3;
   double EgoMotionEdgePcaFactor = 5.;
-  double EgoMotionEdgeMaxModelError = 0.2;
+  double EgoMotionEdgeMaxModelError = 0.1;
   unsigned int LocalizationEdgeNbNeighbors = 10;
   unsigned int LocalizationEdgeMinNbNeighbors = 4;
   double LocalizationEdgePcaFactor = 5.0;
-  double LocalizationEdgeMaxModelError = 0.2;
+  double LocalizationEdgeMaxModelError = 0.1;
 
   // Plane keypoints matching: point-to-plane distance
   unsigned int EgoMotionPlaneNbNeighbors = 5;
   double EgoMotionPlanePcaFactor1 = 35.0;
   double EgoMotionPlanePcaFactor2 = 8.0;
-  double EgoMotionPlaneMaxModelError = 0.2;
+  double EgoMotionPlaneMaxModelError = 0.1;
   unsigned int LocalizationPlaneNbNeighbors = 5;
   double LocalizationPlanePcaFactor1 = 35.0;
   double LocalizationPlanePcaFactor2 = 8.0;
-  double LocalizationPlaneMaxModelError = 0.2;
+  double LocalizationPlaneMaxModelError = 0.1;
 
   // Blob keypoints matching: point-to-ellipsoid distance
   unsigned int LocalizationBlobNbNeighbors = 10;

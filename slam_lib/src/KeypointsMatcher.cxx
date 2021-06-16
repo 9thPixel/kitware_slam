@@ -122,7 +122,7 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildLineMatch(co
   if (this->Params.SingleEdgePerRing)
     this->GetPerRingLineNeighbors(previousEdges, worldPoint.data(), this->Params.EdgeNbNeighbors, knnIndices, knnSqDist);
   else
-    this->GetRansacLineNeighbors(previousEdges, worldPoint.data(), this->Params.EdgeNbNeighbors, this->Params.EdgeMaxModelError, knnIndices, knnSqDist);
+    this->GetRansacLineNeighbors(previousEdges, worldPoint.data(), this->Params.EdgeNbNeighbors, 2.0 * this->Params.EdgeMaxModelError, knnIndices, knnSqDist);
 
   // If not enough neighbors, abort
   unsigned int neighborhoodSize = knnIndices.size();
