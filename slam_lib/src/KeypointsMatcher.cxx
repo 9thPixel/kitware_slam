@@ -162,17 +162,6 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildLineMatch(co
   // and avoid very high weights due to low points number statistics
   double satEigVal0 = std::max(std::pow(this->Params.EdgeMinModelError, 2), eigVals(0));
   double satEigVal1 = std::max(std::pow(this->Params.EdgeMinModelError, 2), eigVals(1));
-  // Compute the inverse of the customized standard deviations along each axis of the line model
-  Eigen::Vector3d eigValsRsqrt(1. / std::sqrt(satEigVal0), 1. / std::sqrt(satEigVal1), 0.);
-  Eigen::Matrix3d A = eigVecs * eigValsRsqrt.asDiagonal() * eigVecs.transpose();
-
-  // =========================
-  // Check parameters validity
-
-  // It would be the case if P1 = P2, for instance if the sensor has some dual
-  // returns that hit the same point.
-  if (!std::isfinite(A(0, 0)))
-    return { MatchingResults::MatchStatus::INVALID_NUMERICAL, 0., CeresTools::Residual() };
 
   // If the MSE is too high, the target model is not accurate enough, discard the match in optimization.
   // This step is useful only if SingleEdgePerRing parameter is set to true.
@@ -180,6 +169,10 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildLineMatch(co
   double rmse = std::sqrt(satEigVal0 + satEigVal1);
   if (rmse >= this->Params.EdgeMaxModelError)
     return { MatchingResults::MatchStatus::MSE_TOO_LARGE, 0., CeresTools::Residual() };
+
+  // Derive A from the inverse of the customized standard deviations along each axis of the line model
+  Eigen::Vector3d eigValsRsqrt(1. / std::sqrt(satEigVal0), 1. / std::sqrt(satEigVal1), 0.);
+  Eigen::Matrix3d A = eigVecs * eigValsRsqrt.asDiagonal() * eigVecs.transpose();
 
   // ===========================================
   // Add valid parameters for later optimization
@@ -249,22 +242,15 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildPlaneMatch(c
   // Clamp the eigen values to keep minimum uncertainty of the model
   // and avoid very high weights due to low points number statistics
   double satEigVal0 = std::max(std::pow(this->Params.PlaneMinModelError, 2), eigVals(0));
-  // Compute the inverse of the customized standard deviations along each axis of the plane model
-  Eigen::Vector3d eigValsRsqrt(1. / std::sqrt(satEigVal0), 0., 0.);
-  Eigen::Matrix3d A = eigVecs * eigValsRsqrt.asDiagonal() * eigVecs.transpose();
-
-  // =========================
-  // Check parameters validity
-
-  // It would be the case if P1 = P2, P1 = P3 or P3 = P2, for instance if the
-  // sensor has some dual returns that hit the same point.
-  if (!std::isfinite(A(0, 0)))
-    return { MatchingResults::MatchStatus::INVALID_NUMERICAL, 0., CeresTools::Residual() };
 
   // If the MSE is too high, the target model is not accurate enough, discard the match in optimization
   double rmse = std::sqrt(satEigVal0);
   if (rmse >= this->Params.PlaneMaxModelError)
     return { MatchingResults::MatchStatus::MSE_TOO_LARGE, 0., CeresTools::Residual() };
+
+  // Derive A from the inverse of the customized standard deviations along each axis of the plane model
+  Eigen::Vector3d eigValsRsqrt(1. / rmse, 0., 0.);
+  Eigen::Matrix3d A = eigVecs * eigValsRsqrt.asDiagonal() * eigVecs.transpose();
 
   // ===========================================
   // Add valid parameters for later optimization
@@ -325,16 +311,6 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildBlobMatch(co
   //    res = A * (pt - centroid)
   Eigen::Vector3d eigValsRsqrt = satEigVals.array().rsqrt();
   Eigen::Matrix3d A = eigVecs * eigValsRsqrt.asDiagonal() * eigVecs.transpose();
-
-  // =========================
-  // Check parameters validity
-
-  // Check the determinant of the matrix
-  // and check parameters validity:
-  // It would be the case if P1 = P2, for instance if the sensor has some dual
-  // returns that hit the same point.
-  if (!std::isfinite(A(0, 0)) || !std::isfinite(eigValsRsqrt.prod()))
-    return { MatchingResults::MatchStatus::INVALID_NUMERICAL, 0., CeresTools::Residual() };
 
   // ===========================================
   // Add valid parameters for later optimization

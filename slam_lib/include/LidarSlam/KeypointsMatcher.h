@@ -91,7 +91,6 @@ public:
       NOT_ENOUGH_NEIGHBORS,       ///< Not enough neighbors found to match keypoint
       NEIGHBORS_TOO_FAR,          ///< Neighbors are too far to match keypoint
       BAD_PCA_STRUCTURE,          ///< PCA eigenvalues analysis discards neighborhood fit to model
-      INVALID_NUMERICAL,          ///< Optimization parameter computation has numerical invalidity
       MSE_TOO_LARGE,              ///< Mean squared error to model is too important to accept fitted model
       UNKOWN,                     ///< Unkown status (matching probably not performed yet)
       nStatus
