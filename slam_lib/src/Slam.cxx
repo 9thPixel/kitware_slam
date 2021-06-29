@@ -348,7 +348,7 @@ void Slam::ProcessFrames(const std::vector<PointCloud::Ptr>& frames)
     IF_VERBOSE(3, Utils::Timer::Init("Confidence estimators computation"));
     if (this->OverlapSamplingRatio > 0)
       this->EstimateOverlap();
-    if (this->WindowWidth > 0)
+    if (this->WindowWidth > 0 && this->TimeDependentProcessesEnabled)
       this->CheckMotionLimits();
     IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Confidence estimators computation"));
   }
@@ -371,7 +371,7 @@ void Slam::ProcessFrames(const std::vector<PointCloud::Ptr>& frames)
   {
     SET_COUT_FIXED_PRECISION(3);
     std::cout << "========== SLAM results ==========\n";
-    if (this->Undistortion)
+    if (this->Undistortion && this->TimeDependentProcessesEnabled)
     {
       Eigen::Isometry3d motion = this->WithinFrameMotion.GetTransformRange();
       std::cout << "Within frame motion:\n"
@@ -437,6 +437,7 @@ void Slam::ProcessFrames(const std::vector<PointCloud::Ptr>& frames)
   this->Latency = Utils::Timer::Stop("SLAM frame processing");
   this->NbrFrameProcessed++;
   IF_VERBOSE(1, Utils::Timer::StopAndDisplay("SLAM frame processing"));
+  this->TimeDependentProcessesEnabled = true;
 }
 
 //-----------------------------------------------------------------------------
@@ -520,7 +521,7 @@ void Slam::RunPoseGraphOptimization(const std::vector<Transform>& gpsPositions,
     for (auto k : KeypointTypes)
       logKeypoints[k] = this->UseKeypoints[k] ? this->LogKeypoints[k][i].GetCloud() : PointCloud::Ptr(new PointCloud);
 
-    if (this->Undistortion && i >= 1)
+    if (this->Undistortion && this->TimeDependentProcessesEnabled && i >= 1)
     {
       // Init the undistortion interpolator
       LinearTransformInterpolator<double> interpolator;
@@ -814,11 +815,38 @@ bool Slam::CheckFrames(const std::vector<PointCloud::Ptr>& frames)
     return false;
   }
 
+  // Check time
+
   // Skip frames if it has the same timestamp as previous ones (will induce problems in extrapolation)
   if (frames[0]->header.stamp == this->CurrentFrames[0]->header.stamp)
   {
     PRINT_ERROR("SLAM frames have the same timestamp (" << frames[0]->header.stamp << ") as previous ones : frames ignored.");
     return false;
+  }
+
+  // Disable time dependent processes if timestamp is not consistent with previous ones
+  this->TimeDependentProcessesEnabled = true;
+  const double t = Utils::PclStampToSec(frames[0]->header.stamp);
+  std::vector<State> lastStates = this->LogStates.LastElements(2);
+  if (lastStates.size() == 2)
+  {
+    const double t0 = lastStates[0].Time;
+    const double t1 = lastStates[1].Time;
+    if (std::abs((t - t1) / (t1 - t0)) > this->MaxExtrapolationRatio)
+    {
+      PRINT_WARNING("New timestamp is too far from previous one, all time dependent processes are ignored.")
+      this->TimeDependentProcessesEnabled = false;
+    }
+  }
+
+  if (lastStates.size() > 0)
+  {
+    const double tLast = lastStates.back().Time;
+    if (std::abs(t - tLast) < 1.f / this->MaxLidarFrequency)
+    {
+      PRINT_WARNING("New timestamp is too close from previous one, all time dependent processes are ignored.")
+      this->TimeDependentProcessesEnabled = false;
+    }
   }
 
   // Check frame dropping
@@ -912,19 +940,15 @@ void Slam::ComputeEgoMotion()
   std::vector<State> lastStates = this->LogStates.LastElements(2);
   if (lastStates.size() >= 2 &&
       (this->EgoMotion == EgoMotionMode::MOTION_EXTRAPOLATION ||
-       this->EgoMotion == EgoMotionMode::MOTION_EXTRAPOLATION_AND_REGISTRATION))
+       this->EgoMotion == EgoMotionMode::MOTION_EXTRAPOLATION_AND_REGISTRATION) &&
+      this->TimeDependentProcessesEnabled)
   {
-    // Estimate new Tworld with a constant velocity model
+    // Estimate relative transform with a constant velocity model
     const double t = Utils::PclStampToSec(this->CurrentFrames[0]->header.stamp);
     const double t0 = lastStates[0].Time;
     const double t1 = lastStates[1].Time;
-    if (std::abs((t - t1) / (t1 - t0)) > this->MaxExtrapolationRatio)
-      PRINT_WARNING("Unable to extrapolate scan pose from previous motion : extrapolation time is too far.")
-    else
-    {
-      Eigen::Isometry3d nextTworldEstimation = LinearInterpolation(lastStates[0].Isometry, lastStates[1].Isometry, t, t0, t1);
-      Trelative = this->Tworld.inverse() * nextTworldEstimation;
-    }
+    Eigen::Isometry3d nextTworldEstimation = LinearInterpolation(lastStates[0].Isometry, lastStates[1].Isometry, t, t0, t1);
+    Trelative = this->Tworld.inverse() * nextTworldEstimation;
   }
 
   // Refine Trelative estimation by registering current frame on previous one
@@ -1078,7 +1102,7 @@ void Slam::Localization()
   this->CurrentUndistortedKeypoints = this->CurrentRawKeypoints;
 
   // Init and run undistortion if required
-  if (this->Undistortion)
+  if (this->Undistortion && this->TimeDependentProcessesEnabled)
   {
     IF_VERBOSE(3, Utils::Timer::Init("Localization : initial undistortion"));
     // Init the within frame motion interpolator time bounds
@@ -1190,7 +1214,7 @@ void Slam::Localization()
       if (this->LogStates.Back(lastState))
         this->Tworld = lastState.Isometry;
 
-      if (this->Undistortion)
+      if (this->Undistortion && this->TimeDependentProcessesEnabled)
         this->WithinFrameMotion.SetTransforms(Eigen::Isometry3d::Identity(), Eigen::Isometry3d::Identity());
       PRINT_ERROR("Not enough keypoints matched, Localization skipped for this frame.");
       break;
@@ -1228,7 +1252,7 @@ void Slam::Localization()
     this->Tworld = optimizer.GetOptimizedPose();
 
     // Optionally refine undistortion
-    if (this->Undistortion == UndistortionMode::REFINED)
+    if (this->Undistortion == UndistortionMode::REFINED && this->TimeDependentProcessesEnabled)
       this->RefineUndistortion();
 
     IF_VERBOSE(3, Utils::Timer::StopAndDisplay("  Localization : LM optim"));
@@ -1477,14 +1501,30 @@ void Slam::EstimateOverlap()
 //-----------------------------------------------------------------------------
 void Slam::CheckMotionLimits()
 {
-  int nPoses = this->LogStates.Size();
-  if (nPoses == 0)
+  std::vector<State> lastStates = this->LogStates.LastElements(this->WindowWidth - 1);
+  // If the window's width required cannot be reached, take the last available pose
+  int windowWidth = lastStates.size();
+
+  if (windowWidth == 0)
     return;
 
-  // If the window's width required cannot be reached, take the last available pose
-  int windowWidth = std::min(nPoses, this->WindowWidth);
+  for (int stateIdx = 0; stateIdx < windowWidth; ++stateIdx)
+  {
+    if (!lastStates[stateIdx].ValidTime)
+    {
+      PRINT_WARNING("Times not valid in window, skipping the motion checks.")
+      return;
+    }
+  }
+
+  // If the number of logged poses is lower than required,
+  // A warning is raised because it can come from a bad parameterization.
+  // This warning will always be raised for first poses.
+  if (windowWidth + 1 != this->WindowWidth)
+    PRINT_WARNING("Not enough logged poses, using " << windowWidth + 1 << " poses to compute velocity.")
+
   // Get the starting bound state
-  State windowStartBound = this->LogStates[nPoses - windowWidth];
+  State windowStartBound = this->LogStates[0];
   // Compute duration time between the two pose bounds of the window
   double currentTimeStamp = Utils::PclStampToSec(this->CurrentFrames[0]->header.stamp);
   double deltaTime = currentTimeStamp - windowStartBound.Time;
@@ -1590,7 +1630,7 @@ Slam::PointCloud::Ptr Slam::AggregateFrames(const std::vector<PointCloud::Ptr>& 
     Eigen::Isometry3d baseToLidar = this->GetBaseToLidarOffset(frame->front().device_id);
 
     // Rigid transform from LIDAR to BASE then undistortion from BASE to WORLD
-    if (worldCoordinates && this->Undistortion)
+    if (worldCoordinates && this->Undistortion && this->TimeDependentProcessesEnabled)
     {
       auto transformInterpolator = this->WithinFrameMotion;
       transformInterpolator.SetTransforms(this->Tworld * this->WithinFrameMotion.GetH0() * baseToLidar,

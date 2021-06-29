@@ -115,6 +115,8 @@ struct State
   std::array<double, 36> Covariance = {};
   // [s] Timestamp of current pose
   double Time = 0.;
+  // boolean to reflect the time validity
+  bool ValidTime = false;
   // Name of the frame coordinates the transform represents or is represented into.
   std::string FrameId;
   // Keypoints extracted at current pose, undistorted and expressed in BASE coordinates
@@ -483,6 +485,10 @@ private:
   // Number of frames that have been processed by SLAM (number of poses in trajectory)
   unsigned int NbrFrameProcessed = 0;
 
+  // Boolean to enable or disable time dependent processes (motion confidence estimators,
+  // motion model based ego-motion, undistortion)
+  bool TimeDependentProcessesEnabled = true;
+
   // ---------------------------------------------------------------------------
   //   Multithreading relative variables
   // ---------------------------------------------------------------------------
@@ -771,6 +777,9 @@ private:
   // This window is used to smooth values to get a more accurate velocity estimation
   // If 0, motion limits won't be checked.
   int WindowWidth = 0;
+
+  // [Hz] Maximum LiDAR frequency to detect wrong timestamps
+  float MaxLidarFrequency = 50.f;
 
   // ---------------------------------------------------------------------------
   //   Main sub-problems and methods
