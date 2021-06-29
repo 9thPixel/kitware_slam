@@ -26,30 +26,6 @@
 
 #define BOLD_GREEN(s) "\033[1;32m" << s << "\033[0m"
 
-enum Output
-{
-  POSE_ODOM,             // Publish SLAM pose as an Odometry msg on 'slam_odom' topic (default : true).
-  POSE_TF,               // Publish SLAM pose as a TF from 'odometry_frame' to 'tracking_frame' (default : true).
-  POSE_PREDICTION_ODOM,  // Publish latency-corrected SLAM pose as an Odometry msg on 'slam_predicted_odom' topic.
-  POSE_PREDICTION_TF,    // Publish latency-corrected SLAM pose as a TF from 'odometry_frame' to '<tracking_frame>_prediction'.
-
-  EDGES_MAP,             // Publish edge keypoints map as a LidarPoint PointCloud2 msg to topic 'maps/edges'.
-  PLANES_MAP,            // Publish plane keypoints map as a LidarPoint PointCloud2 msg to topic 'maps/planes'.
-  BLOBS_MAP,             // Publish blob keypoints map as a LidarPoint PointCloud2 msg to topic 'maps/blobs'.
-
-  EDGE_KEYPOINTS,        // Publish extracted edge keypoints from current frame as a PointCloud2 msg to topic 'keypoints/edges'.
-  PLANE_KEYPOINTS,       // Publish extracted plane keypoints from current frame as a PointCloud2 msg to topic 'keypoints/planes'.
-  BLOB_KEYPOINTS,        // Publish extracted blob keypoints from current frame as a PointCloud2 msg to topic 'keypoints/blobs'.
-
-  SLAM_REGISTERED_POINTS,// Publish SLAM pointcloud as LidarPoint PointCloud2 msg to topic 'slam_registered_points'.
-
-  CONFIDENCE,            // Publish confidence estimators on output pose to topic 'slam_confidence'.
-
-  PGO_PATH,              // Publish optimized SLAM trajectory as Path msg to 'pgo_slam_path' latched topic.
-  ICP_CALIB_SLAM_PATH,   // Publish ICP-aligned SLAM trajectory as Path msg to 'icp_slam_path' latched topic.
-  ICP_CALIB_GPS_PATH     // Publish ICP-aligned GPS trajectory as Path msg to 'icp_gps_path' latched topic.
-};
-
 //==============================================================================
 //   Basic SLAM use
 //==============================================================================
@@ -97,12 +73,12 @@ LidarSlamNode::LidarSlamNode(ros::NodeHandle& nh, ros::NodeHandle& priv_nh)
   // Init ROS publishers
 
   #define initPublisher(publisher, topic, type, rosParam, publishDefault, queue, latch)   \
-    priv_nh.param(rosParam, this->Publish[publisher], publishDefault);                    \
-    if (this->Publish[publisher])                                                         \
-      this->Publishers[publisher] = nh.advertise<type>(topic, queue, latch);
+    priv_nh.param(rosParam, this->Publish[LidarSlam::publisher], publishDefault);                    \
+    if (this->Publish[LidarSlam::publisher])                                                         \
+      this->Publishers[LidarSlam::publisher] = nh.advertise<type>(topic, queue, latch);              \
 
-  priv_nh.param("output/pose/tf",           this->Publish[POSE_TF],            true);
-  priv_nh.param("output/pose/predicted_tf", this->Publish[POSE_PREDICTION_TF], false);
+  priv_nh.param("output/pose/tf",           this->Publish[LidarSlam::POSE_TF],            true);
+  priv_nh.param("output/pose/predicted_tf", this->Publish[LidarSlam::POSE_PREDICTION_TF], false);
   initPublisher(POSE_ODOM,            "slam_odom",           nav_msgs::Odometry, "output/pose/odom",           true,  1, false);
   initPublisher(POSE_PREDICTION_ODOM, "slam_predicted_odom", nav_msgs::Odometry, "output/pose/predicted_odom", false, 1, false);
 
@@ -124,6 +100,9 @@ LidarSlamNode::LidarSlamNode(ros::NodeHandle& nh, ros::NodeHandle& priv_nh)
     initPublisher(ICP_CALIB_SLAM_PATH, "icp_slam_path", nav_msgs::Path, "gps/calibration/publish_icp_paths", false, 1, true);
     initPublisher(ICP_CALIB_GPS_PATH,  "icp_gps_path",  nav_msgs::Path, "gps/calibration/publish_icp_paths", false, 1, true);
   }
+
+  // Only compute required outputs
+  this->LidarSlam.SetOutputRequirement(this->Publish);
 
   // ***************************************************************************
   // Init ROS subscribers
@@ -520,10 +499,10 @@ void LidarSlamNode::PublishOutput()
   while (this->LidarSlam.GetResult(output))
   {
     // Publish SLAM pose
-    if (this->Publish[POSE_ODOM] || this->Publish[POSE_TF])
+    if (this->Publish[LidarSlam::POSE_ODOM] || this->Publish[LidarSlam::POSE_TF])
     {
       // Publish pose as odometry msg
-      if (this->Publish[POSE_ODOM])
+      if (this->Publish[LidarSlam::POSE_ODOM])
       {
         nav_msgs::Odometry odomMsg;
         odomMsg.header.stamp = ros::Time(output.CurrentState.Time);
@@ -531,11 +510,11 @@ void LidarSlamNode::PublishOutput()
         odomMsg.child_frame_id = this->TrackingFrameId;
         odomMsg.pose.pose = Utils::TransformToPoseMsg(LidarSlam::Transform(output.CurrentState.Isometry));
         std::copy(output.CurrentState.Covariance.begin(), output.CurrentState.Covariance.end(), odomMsg.pose.covariance.begin());
-        this->Publishers[POSE_ODOM].publish(odomMsg);
+        this->Publishers[LidarSlam::POSE_ODOM].publish(odomMsg);
       }
 
       // Publish as TF from OdometryFrameId to TrackingFrameId
-      if (this->Publish[POSE_TF])
+      if (this->Publish[LidarSlam::POSE_TF])
       {
         geometry_msgs::TransformStamped tfMsg;
         tfMsg.header.stamp = ros::Time(output.CurrentState.Time);
@@ -547,10 +526,10 @@ void LidarSlamNode::PublishOutput()
     }
 
     // Publish latency compensated SLAM pose
-    if (this->Publish[POSE_PREDICTION_ODOM] || this->Publish[POSE_PREDICTION_TF])
+    if (this->Publish[LidarSlam::POSE_PREDICTION_ODOM] || this->Publish[LidarSlam::POSE_PREDICTION_TF])
     {
       // Publish as odometry msg
-      if (this->Publish[POSE_PREDICTION_ODOM])
+      if (this->Publish[LidarSlam::POSE_PREDICTION_ODOM])
       {
         nav_msgs::Odometry odomMsg;
         odomMsg.header.stamp = ros::Time(output.CurrentState.Time);
@@ -558,11 +537,11 @@ void LidarSlamNode::PublishOutput()
         odomMsg.child_frame_id = this->TrackingFrameId + "_prediction";
         odomMsg.pose.pose = Utils::TransformToPoseMsg(LidarSlam::Transform(output.LatencyCorrectedIsometry));
         std::copy(output.CurrentState.Covariance.begin(), output.CurrentState.Covariance.end(), odomMsg.pose.covariance.begin());
-        this->Publishers[POSE_PREDICTION_ODOM].publish(odomMsg);
+        this->Publishers[LidarSlam::POSE_PREDICTION_ODOM].publish(odomMsg);
       }
 
       // Publish as TF from OdometryFrameId to <TrackingFrameId>_prediction
-      if (this->Publish[POSE_PREDICTION_TF])
+      if (this->Publish[LidarSlam::POSE_PREDICTION_TF])
       {
         geometry_msgs::TransformStamped tfMsg;
         tfMsg.header.stamp = ros::Time(output.CurrentState.Time);
@@ -575,8 +554,8 @@ void LidarSlamNode::PublishOutput()
 
     // Publish a pointcloud only if required and if someone is listening to it to spare bandwidth.
     #define publishPointCloud(publisher, pc)                                            \
-      if (this->Publish[publisher] && this->Publishers[publisher].getNumSubscribers())  \
-        this->Publishers[publisher].publish(pc->GetCloud());
+      if (this->Publish[LidarSlam::publisher] && this->Publishers[LidarSlam::publisher].getNumSubscribers())  \
+        this->Publishers[LidarSlam::publisher].publish(pc->GetCloud());
 
     // Keypoints maps
     publishPointCloud(EDGES_MAP,  output.Maps[LidarSlam::EDGE]);
@@ -592,7 +571,7 @@ void LidarSlamNode::PublishOutput()
     publishPointCloud(SLAM_REGISTERED_POINTS, output.RegisteredFrame);
 
     // Overlap estimation
-    if (this->Publish[CONFIDENCE])
+    if (this->Publish[LidarSlam::CONFIDENCE])
     {
       // Get SLAM pose
       lidar_slam::Confidence confidenceMsg;
@@ -603,7 +582,7 @@ void LidarSlamNode::PublishOutput()
       std::copy(covar.begin(), covar.end(), confidenceMsg.covariance.begin());
       confidenceMsg.nb_matches = output.NbMatchedKeypoints;
       confidenceMsg.comply_motion_limits = output.ComplyMotionLimits;
-      this->Publishers[CONFIDENCE].publish(confidenceMsg);
+      this->Publishers[LidarSlam::CONFIDENCE].publish(confidenceMsg);
     }
   }
 }

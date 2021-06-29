@@ -114,9 +114,29 @@ void vtkSlam::Reset()
   this->Trajectory->GetPointData()->AddArray(Utils::CreateArray<vtkDoubleArray>("Orientation(AxisAngle)", 4));
   this->Trajectory->GetPointData()->AddArray(Utils::CreateArray<vtkDoubleArray>("Covariance", 36));
 
+  // Initialize output requirement
+  // No output is required by default
+  for (int outIdx = LidarSlam::POSE_ODOM; outIdx < LidarSlam::nOutputs; ++outIdx)
+  {
+    LidarSlam::Output out = static_cast<LidarSlam::Output>(outIdx);
+    this->OutputRequirement[out] = false;
+  }
+
+  this->OutputRequirement[LidarSlam::POSE_ODOM] = true;
+  this->OutputRequirement[LidarSlam::EDGES_MAP] = true;
+  this->OutputRequirement[LidarSlam::PLANES_MAP] = true;
+  this->OutputRequirement[LidarSlam::BLOBS_MAP] = true;
+  this->OutputRequirement[LidarSlam::EDGE_KEYPOINTS] = true;
+  this->OutputRequirement[LidarSlam::PLANE_KEYPOINTS] = true;
+  this->OutputRequirement[LidarSlam::BLOB_KEYPOINTS] = true;
+  this->OutputRequirement[LidarSlam::SLAM_REGISTERED_POINTS] = true;
+
   // Add the optional arrays to the trajectory
   if (this->AdvancedReturnMode)
   {
+    this->OutputRequirement[LidarSlam::DEBUG_ARRAYS] = true;
+    this->OutputRequirement[LidarSlam::KE_DEBUG_ARRAYS] = true;
+    this->OutputRequirement[LidarSlam::CONFIDENCE] = true;
     std::vector<std::string> debugInfoFields = this->SlamAlgo->GetDebugInfoFields();
     for (unsigned int i = 0; i < debugInfoFields.size(); ++i)
       this->Trajectory->GetPointData()->AddArray(Utils::CreateArray<vtkDoubleArray>(debugInfoFields[i]));
@@ -127,6 +147,8 @@ void vtkSlam::Reset()
   this->SlamAlgo->SetWindowWidth(this->AdvancedReturnMode ? this->WindowWidth : 0);
   // Log the necessary poses if advanced return mode is activated
   this->SlamAlgo->SetLoggingMax(this->SlamAlgo->GetWindowWidth());
+  // Set Output requirements
+  this->SlamAlgo->SetOutputRequirement(this->OutputRequirement);
 
   // Refresh view
   this->Modified();
@@ -734,6 +756,11 @@ void vtkSlam::SetAdvancedReturnMode(bool _arg)
       this->SlamAlgo->SetOverlapSamplingRatio(this->OverlapSamplingRatio);
       this->SlamAlgo->SetWindowWidth(this->WindowWidth);
       this->SlamAlgo->SetLoggingMax(this->WindowWidth);
+
+      this->OutputRequirement[LidarSlam::DEBUG_ARRAYS] = true;
+      this->OutputRequirement[LidarSlam::KE_DEBUG_ARRAYS] = true;
+      this->OutputRequirement[LidarSlam::CONFIDENCE] = true;
+      this->SlamAlgo->SetOutputRequirement(this->OutputRequirement);
     }
 
     // If AdvancedReturnMode is being disabled
@@ -746,6 +773,11 @@ void vtkSlam::SetAdvancedReturnMode(bool _arg)
       this->SlamAlgo->SetOverlapSamplingRatio(0.);
       this->SlamAlgo->SetWindowWidth(0);
       this->SlamAlgo->SetLoggingMax(0);
+
+      this->OutputRequirement[LidarSlam::DEBUG_ARRAYS] = false;
+      this->OutputRequirement[LidarSlam::KE_DEBUG_ARRAYS] = false;
+      this->OutputRequirement[LidarSlam::CONFIDENCE] = false;
+      this->SlamAlgo->SetOutputRequirement(this->OutputRequirement);
     }
 
     this->AdvancedReturnMode = _arg;

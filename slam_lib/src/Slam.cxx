@@ -167,6 +167,14 @@ Slam::Slam()
   this->SetVoxelGridLeafSize(PLANE, 0.60);
   this->SetVoxelGridLeafSize(BLOB, 0.30);
 
+  // Initialize output requirement
+  // No output is required by default
+  for (int outIdx = POSE_ODOM; outIdx < nOutputs; ++outIdx)
+  {
+    Output out = static_cast<Output>(outIdx);
+    this->OutputRequirement[out] = false;
+  }
+
   // Reset SLAM internal state
   this->Reset();
 }
@@ -1352,22 +1360,37 @@ void Slam::LogCurrentFrameState(double time)
   Publishable toPublish;
   // Light data
   toPublish.CurrentState = state;
-  for (auto k : KeypointTypes)
-    toPublish.Maps[k] =  std::make_shared<PCStorage>(this->LocalMaps[k]->Get(), this->LoggingStorage);
   toPublish.IdxFrame = this->NbrFrameProcessed;
-  for (auto k : KeypointTypes)
-    toPublish.KeypointsWorld[k] = std::make_shared<PCStorage>(this->CurrentWorldKeypoints[k], this->LoggingStorage);
+  if (OutputRequirement[EDGES_MAP])
+    toPublish.Maps[EDGE]  =  std::make_shared<PCStorage>(this->LocalMaps[EDGE]->Get(), this->LoggingStorage);
+  if (OutputRequirement[PLANES_MAP])
+    toPublish.Maps[PLANE] =  std::make_shared<PCStorage>(this->LocalMaps[PLANE]->Get(), this->LoggingStorage);
+  if (OutputRequirement[BLOBS_MAP])
+    toPublish.Maps[BLOB]  =  std::make_shared<PCStorage>(this->LocalMaps[BLOB]->Get(), this->LoggingStorage);
+  
+  if (OutputRequirement[EDGE_KEYPOINTS])
+    toPublish.KeypointsWorld[EDGE]  =  std::make_shared<PCStorage>(this->GetKeypoints(EDGE, true), this->LoggingStorage);
+  if (OutputRequirement[PLANE_KEYPOINTS])
+    toPublish.KeypointsWorld[PLANE] =  std::make_shared<PCStorage>(this->GetKeypoints(PLANE, true), this->LoggingStorage);
+  if (OutputRequirement[BLOB_KEYPOINTS])
+    toPublish.KeypointsWorld[BLOB]  =  std::make_shared<PCStorage>(this->GetKeypoints(BLOB, true), this->LoggingStorage);
 
   // Heavier data
-  // TODO : do not compute if not required
-  toPublish.RegisteredFrame = std::make_shared<PCStorage>(this->GetRegisteredFrame(), this->LoggingStorage);
-  toPublish.DebugArray = this->GetDebugArray();
-  toPublish.KEDebugArray = this->GetKeyPointsExtractor()->GetDebugArray();
-  toPublish.LatencyCorrectedIsometry = this->GetLatencyCompensatedWorldTransform();
-  toPublish.DebugInformation = this->GetDebugInformation();
-  toPublish.Overlap = this->GetOverlapEstimation();
-  toPublish.ComplyMotionLimits = this->GetComplyMotionLimits();
-  toPublish.NbMatchedKeypoints = this->GetTotalMatchedKeypoints();
+  if (OutputRequirement[SLAM_REGISTERED_POINTS])
+    toPublish.RegisteredFrame = std::make_shared<PCStorage>(this->GetRegisteredFrame(), this->LoggingStorage);
+  if (OutputRequirement[DEBUG_ARRAYS])
+    toPublish.DebugArray = this->GetDebugArray();
+  if (OutputRequirement[KE_DEBUG_ARRAYS])
+    toPublish.KEDebugArray = this->GetKeyPointsExtractor()->GetDebugArray();
+  if (OutputRequirement[POSE_PREDICTION_ODOM] || OutputRequirement[POSE_PREDICTION_TF])
+    toPublish.LatencyCorrectedIsometry = this->GetLatencyCompensatedWorldTransform();
+  if (OutputRequirement[CONFIDENCE])
+  {
+    toPublish.DebugInformation = this->GetDebugInformation();
+    toPublish.Overlap = this->OverlapEstimation;
+    toPublish.ComplyMotionLimits = this->ComplyMotionLimits;
+    toPublish.NbMatchedKeypoints = this->TotalMatchedKeypoints;
+  }
 
   this->OutputResults.EmplaceBack(toPublish);
 }
@@ -1832,5 +1855,22 @@ int Slam::GetLoggingMax() const
 {
   return this->LogStates.GetSizeMax();
 }
+
+//==============================================================================
+//   Outputs setting
+//==============================================================================
+
+void Slam::SetOutputRequirement(const std::unordered_map<Output, bool>& required)
+{
+  std::unique_lock<std::shared_timed_mutex> lock(this->ParamsMutex);
+  this->OutputRequirement = required;
+}
+
+std::unordered_map<Output, bool> Slam::GetOutputRequirement() const
+{
+  std::shared_lock<std::shared_timed_mutex> lock(this->ParamsMutex);
+  return this->OutputRequirement;
+}
+
 
 } // end of LidarSlam namespace

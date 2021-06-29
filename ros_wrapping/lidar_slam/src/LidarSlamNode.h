@@ -171,8 +171,8 @@ protected:
   ros::NodeHandle &Nh, &PrivNh;
   std::vector<ros::Subscriber> CloudSubs;
   ros::Subscriber SlamCommandSub, SetPoseSub;
-  std::unordered_map<int, ros::Publisher> Publishers;
-  std::unordered_map<int, bool> Publish;
+  std::unordered_map<LidarSlam::Output, ros::Publisher> Publishers;
+  std::unordered_map<LidarSlam::Output, bool> Publish;
 
   // TF stuff
   std::string OdometryFrameId = "odom";       ///< Frame in which SLAM odometry and maps are expressed.

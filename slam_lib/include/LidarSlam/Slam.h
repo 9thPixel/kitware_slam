@@ -274,6 +274,8 @@ public:
   SetProtectedMacro(UpdateMap, bool)
   GetProtectedMacro(UpdateMap, bool)
 
+  void SetOutputRequirement(const std::unordered_map<Output, bool>& required);
+  std::unordered_map<Output, bool> GetOutputRequirement() const;
   // ---------------------------------------------------------------------------
   //   Coordinates systems parameters
   // ---------------------------------------------------------------------------
@@ -488,6 +490,9 @@ private:
   // Boolean to enable or disable time dependent processes (motion confidence estimators,
   // motion model based ego-motion, undistortion)
   bool TimeDependentProcessesEnabled = true;
+
+  // Output requirement
+  std::unordered_map<Output, bool> OutputRequirement;
 
   // ---------------------------------------------------------------------------
   //   Multithreading relative variables
