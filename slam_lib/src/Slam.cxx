@@ -1860,13 +1860,13 @@ int Slam::GetLoggingMax() const
 //   Outputs setting
 //==============================================================================
 
-void Slam::SetOutputRequirement(const std::unordered_map<Output, bool>& required)
+void Slam::SetOutputRequirement(const std::unordered_map<Output, bool, std::hash<int>>& required)
 {
   std::unique_lock<std::shared_timed_mutex> lock(this->ParamsMutex);
   this->OutputRequirement = required;
 }
 
-std::unordered_map<Output, bool> Slam::GetOutputRequirement() const
+std::unordered_map<Output, bool, std::hash<int>> Slam::GetOutputRequirement() const
 {
   std::shared_lock<std::shared_timed_mutex> lock(this->ParamsMutex);
   return this->OutputRequirement;

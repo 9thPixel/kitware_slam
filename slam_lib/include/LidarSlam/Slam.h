@@ -274,8 +274,8 @@ public:
   SetProtectedMacro(UpdateMap, bool)
   GetProtectedMacro(UpdateMap, bool)
 
-  void SetOutputRequirement(const std::unordered_map<Output, bool>& required);
-  std::unordered_map<Output, bool> GetOutputRequirement() const;
+  void SetOutputRequirement(const std::unordered_map<Output, bool, std::hash<int>>& required);
+  std::unordered_map<Output, bool, std::hash<int>> GetOutputRequirement() const;
   // ---------------------------------------------------------------------------
   //   Coordinates systems parameters
   // ---------------------------------------------------------------------------
@@ -492,7 +492,7 @@ private:
   bool TimeDependentProcessesEnabled = true;
 
   // Output requirement
-  std::unordered_map<Output, bool> OutputRequirement;
+  std::unordered_map<Output, bool, std::hash<int>> OutputRequirement;
 
   // ---------------------------------------------------------------------------
   //   Multithreading relative variables

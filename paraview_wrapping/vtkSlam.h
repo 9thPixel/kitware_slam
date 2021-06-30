@@ -323,7 +323,8 @@ private:
   //  - Extracted keypoints : ICP matching results
   bool AdvancedReturnMode = false;
 
-  std::unordered_map<LidarSlam::Output, bool> OutputRequirement;
+  // Allow to choose the result data to output 
+  std::unordered_map<LidarSlam::Output, bool, std::hash<int>> OutputRequirement;
 
   // If enabled, SLAM filter will output keypoints maps.
   // Otherwise, these filter outputs are left empty to save time.
