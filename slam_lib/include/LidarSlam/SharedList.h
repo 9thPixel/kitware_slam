@@ -31,6 +31,7 @@ namespace LidarSlam
  */
 template <typename T>
 class SharedList {
+EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 public:
 
   // -------------Constructors--------------

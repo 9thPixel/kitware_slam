@@ -105,12 +105,12 @@ struct State
   using PCStoragePtr = std::shared_ptr<PointCloudStorage<Point>>;
 
   State() = default;
-  State(const Eigen::Isometry3d& isometry, double time = 0.)
+  State(const Eigen::UnalignedIsometry3d& isometry, double time = 0.)
     : Isometry(isometry),
       Time(time)
   {}
   // Pose transform in world coordinates
-  Eigen::Isometry3d Isometry = Eigen::Isometry3d::Identity();
+  Eigen::UnalignedIsometry3d Isometry = Eigen::UnalignedIsometry3d::Identity();
   // Covariance of current pose
   std::array<double, 36> Covariance = {};
   // [s] Timestamp of current pose
@@ -146,7 +146,7 @@ struct Publishable
   PCStoragePtr RegisteredFrame;
   // Pose relative to publish time
   // It corresponds to the computed pose corrected by latency time with ego motion model
-  Eigen::Isometry3d LatencyCorrectedIsometry = Eigen::Isometry3d::Identity();
+  Eigen::Isometry3d LatencyCorrectedIsometry = Eigen::UnalignedIsometry3d::Identity();
   // Number of the frame processed since last reset
   int IdxFrame = 0;
   // Confidence estimators to evaluate pose output
