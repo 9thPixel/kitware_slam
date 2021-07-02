@@ -337,7 +337,8 @@ void Slam::ProcessFrames(const std::vector<PointCloud::Ptr>& frames)
   this->ComputeEgoMotion();
   IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Ego-Motion"));
 
-  if (this->WheelOdomManager.CanBeUsed() || this->ImuManager.CanBeUsed())
+  bool externalSensorsEnabled = this->GetWheelOdomWeight() > 1e-6 || this->GetGravityWeight() > 1e-6;
+  if (this->TimeDependentProcessesEnabled && externalSensorsEnabled)
   {
     IF_VERBOSE(3, Utils::Timer::Init("Sensor constraints computation"));
     this->ComputeSensorConstraints();
@@ -1750,16 +1751,22 @@ double Slam::GetSensorTimeOffset() const
 //-----------------------------------------------------------------------------
 void Slam::AddGravityMeasurement(const SensorConstraints::GravityMeasurement& gm)
 {
+  // This function will lock the measurements
+  // and block the sensor constraints computation in front end
   this->ImuManager.AddMeasurement(gm);
 }
 
 void Slam::AddWheelOdomMeasurement(const SensorConstraints::WheelOdomMeasurement& om)
 {
+  // This function will lock the measurements
+  // and block the sensor constraints computation in front end
   this->WheelOdomManager.AddMeasurement(om);
 }
 
 void Slam::ClearSensorMeasurements()
 {
+  // This function will lock the measurements
+  // and block the sensor constraints computation in front end
   this->WheelOdomManager.Reset();
   this->ImuManager.Reset();
 }
