@@ -203,7 +203,12 @@ void Slam::Stop(bool stopPublishing)
     this->LocalSlam.join();
   }
 
-  // Join the back end here
+  // Wait for internal global slam thread which was just freed
+  if (this->GlobalSlam.joinable())
+  {
+    PRINT_COLOR(GREEN, "*************Ending back end**************");
+    this->GlobalSlam.join();
+  }
 }
 
 //-----------------------------------------------------------------------------
@@ -263,7 +268,9 @@ void Slam::Reset(bool resetLog)
   // Launch front end in another thread
   this->LocalSlam = std::thread(&Slam::GetAndProcessFrames, this);
 
-  // Start the backend here
+  PRINT_COLOR(GREEN, "*************Starting back end*************");
+  // Launch back end in another thread
+  // this->GlobalSlam = std::thread(&Slam::GetAndProcessExternalAbsolutePose, this);
 }
 
 //-----------------------------------------------------------------------------
@@ -275,6 +282,14 @@ void Slam::SetNbThreads(int n)
   // Set number of threads for keypoints extraction
   for (const auto& kv : this->KeyPointsExtractors)
     kv.second->SetNbThreads(n); 
+}
+
+//-----------------------------------------------------------------------------
+void Slam::GetAndProcessExternalAbsolutePose()
+{
+  // std::vector<PointCloud::Ptr> PoseReceived;
+  // while (this->InputScans.WaitAndPopFront(lastFramesReceived))
+  //   this->ProcessFrames(lastFramesReceived);
 }
 
 //-----------------------------------------------------------------------------

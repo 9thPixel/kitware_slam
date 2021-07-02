@@ -526,7 +526,13 @@ private:
   // Output a local pose
   std::thread LocalSlam;
 
-  // Add back end thread here
+  // Back end process of the SLAM
+  // Recompute the states graph and the maps
+  // when receiving a hint on absolute pose
+  // (Translation or whole pose hint with relative covariances)
+  // Update the map for front end thread (LocalSlam)
+  // and last pose for next ego-motion step
+  std::thread GlobalSlam;
 
   // ---------------------------------------------------------------------------
   // Mutexes
@@ -816,6 +822,11 @@ private:
   // Wait for a new frame in waiting list and process it
   // The loop stops when the scans waiting list closes
   void GetAndProcessFrames();
+
+  // Main back end function
+  // Wait for a new absolute pose in waiting list and use it to run pose graph optimization
+  // The loop stops when the external poses waiting list closes
+  void GetAndProcessExternalAbsolutePose();
 
   // Get the computed world transform so far, but compensating SLAM computation duration latency.
   Eigen::Isometry3d GetLatencyCompensatedWorldTransform() const;
