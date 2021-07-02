@@ -25,6 +25,25 @@
 
 namespace LidarSlam
 {
+
+// Structure containing one state acquired by a sensor
+// Various states can be mixed in back end process to optimize pose graph
+struct SensorState
+{
+  SensorState() = default;
+  SensorState(const Eigen::UnalignedIsometry3d& isometry, const std::array<double, 36>& covariance = {}, double time = 0.)
+            : Isometry(isometry),
+              Covariance(covariance),
+              Time(time)
+  {}
+
+  // Pose transform in world coordinates
+  Eigen::UnalignedIsometry3d Isometry = Eigen::UnalignedIsometry3d::Identity();
+  // Covariance of current pose
+  std::array<double, 36> Covariance = {};
+  // [s] Timestamp of data
+  double Time = 0.;
+};
   
 #define SetSensorMacro(name,type) void Set##name (type _arg) { this->name = _arg; }
 #define GetSensorMacro(name,type) type Get##name () const { return this->name; }

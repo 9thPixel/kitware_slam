@@ -301,7 +301,7 @@ void Slam::ProcessFrames(const std::vector<PointCloud::Ptr>& frames)
   if (!this->CheckFrames(frames))
   { 
     Publishable toPublish;
-    toPublish.CurrentState.Time = -1;
+    toPublish.State.Time = -1;
     this->OutputResults.EmplaceBack(toPublish);
     return;
   }
@@ -316,7 +316,7 @@ void Slam::ProcessFrames(const std::vector<PointCloud::Ptr>& frames)
   // poses relatively to starting point, i.e, last pose can have changed.
   // New local frames can have been computed while global optimization was performed
   // This implies a "new transforms rebasing step" in global optimization with local optimization disabled.
-  State lastState;
+  LidarState lastState;
   // If LogStates empty, do not modify Tworld (must be identity after Reset)
   if (this->LogStates.Back(lastState))
     this->Tworld = lastState.Isometry;
@@ -389,7 +389,7 @@ void Slam::ProcessFrames(const std::vector<PointCloud::Ptr>& frames)
     }
 
     Eigen::Isometry3d Trelative = this->Tworld;
-    State lastState;
+    LidarState lastState;
     if (this->LogStates.Back(lastState))
       Trelative = lastState.Isometry.inverse() * this->Tworld;
     std::cout << "Local Motion:\n"
@@ -413,7 +413,7 @@ void Slam::ProcessFrames(const std::vector<PointCloud::Ptr>& frames)
     }
 
     // Logged keypoints
-    std::deque<State> LogCopy = this->LogStates.Copy();
+    std::deque<LidarState> LogCopy = this->LogStates.Copy();
     std::map<Keypoint, size_t> memory, points;
     // Initialize number of points per keypoint type
     for (auto k : KeypointTypes)
@@ -468,13 +468,12 @@ void Slam::RunPoseGraphOptimization(const std::vector<Transform>& gpsPositions,
   IF_VERBOSE(1, Utils::Timer::Init("Pose graph optimization"));
   IF_VERBOSE(3, Utils::Timer::Init("PGO : optimization"));
 
-  // Transform to modifiable vectors
-  std::vector<Transform> slamPoses(this->LogTrajectory.begin(), this->LogTrajectory.end());
-  std::vector<std::array<double, 36>> slamCovariances(this->LogCovariances.begin(), this->LogCovariances.end());
+  // Copy all states
+  std::vector<LidarState> states = this->LogStates.LastElements();
 
-  const unsigned int nbSlamPoses = slamPoses.size();
+  const unsigned int nbSlamPoses = states.size();
 
-  if (this->LoggingTimeout == 0.)
+  if (this->LoggingMax == 2)
   {
     PRINT_WARNING("SLAM logging is not enabled : covariances will be "
                   "arbitrarly set and maps will not be optimized during pose "
@@ -677,13 +676,13 @@ bool Slam::GetResult(Publishable& toPublish)
 Eigen::Isometry3d Slam::GetLatencyCompensatedWorldTransform() const
 {
   // Get 2 last transforms
-  std::vector<State> lastStates = this->LogStates.LastElements(2);
+  std::vector<LidarState> lastStates = this->LogStates.LastElements(2);
   if (lastStates.empty())
     return Eigen::Isometry3d::Identity();
   else if (lastStates.size() == 1)
     return lastStates.back().Isometry;
-  const State& previous = lastStates.front();
-  const State& current = lastStates.back();
+  const LidarState& previous = lastStates.front();
+  const LidarState& current = lastStates.back();
   const Eigen::Isometry3d& H0 = previous.Isometry;
   const Eigen::Isometry3d& H1 = current.Isometry;
 
@@ -836,7 +835,7 @@ bool Slam::CheckFrames(const std::vector<PointCloud::Ptr>& frames)
   // Disable time dependent processes if timestamp is not consistent with previous ones
   this->TimeDependentProcessesEnabled = true;
   const double t = Utils::PclStampToSec(frames[0]->header.stamp);
-  std::vector<State> lastStates = this->LogStates.LastElements(2);
+  std::vector<LidarState> lastStates = this->LogStates.LastElements(2);
   if (lastStates.size() == 2)
   {
     const double t0 = lastStates[0].Time;
@@ -946,7 +945,7 @@ void Slam::ComputeEgoMotion()
   Eigen::Isometry3d Trelative = Eigen::Isometry3d::Identity();
 
   // Linearly extrapolate previous motion to estimate new pose
-  std::vector<State> lastStates = this->LogStates.LastElements(2);
+  std::vector<LidarState> lastStates = this->LogStates.LastElements(2);
   if (lastStates.size() >= 2 &&
       (this->EgoMotion == EgoMotionMode::MOTION_EXTRAPOLATION ||
        this->EgoMotion == EgoMotionMode::MOTION_EXTRAPOLATION_AND_REGISTRATION) &&
@@ -1219,7 +1218,7 @@ void Slam::Localization()
     if (this->TotalMatchedKeypoints < this->MinNbMatchedKeypoints)
     {
       this->Tworld = Eigen::Isometry3d::Identity();
-      State lastState;
+      LidarState lastState;
       if (this->LogStates.Back(lastState))
         this->Tworld = lastState.Isometry;
 
@@ -1347,7 +1346,7 @@ void Slam::LogCurrentFrameState(double time)
 {
   // Save current state to log buffer.
   // This buffer will be processed by a global optimization thread
-  State state;
+  LidarState state;
   state.Isometry = this->Tworld;
   state.Covariance = Utils::Matrix6dToStdArray36(this->LocalizationUncertainty.Covariance);
   state.Time = time;
@@ -1360,7 +1359,7 @@ void Slam::LogCurrentFrameState(double time)
   // This buffer should be processed by an external publisher thread
   Publishable toPublish;
   // Light data
-  toPublish.CurrentState = state;
+  toPublish.State = state;
   toPublish.IdxFrame = this->NbrFrameProcessed;
   if (OutputRequirement[EDGES_MAP])
     toPublish.Maps[EDGE]  =  std::make_shared<PCStorage>(this->LocalMaps[EDGE]->Get(), this->LoggingStorage);
@@ -1403,7 +1402,7 @@ void Slam::LogCurrentFrameState(double time)
 //-----------------------------------------------------------------------------
 Eigen::Isometry3d Slam::InterpolateScanPose(double time)
 {
-  State lastState;
+  LidarState lastState;
   if (!this->LogStates.Back(lastState))
     return this->Tworld;
 
@@ -1525,7 +1524,7 @@ void Slam::EstimateOverlap()
 //-----------------------------------------------------------------------------
 void Slam::CheckMotionLimits()
 {
-  std::vector<State> lastStates = this->LogStates.LastElements(this->WindowWidth - 1);
+  std::vector<LidarState> lastStates = this->LogStates.LastElements(this->WindowWidth - 1);
   // If the window's width required cannot be reached, take the last available pose
   int windowWidth = lastStates.size();
 
@@ -1548,7 +1547,7 @@ void Slam::CheckMotionLimits()
     PRINT_WARNING("Not enough logged poses, using " << windowWidth + 1 << " poses to compute velocity.")
 
   // Get the starting bound state
-  State windowStartBound = this->LogStates[0];
+  LidarState windowStartBound = this->LogStates[0];
   // Compute duration time between the two pose bounds of the window
   double currentTimeStamp = Utils::PclStampToSec(this->CurrentFrames[0]->header.stamp);
   double deltaTime = currentTimeStamp - windowStartBound.Time;

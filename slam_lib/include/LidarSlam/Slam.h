@@ -99,26 +99,17 @@ namespace LidarSlam
 // Structure containing one state
 // States are stored in a list for further global optimization processing
 // They will be kept as long as they fit the buffer size
-struct State
+struct LidarState : public SensorState
 {
   using Point = LidarPoint;
   using PCStoragePtr = std::shared_ptr<PointCloudStorage<Point>>;
 
-  State() = default;
-  State(const Eigen::UnalignedIsometry3d& isometry, double time = 0.)
-    : Isometry(isometry),
-      Time(time)
-  {}
-  // Pose transform in world coordinates
-  Eigen::UnalignedIsometry3d Isometry = Eigen::UnalignedIsometry3d::Identity();
-  // Covariance of current pose
-  std::array<double, 36> Covariance = {};
-  // [s] Timestamp of current pose
-  double Time = 0.;
+  LidarState() = default;
+  LidarState(const Eigen::UnalignedIsometry3d& isometry, const std::array<double, 36>& covariance = {}, double time = 0.)
+    : SensorState(isometry, covariance, time) {};
+
   // boolean to reflect the time validity
   bool ValidTime = false;
-  // Name of the frame coordinates the transform represents or is represented into.
-  std::string FrameId;
   // Keypoints extracted at current pose, undistorted and expressed in BASE coordinates
   std::map<Keypoint, PCStoragePtr> Keypoints;
 };
@@ -131,7 +122,7 @@ struct Publishable
   using Point = LidarPoint;
   using PCStoragePtr = std::shared_ptr<PointCloudStorage<Point>>;
 
-  State CurrentState;
+  LidarState State;
   // Undistorted keypoints expressed in World coordinates
   std::map<Keypoint, PCStoragePtr> KeypointsWorld;
   // Local keypoint maps (edges/planes/blobs)
@@ -508,7 +499,7 @@ private:
   // a maximum size.
   // Default maximum size is fixed to 100 (cf. constructor),
   // and can be parameterized (cf. LoggingMax)
-  SharedList<State> LogStates;
+  SharedList<LidarState> LogStates;
 
   // List of publishable info (local Slam results)
   // It may be shared between the local SLAM optimization

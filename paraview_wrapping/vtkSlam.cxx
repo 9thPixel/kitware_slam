@@ -212,7 +212,7 @@ int vtkSlam::RequestData(vtkInformation* vtkNotUsed(request),
   if (!this->SlamAlgo->GetResult(output))
     return 1;
 
-  if (output.CurrentState.Time < 0)
+  if (output.State.Time < 0)
   {
     auto* slamTrajectory = vtkPolyData::GetData(outputVector, SLAM_TRAJECTORY_OUTPUT_PORT);
     slamTrajectory->ShallowCopy(this->Trajectory);
@@ -232,7 +232,7 @@ int vtkSlam::RequestData(vtkInformation* vtkNotUsed(request),
   }
 
   // Update Trajectory with new SLAM pose
-  this->AddCurrentPoseToTrajectory(output.CurrentState);
+  this->AddCurrentPoseToTrajectory(output.State);
 
   // ===== SLAM frame and pose =====
   // Output : Current undistorted LiDAR frame in world coordinates
@@ -312,7 +312,7 @@ int vtkSlam::RequestData(vtkInformation* vtkNotUsed(request),
     auto GetKeypoints = [this, &output, &outputVector] (LidarSlam::Keypoint k, int port)
     {
       auto* points = vtkPolyData::GetData(outputVector, port);
-      this->PointCloudToPolyData(this->OutputKeypointsInWorldCoordinates ? output.KeypointsWorld[k]->GetCloud() : output.CurrentState.Keypoints[k]->GetCloud(), points);
+      this->PointCloudToPolyData(this->OutputKeypointsInWorldCoordinates ? output.KeypointsWorld[k]->GetCloud() : output.State.Keypoints[k]->GetCloud(), points);
     };
 
     // Output : Current edge keypoints
@@ -621,7 +621,7 @@ std::vector<size_t> vtkSlam::GetLaserIdMapping(vtkTable* calib)
 }
 
 //-----------------------------------------------------------------------------
-void vtkSlam::AddCurrentPoseToTrajectory(LidarSlam::State& result)
+void vtkSlam::AddCurrentPoseToTrajectory(LidarSlam::LidarState& result)
 {
   // Add position
   Eigen::Vector3d translation = result.Isometry.translation();

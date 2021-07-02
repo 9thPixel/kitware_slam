@@ -505,11 +505,11 @@ void LidarSlamNode::PublishOutput()
       if (this->Publish[LidarSlam::POSE_ODOM])
       {
         nav_msgs::Odometry odomMsg;
-        odomMsg.header.stamp = ros::Time(output.CurrentState.Time);
+        odomMsg.header.stamp = ros::Time(output.State.Time);
         odomMsg.header.frame_id = this->OdometryFrameId;
         odomMsg.child_frame_id = this->TrackingFrameId;
-        odomMsg.pose.pose = Utils::TransformToPoseMsg(LidarSlam::Transform(output.CurrentState.Isometry));
-        std::copy(output.CurrentState.Covariance.begin(), output.CurrentState.Covariance.end(), odomMsg.pose.covariance.begin());
+        odomMsg.pose.pose = Utils::TransformToPoseMsg(LidarSlam::Transform(output.State.Isometry));
+        std::copy(output.State.Covariance.begin(), output.State.Covariance.end(), odomMsg.pose.covariance.begin());
         this->Publishers[LidarSlam::POSE_ODOM].publish(odomMsg);
       }
 
@@ -517,10 +517,10 @@ void LidarSlamNode::PublishOutput()
       if (this->Publish[LidarSlam::POSE_TF])
       {
         geometry_msgs::TransformStamped tfMsg;
-        tfMsg.header.stamp = ros::Time(output.CurrentState.Time);
+        tfMsg.header.stamp = ros::Time(output.State.Time);
         tfMsg.header.frame_id = this->OdometryFrameId;
         tfMsg.child_frame_id = this->TrackingFrameId;
-        tfMsg.transform = Utils::TransformToTfMsg(LidarSlam::Transform(output.CurrentState.Isometry));
+        tfMsg.transform = Utils::TransformToTfMsg(LidarSlam::Transform(output.State.Isometry));
         this->TfBroadcaster.sendTransform(tfMsg);
       }
     }
@@ -532,11 +532,11 @@ void LidarSlamNode::PublishOutput()
       if (this->Publish[LidarSlam::POSE_PREDICTION_ODOM])
       {
         nav_msgs::Odometry odomMsg;
-        odomMsg.header.stamp = ros::Time(output.CurrentState.Time);
+        odomMsg.header.stamp = ros::Time(output.State.Time);
         odomMsg.header.frame_id = this->OdometryFrameId;
         odomMsg.child_frame_id = this->TrackingFrameId + "_prediction";
         odomMsg.pose.pose = Utils::TransformToPoseMsg(LidarSlam::Transform(output.LatencyCorrectedIsometry));
-        std::copy(output.CurrentState.Covariance.begin(), output.CurrentState.Covariance.end(), odomMsg.pose.covariance.begin());
+        std::copy(output.State.Covariance.begin(), output.State.Covariance.end(), odomMsg.pose.covariance.begin());
         this->Publishers[LidarSlam::POSE_PREDICTION_ODOM].publish(odomMsg);
       }
 
@@ -544,7 +544,7 @@ void LidarSlamNode::PublishOutput()
       if (this->Publish[LidarSlam::POSE_PREDICTION_TF])
       {
         geometry_msgs::TransformStamped tfMsg;
-        tfMsg.header.stamp = ros::Time(output.CurrentState.Time);
+        tfMsg.header.stamp = ros::Time(output.State.Time);
         tfMsg.header.frame_id = this->OdometryFrameId;
         tfMsg.child_frame_id = this->TrackingFrameId + "_prediction";
         tfMsg.transform = Utils::TransformToTfMsg(LidarSlam::Transform(output.LatencyCorrectedIsometry));
@@ -575,10 +575,10 @@ void LidarSlamNode::PublishOutput()
     {
       // Get SLAM pose
       lidar_slam::Confidence confidenceMsg;
-      confidenceMsg.header.stamp = ros::Time(output.CurrentState.Time);
+      confidenceMsg.header.stamp = ros::Time(output.State.Time);
       confidenceMsg.header.frame_id = this->OdometryFrameId;
       confidenceMsg.overlap = output.Overlap;
-      auto covar = output.CurrentState.Covariance;
+      auto covar = output.State.Covariance;
       std::copy(covar.begin(), covar.end(), confidenceMsg.covariance.begin());
       confidenceMsg.nb_matches = output.NbMatchedKeypoints;
       confidenceMsg.comply_motion_limits = output.ComplyMotionLimits;

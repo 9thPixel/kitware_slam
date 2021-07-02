@@ -285,7 +285,7 @@ private:
   std::vector<size_t> GetLaserIdMapping(vtkTable* calib);
 
   // Add current SLAM pose and covariance in WORLD coordinates to Trajectory.
-  void AddCurrentPoseToTrajectory(LidarSlam::State& result);
+  void AddCurrentPoseToTrajectory(LidarSlam::LidarState& result);
 
   // Convert VTK PolyData to PCL pointcloud
   // Returns true if all input points are valid (null coordinates), false otherwise
