@@ -1,3 +1,22 @@
+//==============================================================================
+// Copyright 2018-2020 Kitware, Inc., Kitware SAS
+// Author: Sanchez Julia (Kitware SAS)
+//         Cadart Nicolas (Kitware SAS)
+// Creation date: 2021-04-02
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//==============================================================================
+
 #include "LidarSlam/SensorConstraints.h"
 
 namespace LidarSlam
@@ -7,147 +26,186 @@ namespace SensorConstraints
 
 void WheelOdometryManager::ComputeWheelAbsoluteConstraint(double lidarTime)
 {
+  // Protect Measures data (reading) from outside modification
+  // (Adding a measure with external thread)
+  std::shared_lock<std::shared_timed_mutex> lock(this->Mutex);
+
   this->ResetResidual();
 
+  // Check if weight is not null and measures contains elements
   if (!this->CanBeUsed())
     return;
 
+  // If sensor times don't match,
+  // Do not add constraint to optimization
   lidarTime -= this->TimeOffset;
-  // Check if odometry measurements were taken around Lidar Frame acquisition
-  if (lidarTime < this->Measures.front().Time || lidarTime > this->Measures.back().Time)
+  if (lidarTime < this->Measures.front().Time || lidarTime >= this->Measures.back().Time)
   {
-    PRINT_WARNING("No odometry measure corresponds to the current frame acquisition (times don't match)");
+    PRINT_WARNING("No odometry measure corresponds to the current frame acquisition (times don't match) : "
+               << "no absolute wheel odometric constraint added to optimization");
     return;
   }
 
-  // Reset if the timeline has been modified
-  if (this->PreviousIdx >= 0 && this->Measures[this->PreviousIdx].Time > lidarTime)
-    this->PreviousIdx = -1;
+  // Reset if it is the first call or if the timeline has been modified
+  if (!this->IsRef || this->PrevIt->Time > lidarTime)
+    this->PrevIt = this->Measures.begin();
 
+  // Get index of first odometry measurement after LiDAR time
+  auto nextIt = this->PrevIt;
+  while (nextIt->Time <= lidarTime)
+    ++nextIt;
   // Get index of last odometry measurement before LiDAR time
-  int currIdx = this->PreviousIdx;
-  while (this->Measures[currIdx + 1].Time < lidarTime)
-    currIdx++;
-
-  // Interpolate odometry measurement at LiDAR timestamp (between currIdx and currIdx + 1 measures)
-  double rt = (lidarTime - this->Measures[currIdx].Time) / (this->Measures[currIdx + 1].Time - this->Measures[currIdx].Time);
-  double currDistance = (1 - rt) * this->Measures[currIdx].Distance + rt * this->Measures[currIdx + 1].Distance;
+  auto prevIt = nextIt;
+  --prevIt;
+  // Interpolate odometry measurement at LiDAR timestamp (between prevIt and nextIt measures)
+  float rt = (lidarTime - prevIt->Time) / (nextIt->Time - prevIt->Time);
+  float currDistance = (1 - rt) * prevIt->Distance + rt * nextIt->Distance;
 
   // Build odometry residual
 
-  // If there is no memory of previous poses
-  if (this->PreviousIdx == -1)
+  // If this is the first pose,
+  // initialize reference with the current first data
+  if (this->IsRef)
   {
-    std::cout << "No previous wheel odometry measure : no constraint added to optimization" << std::endl;
+    std::cout << "No wheel odometry measure corresponding to previous pose : "
+              << "no absolute wheel odometric constraint added to optimization" << std::endl;
     // Update index and distance for next frame
-    this->PreviousIdx = currIdx;
-    this->PreviousDistance = currDistance;
+    this->PrevIt = prevIt;
+    this->RefDistance = currDistance;
+    this->IsRef = true;
     return;
   }
 
-  // If there is memory of a previous pose
-  this->Residual.Cost = CeresCostFunctions::OdometerDistanceResidual::Create(this->PreviousPose.translation(), currDistance - this->PreviousDistance);
+  // If the reference has been computed,
+  // add the corresponding constraint
+  this->Residual.Cost = CeresCostFunctions::OdometerDistanceResidual::Create(this->RefPose.translation(), currDistance - this->RefDistance);
   this->Residual.Robustifier.reset(new ceres::ScaledLoss(NULL, this->Weight, ceres::TAKE_OWNERSHIP));
-  std::cout << "Adding wheel odometry residual : " << currDistance - this->PreviousDistance << " m travelled since first frame." << std::endl;
+  std::cout << "Adding wheel odometry residual : " << currDistance - this->RefDistance << " m travelled since first frame." << std::endl;
 
-  // Update index for next frame
-  this->PreviousIdx = currIdx;
+  // Update current iterator for next frame
+  this->PrevIt = prevIt;
 }
 
 void WheelOdometryManager::ComputeWheelOdomConstraint(double lidarTime)
 {
+  // Protect Measures data (reading) from outside modification
+  // (Adding a measure with external thread)
+  std::shared_lock<std::shared_timed_mutex> lock(this->Mutex);
+
   this->ResetResidual();
 
   if (!this->CanBeUsed())
     return;
-  // Index of measurements used for this frame
+
+  // If sensor times don't match,
+  // Do not add constraint to optimization
+  // Reset IsRef to recompute the reference odometry value in next call
   lidarTime -= this->TimeOffset;
-
-  // Check if odometry measurements were taken around Lidar Frame acquisition
-  if (lidarTime < this->Measures.front().Time || lidarTime > this->Measures.back().Time)
+  if (lidarTime < this->Measures.front().Time || lidarTime >= this->Measures.back().Time)
   {
-    PRINT_WARNING("No odometry measure corresponds to the current frame acquisition (times don't match)");
+    PRINT_WARNING("No odometry measure corresponds to the current frame acquisition (times don't match) : "
+               << "no relative wheel odometric constraint added to optimization");
+    this->IsRef = false;
     return;
   }
 
-  // Reset if the timeline has been modified
-  if (this->PreviousIdx >= 0 && this->Measures[this->PreviousIdx].Time > lidarTime)
-    this->PreviousIdx = -1;
+  // If the timeline has been modified, reference odometry value needs to be updated
+  if (this->PrevIt->Time > lidarTime)
+    this->IsRef = false;
 
-  unsigned int currIdx = this->PreviousIdx;
+  // Reset if the reference pose does not exist
+  if (!this->IsRef)
+    this->PrevIt = this->Measures.begin();
+
+  // Get index of first odometry measurement after LiDAR time
+  auto nextIt = this->PrevIt;
+  while (nextIt->Time <= lidarTime)
+    ++nextIt;
   // Get index of last odometry measurement before LiDAR time
-  while (this->Measures[currIdx + 1].Time < lidarTime)
-    currIdx++;
+  auto prevIt = nextIt;
+  --prevIt;
+  // Interpolate odometry measurement at LiDAR timestamp (between prevIt and nextIt measures)
+  float rt = (lidarTime - prevIt->Time) / (nextIt->Time - prevIt->Time);
+  float currDistance = (1 - rt) * prevIt->Distance + rt * nextIt->Distance;
 
-  // Interpolate odometry measurement at LiDAR timestamp (between currIdx and currIdx + 1)
-  double rt = (lidarTime - this->Measures[currIdx].Time) / (this->Measures[currIdx + 1].Time - this->Measures[currIdx].Time);
-  double currDistance = (1 - rt) * this->Measures[currIdx].Distance + rt * this->Measures[currIdx + 1].Distance;
-
-  // Build odometry residual
-  // If there is no memory of previous poses
-  if (this->PreviousIdx == -1)
+  // If the reference pose has been set,
+  // build constraint with relative spatial distance between
+  // the two successive poses
+  if (this->IsRef)
   {
-    std::cout << "No previous wheel odometry measure : no constraint added to optimization" << std::endl;
-    // Update index and distance for next frame
-    this->PreviousIdx = currIdx;
-    this->PreviousDistance = currDistance;
-    return;
+    float distDiff = std::abs(currDistance - this->RefDistance);
+    this->Residual.Cost = CeresCostFunctions::OdometerDistanceResidual::Create(this->RefPose.translation(), distDiff);
+    this->Residual.Robustifier.reset(new ceres::ScaledLoss(NULL, this->Weight, ceres::TAKE_OWNERSHIP));
+    std::cout << "Adding relative wheel odometry residual : " << distDiff << " m travelled since last frame." << std::endl;
   }
+  // If the reference pose has not been set (e.g. first call / reset / time unconsistency),
+  // no constraint is added
+  else
+    std::cout << "No previous wheel odometry measure : no relative wheel odometric constraint added to optimization" << std::endl;
 
-  // If there is memory of a previous pose
-  double distDiff = std::abs(currDistance - this->PreviousDistance);
-  this->Residual.Cost = CeresCostFunctions::OdometerDistanceResidual::Create(this->PreviousPose.translation(), distDiff);
-  this->Residual.Robustifier.reset(new ceres::ScaledLoss(NULL, this->Weight, ceres::TAKE_OWNERSHIP));
-  std::cout << "Adding relative wheel odometry residual : " << distDiff << " m travelled since last frame." << std::endl;
-
-  // Update index and distance for next frame
-  this->PreviousIdx = currIdx;
-  this->PreviousDistance = currDistance;
+  // Update current iterator for next frame
+  this->PrevIt = prevIt;
+  // Update reference distance for next frame
+  this->RefDistance = currDistance;
+  // Update manager state
+  this->IsRef = true;
 }
 
 void ImuManager::ComputeGravityConstraint(double lidarTime)
 {
+  // Protect Measures data (reading) from outside modification
+  // (Adding a measure with external thread)
+  std::shared_lock<std::shared_timed_mutex> lock(this->Mutex);
+
   this->ResetResidual();
 
   if (!this->CanBeUsed())
     return;
 
+  // If sensor times don't match,
+  // Do not add constraint to optimization
   lidarTime -= this->TimeOffset;
-  if (lidarTime < this->Measures.front().Time || lidarTime > this->Measures.back().Time)
+  if (lidarTime < this->Measures.front().Time || lidarTime >= this->Measures.back().Time)
   {
-    PRINT_WARNING("No IMU measure corresponds to the current frame acquisition (times don't match)");
+    PRINT_WARNING("No IMU measure corresponds to the current frame acquisition (times don't match) : "
+               << "no IMU constraint added to optimization");
     return;
   }
 
-  // Compute reference gravity vector
+  // Compute reference gravity vector if needed
   if (this->GravityRef.norm() < 1e-6)
     this->ComputeGravityRef(Utils::Deg2Rad(5.f));
 
-  // Reset if the timeline has been modified
-  if (this->PreviousIdx >= 0 && this->Measures[this->PreviousIdx].Time > lidarTime)
-    this->PreviousIdx = -1;
+  // Reset if it is the first call or if the timeline has been modified
+  if (!this->IsRef || this->PrevIt->Time > lidarTime)
+    this->PrevIt = this->Measures.begin();
 
-  // Index of measurement used for this frame
-  int currIdx = this->PreviousIdx;
+  // Get index of first odometry measurement after LiDAR time
+  auto nextIt = this->PrevIt;
+  while (nextIt->Time <= lidarTime)
+    ++nextIt;
+  // Get index of last odometry measurement before LiDAR time
+  auto prevIt = nextIt;
+  --prevIt;
+  // Interpolate gravity measurement at LiDAR timestamp (between prevIt and nextIt measures)
+  float rt = (lidarTime - prevIt->Time) / (nextIt->Time - prevIt->Time);
+  Eigen::Vector3d gravityDirection = (1 - rt) * prevIt->Acceleration.normalized() + rt * nextIt->Acceleration.normalized();
 
-  // Get index of last IMU measurement before LiDAR time
-  while (this->Measures[currIdx + 1].Time < lidarTime)
-    currIdx++;
-
-  // Interpolate gravity measurement at LiDAR timestamp
-  double rt = (lidarTime - this->Measures[currIdx].Time) / (this->Measures[currIdx + 1].Time - this->Measures[currIdx].Time);
-  Eigen::Vector3d gravityDirection = (1 - rt) * this->Measures[currIdx].Acceleration.normalized() + rt * this->Measures[currIdx + 1].Acceleration.normalized();
   // Normalize interpolated gravity vector
   if (gravityDirection.norm() > 1e-6) // Check to insure consistent IMU measure
     gravityDirection.normalize();
   else
+  {
+    PRINT_WARNING("Gravity constraint could not be computed : no IMU constraint added to optimization");
     return;
+  }
 
   // Build gravity constraint
   this->Residual.Cost = CeresCostFunctions::ImuGravityAlignmentResidual::Create(this->GravityRef, gravityDirection);
   this->Residual.Robustifier.reset(new ceres::ScaledLoss(NULL, this->Weight, ceres::TAKE_OWNERSHIP));
 
-  this->PreviousIdx = currIdx;
+  // Update current iterator for next frame
+  this->PrevIt = prevIt;
 }
 
 void ImuManager::ComputeGravityRef(double deltaAngle)

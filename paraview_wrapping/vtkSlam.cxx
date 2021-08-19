@@ -119,19 +119,41 @@ void vtkSlam::Reset()
   this->Trajectory->GetPointData()->AddArray(Utils::CreateArray<vtkDoubleArray>("Orientation(AxisAngle)", 4));
   this->Trajectory->GetPointData()->AddArray(Utils::CreateArray<vtkDoubleArray>("Covariance", 36));
 
+  // Initialize output requirement
+  // No output is required by default
+  for (int outIdx = LidarSlam::POSE_ODOM; outIdx < LidarSlam::nOutputs; ++outIdx)
+  {
+    LidarSlam::Output out = static_cast<LidarSlam::Output>(outIdx);
+    this->OutputRequirement[out] = false;
+  }
+
+  this->OutputRequirement[LidarSlam::POSE_ODOM] = true;
+  this->OutputRequirement[LidarSlam::EDGES_MAP] = true;
+  this->OutputRequirement[LidarSlam::PLANES_MAP] = true;
+  this->OutputRequirement[LidarSlam::BLOBS_MAP] = true;
+  this->OutputRequirement[LidarSlam::EDGE_KEYPOINTS] = true;
+  this->OutputRequirement[LidarSlam::PLANE_KEYPOINTS] = true;
+  this->OutputRequirement[LidarSlam::BLOB_KEYPOINTS] = true;
+  this->OutputRequirement[LidarSlam::SLAM_REGISTERED_POINTS] = true;
+
   // Add the optional arrays to the trajectory
   if (this->AdvancedReturnMode)
   {
-    auto debugInfo = this->SlamAlgo->GetDebugInformation();
-    for (const auto& it : debugInfo)
-      this->Trajectory->GetPointData()->AddArray(Utils::CreateArray<vtkDoubleArray>(it.first));
+    this->OutputRequirement[LidarSlam::DEBUG_ARRAYS] = true;
+    this->OutputRequirement[LidarSlam::KE_DEBUG_ARRAYS] = true;
+    this->OutputRequirement[LidarSlam::CONFIDENCE] = true;
+    std::vector<std::string> debugInfoFields = this->SlamAlgo->GetDebugInfoFields();
+    for (unsigned int i = 0; i < debugInfoFields.size(); ++i)
+      this->Trajectory->GetPointData()->AddArray(Utils::CreateArray<vtkDoubleArray>(debugInfoFields[i]));
   }
   // Enable overlap computation only if advanced return mode is activated
   this->SlamAlgo->SetOverlapSamplingRatio(this->AdvancedReturnMode ? this->OverlapSamplingRatio : 0.);
   // Enable motion limitation checks if advanced return mode is activated
-  this->SlamAlgo->SetTimeWindowDuration(this->AdvancedReturnMode ? this->TimeWindowDuration : 0.);
+  this->SlamAlgo->SetWindowWidth(this->AdvancedReturnMode ? this->WindowWidth : 0);
   // Log the necessary poses if advanced return mode is activated
-  this->SlamAlgo->SetLoggingTimeout(this->AdvancedReturnMode ? 1.1 * this->TimeWindowDuration : 0.);
+  this->SlamAlgo->SetLoggingMax(this->SlamAlgo->GetWindowWidth());
+  // Set Output requirements
+  this->SlamAlgo->SetOutputRequirement(this->OutputRequirement);
 
   // Refresh view
   this->Modified();
@@ -214,17 +236,46 @@ int vtkSlam::RequestData(vtkInformation* vtkNotUsed(request),
 
   // Run SLAM
   IF_VERBOSE(3, Utils::Timer::StopAndDisplay("vtkSlam : input conversions"));
-  this->SlamAlgo->AddFrame(pc);
+  // Add acquired scans to the waiting list
+  // This scan will be processed by the front end thread
+  this->SlamAlgo->AddScans({pc});
   IF_VERBOSE(3, Utils::Timer::Init("vtkSlam : basic output conversions"));
 
+  // Wait for result and publish it
+  // Result must exist, we can't return before because the front end works continuously
+  // independently of the wrapping thread
+  // Should be done in another thread ?
+  LidarSlam::Publishable output;
+  if (!this->SlamAlgo->GetResult(output))
+    return 1;
+
+  if (output.State.Time < 0)
+  {
+    auto* slamTrajectory = vtkPolyData::GetData(outputVector, SLAM_TRAJECTORY_OUTPUT_PORT);
+    slamTrajectory->ShallowCopy(this->Trajectory);
+    auto* slamFrame = vtkPolyData::GetData(outputVector, SLAM_FRAME_OUTPUT_PORT);
+    slamFrame->ShallowCopy(input);
+    auto* edgeMap = vtkPolyData::GetData(outputVector, EDGE_MAP_OUTPUT_PORT);
+    edgeMap->ShallowCopy(vtkPolyData::New());
+    // Output : Planar points map
+    auto* planarMap = vtkPolyData::GetData(outputVector, PLANE_MAP_OUTPUT_PORT);
+    planarMap->ShallowCopy(vtkPolyData::New());
+    // Output : Blob points map
+    auto* blobMap = vtkPolyData::GetData(outputVector, BLOB_MAP_OUTPUT_PORT);
+    blobMap->ShallowCopy(vtkPolyData::New());
+    IF_VERBOSE(3, Utils::Timer::StopAndDisplay("vtkSlam : basic output conversions"));
+    IF_VERBOSE(1, Utils::Timer::StopAndDisplay("vtkSlam"));
+    return 1;
+  }
+
   // Update Trajectory with new SLAM pose
-  this->AddCurrentPoseToTrajectory();
+  this->AddCurrentPoseToTrajectory(output.State);
 
   // ===== SLAM frame and pose =====
   // Output : Current undistorted LiDAR frame in world coordinates
   auto* slamFrame = vtkPolyData::GetData(outputVector, SLAM_FRAME_OUTPUT_PORT);
   slamFrame->ShallowCopy(input);
-  auto worldFrame = this->SlamAlgo->GetRegisteredFrame();
+  LidarSlam::Slam::PointCloud::Ptr worldFrame = output.RegisteredFrame->GetCloud();
   vtkIdType nbPoints = input->GetNumberOfPoints();
   // Modify only points coordinates to keep input arrays
   auto registeredPoints = vtkSmartPointer<vtkPoints>::New();
@@ -268,11 +319,11 @@ int vtkSlam::RequestData(vtkInformation* vtkNotUsed(request),
     static vtkPolyData* cacheEdgeMap = vtkPolyData::New();
     static vtkPolyData* cachePlanarMap = vtkPolyData::New();
     static vtkPolyData* cacheBlobMap = vtkPolyData::New();
-    if ((this->SlamAlgo->GetNbrFrameProcessed() - 1) % this->MapsUpdateStep == 0)
+    if ((output.IdxFrame - 1) % this->MapsUpdateStep == 0)
     {
-      this->PointCloudToPolyData(this->SlamAlgo->GetMap(LidarSlam::EDGE), cacheEdgeMap);
-      this->PointCloudToPolyData(this->SlamAlgo->GetMap(LidarSlam::PLANE), cachePlanarMap);
-      this->PointCloudToPolyData(this->SlamAlgo->GetMap(LidarSlam::BLOB), cacheBlobMap);
+      this->PointCloudToPolyData(output.Maps[LidarSlam::EDGE]->GetCloud(), cacheEdgeMap);
+      this->PointCloudToPolyData(output.Maps[LidarSlam::PLANE]->GetCloud(), cachePlanarMap);
+      this->PointCloudToPolyData(output.Maps[LidarSlam::BLOB]->GetCloud(), cacheBlobMap);
     }
 
     // Fill outputs from cache
@@ -293,15 +344,20 @@ int vtkSlam::RequestData(vtkInformation* vtkNotUsed(request),
   if (this->OutputCurrentKeypoints)
   {
     IF_VERBOSE(3, Utils::Timer::Init("vtkSlam : output current keypoints"));
+
+    // Helper to get keypoints in required frame
+    auto GetKeypoints = [this, &output, &outputVector] (LidarSlam::Keypoint k, int port)
+    {
+      auto* points = vtkPolyData::GetData(outputVector, port);
+      this->PointCloudToPolyData(this->OutputKeypointsInWorldCoordinates ? output.KeypointsWorld[k]->GetCloud() : output.State.Keypoints[k]->GetCloud(), points);
+    };
+
     // Output : Current edge keypoints
-    auto* edgePoints = vtkPolyData::GetData(outputVector, EDGE_KEYPOINTS_OUTPUT_PORT);
-    this->PointCloudToPolyData(this->SlamAlgo->GetKeypoints(LidarSlam::EDGE, this->OutputKeypointsInWorldCoordinates), edgePoints);
+    GetKeypoints(LidarSlam::EDGE, EDGE_KEYPOINTS_OUTPUT_PORT);
     // Output : Current planar keypoints
-    auto* planarPoints = vtkPolyData::GetData(outputVector, PLANE_KEYPOINTS_OUTPUT_PORT);
-    this->PointCloudToPolyData(this->SlamAlgo->GetKeypoints(LidarSlam::PLANE, this->OutputKeypointsInWorldCoordinates), planarPoints);
+    GetKeypoints(LidarSlam::PLANE, PLANE_KEYPOINTS_OUTPUT_PORT);
     // Output : Current blob keypoints
-    auto* blobPoints = vtkPolyData::GetData(outputVector, BLOB_KEYPOINTS_OUTPUT_PORT);
-    this->PointCloudToPolyData(this->SlamAlgo->GetKeypoints(LidarSlam::BLOB, this->OutputKeypointsInWorldCoordinates), blobPoints);
+    GetKeypoints(LidarSlam::BLOB, BLOB_KEYPOINTS_OUTPUT_PORT);
     IF_VERBOSE(3, Utils::Timer::StopAndDisplay("vtkSlam : output current keypoints"));
   }
 
@@ -313,8 +369,7 @@ int vtkSlam::RequestData(vtkInformation* vtkNotUsed(request),
     // Keypoints extraction debug array (curvatures, depth gap, intensity gap...)
     // Arrays added to WORLD transformed frame output
     auto* slamFrame = vtkPolyData::GetData(outputVector, SLAM_FRAME_OUTPUT_PORT);
-    auto keypointsExtractionDebugArray = this->SlamAlgo->GetKeyPointsExtractor()->GetDebugArray();
-    for (const auto& it : keypointsExtractionDebugArray)
+    for (const auto& it : output.KEDebugArray)
     {
       auto array = Utils::CreateArray<vtkFloatArray>(it.first.c_str(), 1, nbPoints);
       slamFrame->GetPointData()->AddArray(array);
@@ -342,8 +397,7 @@ int vtkSlam::RequestData(vtkInformation* vtkNotUsed(request),
 
     // General SLAM info (number of keypoints used in ICP and optimization, max variance, ...)
     // Arrays added to trajectory output
-    auto debugInfo = this->SlamAlgo->GetDebugInformation();
-    for (const auto& it : debugInfo)
+    for (const auto& it : output.DebugInformation)
     {
       slamTrajectory->GetPointData()->GetArray(it.first.c_str())->InsertNextTuple1(it.second);
     }
@@ -366,12 +420,11 @@ int vtkSlam::RequestData(vtkInformation* vtkNotUsed(request),
       outputMap["Localization: plane weights"] = planarPoints;
       outputMap["Localization: blob matches"]  = blobPoints;
       outputMap["Localization: blob weights"]  = blobPoints;
-      auto debugArray = this->SlamAlgo->GetDebugArray();
       for (const auto& it : outputMap)
       {
-        auto array = Utils::CreateArray<vtkDoubleArray>(it.first.c_str(), 1, debugArray[it.first].size());
+        auto array = Utils::CreateArray<vtkDoubleArray>(it.first.c_str(), 1, output.DebugArray[it.first].size());
         // memcpy is a better alternative than looping on all tuples
-        std::memcpy(array->GetVoidPointer(0), debugArray[it.first].data(), sizeof(double) * debugArray[it.first].size());
+        std::memcpy(array->GetVoidPointer(0), output.DebugArray[it.first].data(), sizeof(double) * output.DebugArray[it.first].size());
         it.second->GetPointData()->AddArray(array);
       }
     }
@@ -532,7 +585,7 @@ void vtkSlam::IdentifyInputArrays(vtkPolyData* poly, vtkTable* calib)
     };
 
     // Check if requested calib array exists and set it if it is valid
-    auto CheckAndSetCalibArray = [&](const char* vendor, const char* verticalAngles)
+    auto CheckAndSetCalibArray = [&](const char* /*vendor*/, const char* verticalAngles)
     {
       bool valid = calib && calib->GetRowData() && calib->GetRowData()->HasArray(verticalAngles);
       this->VerticalCalibArrayName = valid ? verticalAngles : "";
@@ -605,30 +658,26 @@ std::vector<size_t> vtkSlam::GetLaserIdMapping(vtkTable* calib)
 }
 
 //-----------------------------------------------------------------------------
-void vtkSlam::AddCurrentPoseToTrajectory()
+void vtkSlam::AddCurrentPoseToTrajectory(LidarSlam::LidarState& result)
 {
-  // Get current SLAM pose in WORLD coordinates
-  LidarSlam::Transform Tworld = this->SlamAlgo->GetWorldTransform();
-  Eigen::Isometry3d pose = Tworld.GetIsometry();
-
   // Add position
-  Eigen::Vector3d translation = pose.translation();
+  Eigen::Vector3d translation = result.Isometry.translation();
   this->Trajectory->GetPoints()->InsertNextPoint(translation.x(), translation.y(), translation.z());
 
   // Add orientation as quaternion
-  Eigen::Quaterniond quaternion(pose.linear());
+  Eigen::Quaterniond quaternion(result.Isometry.linear());
   double wxyz[] = {quaternion.w(), quaternion.x(), quaternion.y(), quaternion.z()};
   this->Trajectory->GetPointData()->GetArray("Orientation(Quaternion)")->InsertNextTuple(wxyz);
 
   // Add orientation as axis angle
-  Eigen::AngleAxisd angleAxis(pose.linear());
+  Eigen::AngleAxisd angleAxis(result.Isometry.linear());
   Eigen::Vector3d axis = angleAxis.axis();
   double xyza[] = {axis.x(), axis.y(), axis.z(), angleAxis.angle()};
   this->Trajectory->GetPointData()->GetArray("Orientation(AxisAngle)")->InsertNextTuple(xyza);
 
   // Add pose time and covariance
-  this->Trajectory->GetPointData()->GetArray("Time")->InsertNextTuple(&Tworld.time);
-  this->Trajectory->GetPointData()->GetArray("Covariance")->InsertNextTuple(this->SlamAlgo->GetTransformCovariance().data());
+  this->Trajectory->GetPointData()->GetArray("Time")->InsertNextTuple(&result.Time);
+  this->Trajectory->GetPointData()->GetArray("Covariance")->InsertNextTuple(result.Covariance.data());
 
   // Add line linking 2 successive points
   vtkIdType nPoints = this->Trajectory->GetNumberOfPoints();
@@ -727,35 +776,45 @@ void vtkSlam::SetAdvancedReturnMode(bool _arg)
   vtkDebugMacro(<< this->GetClassName() << " (" << this << "): setting AdvancedReturnMode to " << _arg);
   if (this->AdvancedReturnMode != _arg)
   {
-    auto debugInfo = this->SlamAlgo->GetDebugInformation();
+    std::vector<std::string> debugInfoFields = this->SlamAlgo->GetDebugInfoFields();
 
     // If AdvancedReturnMode is being activated
     if (_arg)
     {
       // Add new optional arrays to trajectory, and init past values to 0.
-      for (const auto& it : debugInfo)
+      for (unsigned int i = 0; i < debugInfoFields.size(); ++i)
       {
-        auto array = Utils::CreateArray<vtkDoubleArray>(it.first, 1, this->Trajectory->GetNumberOfPoints());
+        auto array = Utils::CreateArray<vtkDoubleArray>(debugInfoFields[i], 1, this->Trajectory->GetNumberOfPoints());
         for (vtkIdType i = 0; i < this->Trajectory->GetNumberOfPoints(); i++)
           array->SetTuple1(i, 0.);
         this->Trajectory->GetPointData()->AddArray(array);
       }
       // Enable overlap computation
       this->SlamAlgo->SetOverlapSamplingRatio(this->OverlapSamplingRatio);
-      this->SlamAlgo->SetTimeWindowDuration(this->TimeWindowDuration);
-      this->SlamAlgo->SetLoggingTimeout(1.1 * this->TimeWindowDuration);
+      this->SlamAlgo->SetWindowWidth(this->WindowWidth);
+      this->SlamAlgo->SetLoggingMax(this->WindowWidth);
+
+      this->OutputRequirement[LidarSlam::DEBUG_ARRAYS] = true;
+      this->OutputRequirement[LidarSlam::KE_DEBUG_ARRAYS] = true;
+      this->OutputRequirement[LidarSlam::CONFIDENCE] = true;
+      this->SlamAlgo->SetOutputRequirement(this->OutputRequirement);
     }
 
     // If AdvancedReturnMode is being disabled
     else
     {
       // Delete optional arrays
-      for (const auto& it : debugInfo)
-        this->Trajectory->GetPointData()->RemoveArray(it.first.c_str());
+      for (unsigned int i = 0; i < debugInfoFields.size(); ++i)
+        this->Trajectory->GetPointData()->RemoveArray(debugInfoFields[i].c_str());
       // Disable overlap computation
       this->SlamAlgo->SetOverlapSamplingRatio(0.);
-      this->SlamAlgo->SetTimeWindowDuration(0.);
-      this->SlamAlgo->SetLoggingTimeout(0.);
+      this->SlamAlgo->SetWindowWidth(0);
+      this->SlamAlgo->SetLoggingMax(0);
+
+      this->OutputRequirement[LidarSlam::DEBUG_ARRAYS] = false;
+      this->OutputRequirement[LidarSlam::KE_DEBUG_ARRAYS] = false;
+      this->OutputRequirement[LidarSlam::CONFIDENCE] = false;
+      this->SlamAlgo->SetOutputRequirement(this->OutputRequirement);
     }
 
     this->AdvancedReturnMode = _arg;
@@ -883,20 +942,20 @@ void vtkSlam::SetVelocityLimits(float linearVel, float angularVel)
 }
 
 //-----------------------------------------------------------------------------
-void vtkSlam::SetTimeWindowDuration(float time)
+void vtkSlam::SetWindowWidth(int width)
 {
   // Change parameter value if it is modified
-  vtkDebugMacro(<< this->GetClassName() << " (" << this << "): setting TimeWindowDuration to " << time);
-  if (this->TimeWindowDuration != time)
+  vtkDebugMacro(<< this->GetClassName() << " (" << this << "): setting WindowWidth to " << width);
+  if (this->WindowWidth != width)
   {
-    this->TimeWindowDuration = time;
+    this->WindowWidth = width;
     this->ParametersModificationTime.Modified();
   }
 
   // Forward this parameter change to SLAM if Advanced Return Mode is enabled
   if (this->AdvancedReturnMode)
   {
-    this->SlamAlgo->SetTimeWindowDuration(this->TimeWindowDuration);
-    this->SlamAlgo->SetLoggingTimeout(1.1 * this->TimeWindowDuration);
+    this->SlamAlgo->SetWindowWidth(this->WindowWidth);
+    this->SlamAlgo->SetLoggingMax(this->WindowWidth);
   }
 }

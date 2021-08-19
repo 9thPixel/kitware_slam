@@ -50,6 +50,15 @@ public:
 
   //----------------------------------------------------------------------------
   /*!
+   * @brief     Destructor.
+   * 
+   * Stop Slam processing
+   * Stop Publisher thread
+   */
+  ~LidarSlamNode();
+
+  //----------------------------------------------------------------------------
+  /*!
    * @brief     New main LiDAR frame callback, running SLAM and publishing TF.
    * @param[in] cloud New frame, published by conversion node.
    *
@@ -162,8 +171,8 @@ protected:
   ros::NodeHandle &Nh, &PrivNh;
   std::vector<ros::Subscriber> CloudSubs;
   ros::Subscriber SlamCommandSub, SetPoseSub;
-  std::unordered_map<int, ros::Publisher> Publishers;
-  std::unordered_map<int, bool> Publish;
+  std::unordered_map<LidarSlam::Output, ros::Publisher> Publishers;
+  std::unordered_map<LidarSlam::Output, bool, std::hash<int>> Publish;
 
   // TF stuff
   std::string OdometryFrameId = "odom";       ///< Frame in which SLAM odometry and maps are expressed.
@@ -179,6 +188,11 @@ protected:
   std::deque<std::array<double, 9>> GpsCovars;  ///< Buffer of last received GPS positions covariances.
   Eigen::Isometry3d BaseToGpsOffset = Eigen::Isometry3d::Identity();  ///< Pose of the GPS antenna in BASE coordinates.
   ros::Subscriber GpsOdomSub;
+
+  // Thread to publish all available results from Slam waiting list.
+  // This thread will loop to wait for a result and publish it when it arrives.
+  // This thread stops when the waiting list is closed.
+  std::thread PublisherThread;
 };
 
 #endif // LIDAR_SLAM_NODE_H

@@ -138,14 +138,10 @@ slam:
   #  5) 4 + logging/maps memory usage
   verbosity: 3
 
-  # Optional logging of computed pose, localization covariance and keypoints of each processed frame.
-  #  - A value of 0. will disable logging.
-  #  - A negative value will log all incoming data, without any timeout.
-  #  - A positive value will keep only most recent data, forgetting all previous data older than LoggingTimeout seconds.
-  # Logged data will be used for pose graph optimization, GPS antenna/LiDAR sensor calibration using GPS data
-  # and velocity/acceleration estimations.
-  # WARNING : the time window duration must be set lower than this value.
-  logging_timeout: 0.  # [s]
+  # Length of the buffer which stores states along trajectory.
+  # Each state contains a transform, a covariance, a timestamp, an ID and a pointer of keypoints.
+  # WARNING : it must be set greater than window_width to be able to comply with the requirements.
+  logging_max: 2  # log elements
 
   # How to store pointclouds data during keypoints logging (if logging_timeout != 0):
   #  0) PCL pointcloud                    (in RAM,     no compression,      no overhead)
@@ -200,9 +196,9 @@ slam:
     motion_limits:               # Physical constraints on motion to check pose credibility.
       acceleration: [.inf, .inf] # [linear_acc (m/s2), angular_acc (°/s2)] Acceleration limits.
       velocity:     [.inf, .inf] # [linear_vel (m/s ), angular_vel (°/s )] Velocity limits.
-      time_window_duration:  0.  # [s] Duration on which to compute the local velocity/acceleration.
+      window_width:  0.          # [s] Duration on which to compute the local velocity/acceleration.
                                  # 0 disables motion limits check.
-                                 # WARNING : the logging time out must be set greater than this value.
+                                 # WARNING : logging_max must be set greater than this value.
 
   # Keypoints maps, saved as downsampled voxel grids
   voxel_grid:

@@ -61,29 +61,11 @@ geometry_msgs::Pose TransformToPoseMsg(const LidarSlam::Transform& transform)
   return PoseMsg;
 }
 
-//------------------------------------------------------------------------------
-//! Fill a PoseStamped msg with a Transform object.
-geometry_msgs::PoseStamped TransformToPoseStampedMsg(const LidarSlam::Transform& transform)
-{
-  geometry_msgs::PoseStamped PoseStampedMsg;
-  PoseStampedMsg.header.frame_id = transform.frameid;
-  PoseStampedMsg.header.stamp = ros::Time(transform.time);
-  PoseStampedMsg.pose.position.x = transform.x();
-  PoseStampedMsg.pose.position.y = transform.y();
-  PoseStampedMsg.pose.position.z = transform.z();
-  Eigen::Quaterniond q = transform.GetRotation();
-  PoseStampedMsg.pose.orientation.x = q.x();
-  PoseStampedMsg.pose.orientation.y = q.y();
-  PoseStampedMsg.pose.orientation.z = q.z();
-  PoseStampedMsg.pose.orientation.w = q.w();
-  return PoseStampedMsg;
-}
-
 //========================== ROS msg -> Transform ==============================
 
 //------------------------------------------------------------------------------
 //! Build a Transform object from a Pose msg.
-LidarSlam::Transform PoseMsgToTransform(const geometry_msgs::Pose& poseMsg, double time = 0., const std::string& frameid = "")
+Eigen::Isometry3d PoseMsgToTransform(const geometry_msgs::Pose& poseMsg)
 {
   Eigen::Translation3d trans(poseMsg.position.x,
                              poseMsg.position.y,
@@ -92,22 +74,8 @@ LidarSlam::Transform PoseMsgToTransform(const geometry_msgs::Pose& poseMsg, doub
                          poseMsg.orientation.x,
                          poseMsg.orientation.y,
                          poseMsg.orientation.z);
-  return LidarSlam::Transform(trans, rot, time, frameid);
-}
-
-//------------------------------------------------------------------------------
-//! Build a Transform object from a PoseStamped msg.
-LidarSlam::Transform PoseMsgToTransform(const geometry_msgs::PoseStamped& poseStampedMsg)
-{
-  double time = poseStampedMsg.header.stamp.toSec();
-  Eigen::Translation3d trans(poseStampedMsg.pose.position.x,
-                             poseStampedMsg.pose.position.y,
-                             poseStampedMsg.pose.position.z);
-  Eigen::Quaterniond rot(poseStampedMsg.pose.orientation.w,
-                         poseStampedMsg.pose.orientation.x,
-                         poseStampedMsg.pose.orientation.y,
-                         poseStampedMsg.pose.orientation.z);
-  return LidarSlam::Transform(trans, rot, time, poseStampedMsg.header.frame_id);
+  LidarSlam::Transform transform(trans, rot);
+  return transform.Isometry;
 }
 
 //========================== ROS TF2 -> Eigen Isometry3d =======================

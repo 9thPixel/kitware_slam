@@ -267,8 +267,8 @@ public:
   virtual void SetAccelerationLimits(float linearAcc, float angularAcc);
   virtual void SetVelocityLimits(float linearVel, float angularVel);
 
-  virtual void SetTimeWindowDuration(float time);
-  vtkCustomGetMacro(TimeWindowDuration, float)
+  virtual void SetWindowWidth(int width);
+  vtkCustomGetMacro(WindowWidth, int)
 
 protected:
   vtkSlam();
@@ -291,7 +291,7 @@ private:
   std::vector<size_t> GetLaserIdMapping(vtkTable* calib);
 
   // Add current SLAM pose and covariance in WORLD coordinates to Trajectory.
-  void AddCurrentPoseToTrajectory();
+  void AddCurrentPoseToTrajectory(LidarSlam::LidarState& result);
 
   // Convert VTK PolyData to PCL pointcloud
   // Returns true if all input points are valid (null coordinates), false otherwise
@@ -329,6 +329,9 @@ private:
   //  - Extracted keypoints : ICP matching results
   bool AdvancedReturnMode = false;
 
+  // Allow to choose the result data to output 
+  std::unordered_map<LidarSlam::Output, bool, std::hash<int>> OutputRequirement;
+
   // If enabled, SLAM filter will output keypoints maps.
   // Otherwise, these filter outputs are left empty to save time.
   bool OutputKeypointsMaps = true;
@@ -362,7 +365,7 @@ private:
   // Internal variable to store overlap sampling ratio when advanced return mode is disabled.
   float OverlapSamplingRatio = 0.25;
   // Internal variable to store window time to estimate local velocity when advanced return mode is disabled.
-  float TimeWindowDuration = 0.5;
+  int WindowWidth = 5;
 };
 
 #endif // VTK_SLAM_H

@@ -92,4 +92,32 @@ enum class EgoMotionMode
   MOTION_EXTRAPOLATION_AND_REGISTRATION = 3
 };
 
+enum Output
+{
+  POSE_ODOM,             // Output SLAM pose as an Odometry msg on 'slam_odom' topic (default : true).
+  POSE_TF,               // Output SLAM pose as a TF from 'odometry_frame' to 'tracking_frame' (default : true).
+  POSE_PREDICTION_ODOM,  // Output latency-corrected SLAM pose as an Odometry msg on 'slam_predicted_odom' topic.
+  POSE_PREDICTION_TF,    // Output latency-corrected SLAM pose as a TF from 'odometry_frame' to '<tracking_frame>_prediction'.
+
+  EDGES_MAP,             // Output edge keypoints map as a LidarPoint PointCloud2 msg to topic 'maps/edges'.
+  PLANES_MAP,            // Output plane keypoints map as a LidarPoint PointCloud2 msg to topic 'maps/planes'.
+  BLOBS_MAP,             // Output blob keypoints map as a LidarPoint PointCloud2 msg to topic 'maps/blobs'.
+
+  EDGE_KEYPOINTS,        // Output extracted edge keypoints from current frame as a PointCloud2 msg to topic 'keypoints/edges'.
+  PLANE_KEYPOINTS,       // Output extracted plane keypoints from current frame as a PointCloud2 msg to topic 'keypoints/planes'.
+  BLOB_KEYPOINTS,        // Output extracted blob keypoints from current frame as a PointCloud2 msg to topic 'keypoints/blobs'.
+
+  SLAM_REGISTERED_POINTS,// Output SLAM pointcloud as LidarPoint PointCloud2 msg to topic 'slam_registered_points'.
+
+  CONFIDENCE,            // Output confidence estimators on output pose to topic 'slam_confidence'.
+
+  PGO_PATH,              // Output optimized SLAM trajectory as Path msg to 'pgo_slam_path' latched topic.
+  ICP_CALIB_SLAM_PATH,   // Output ICP-aligned SLAM trajectory as Path msg to 'icp_slam_path' latched topic.
+  ICP_CALIB_GPS_PATH ,   // Output ICP-aligned GPS trajectory as Path msg to 'icp_gps_path' latched topic.
+
+  DEBUG_ARRAYS,          // Output std::map containing local error + confidence estimators (explicit names + values)
+  KE_DEBUG_ARRAYS,        // Output std::map containing kpts extraction info (explicit names + values)
+  nOutputs
+};
+
 } // end of LidarSlam namespace

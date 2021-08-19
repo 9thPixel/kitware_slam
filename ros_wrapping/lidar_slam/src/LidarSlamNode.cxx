@@ -26,30 +26,6 @@
 
 #define BOLD_GREEN(s) "\033[1;32m" << s << "\033[0m"
 
-enum Output
-{
-  POSE_ODOM,             // Publish SLAM pose as an Odometry msg on 'slam_odom' topic (default : true).
-  POSE_TF,               // Publish SLAM pose as a TF from 'odometry_frame' to 'tracking_frame' (default : true).
-  POSE_PREDICTION_ODOM,  // Publish latency-corrected SLAM pose as an Odometry msg on 'slam_predicted_odom' topic.
-  POSE_PREDICTION_TF,    // Publish latency-corrected SLAM pose as a TF from 'odometry_frame' to '<tracking_frame>_prediction'.
-
-  EDGES_MAP,             // Publish edge keypoints map as a LidarPoint PointCloud2 msg to topic 'maps/edges'.
-  PLANES_MAP,            // Publish plane keypoints map as a LidarPoint PointCloud2 msg to topic 'maps/planes'.
-  BLOBS_MAP,             // Publish blob keypoints map as a LidarPoint PointCloud2 msg to topic 'maps/blobs'.
-
-  EDGE_KEYPOINTS,        // Publish extracted edge keypoints from current frame as a PointCloud2 msg to topic 'keypoints/edges'.
-  PLANE_KEYPOINTS,       // Publish extracted plane keypoints from current frame as a PointCloud2 msg to topic 'keypoints/planes'.
-  BLOB_KEYPOINTS,        // Publish extracted blob keypoints from current frame as a PointCloud2 msg to topic 'keypoints/blobs'.
-
-  SLAM_REGISTERED_POINTS,// Publish SLAM pointcloud as LidarPoint PointCloud2 msg to topic 'slam_registered_points'.
-
-  CONFIDENCE,            // Publish confidence estimators on output pose to topic 'slam_confidence'.
-
-  PGO_PATH,              // Publish optimized SLAM trajectory as Path msg to 'pgo_slam_path' latched topic.
-  ICP_CALIB_SLAM_PATH,   // Publish ICP-aligned SLAM trajectory as Path msg to 'icp_slam_path' latched topic.
-  ICP_CALIB_GPS_PATH     // Publish ICP-aligned GPS trajectory as Path msg to 'icp_gps_path' latched topic.
-};
-
 //==============================================================================
 //   Basic SLAM use
 //==============================================================================
@@ -97,12 +73,12 @@ LidarSlamNode::LidarSlamNode(ros::NodeHandle& nh, ros::NodeHandle& priv_nh)
   // Init ROS publishers
 
   #define initPublisher(publisher, topic, type, rosParam, publishDefault, queue, latch)   \
-    priv_nh.param(rosParam, this->Publish[publisher], publishDefault);                    \
-    if (this->Publish[publisher])                                                         \
-      this->Publishers[publisher] = nh.advertise<type>(topic, queue, latch);
+    priv_nh.param(rosParam, this->Publish[LidarSlam::publisher], publishDefault);                    \
+    if (this->Publish[LidarSlam::publisher])                                                         \
+      this->Publishers[LidarSlam::publisher] = nh.advertise<type>(topic, queue, latch);              \
 
-  priv_nh.param("output/pose/tf",           this->Publish[POSE_TF],            true);
-  priv_nh.param("output/pose/predicted_tf", this->Publish[POSE_PREDICTION_TF], false);
+  priv_nh.param("output/pose/tf",           this->Publish[LidarSlam::POSE_TF],            true);
+  priv_nh.param("output/pose/predicted_tf", this->Publish[LidarSlam::POSE_PREDICTION_TF], false);
   initPublisher(POSE_ODOM,            "slam_odom",           nav_msgs::Odometry, "output/pose/odom",           true,  1, false);
   initPublisher(POSE_PREDICTION_ODOM, "slam_predicted_odom", nav_msgs::Odometry, "output/pose/predicted_odom", false, 1, false);
 
@@ -124,6 +100,9 @@ LidarSlamNode::LidarSlamNode(ros::NodeHandle& nh, ros::NodeHandle& priv_nh)
     initPublisher(ICP_CALIB_SLAM_PATH, "icp_slam_path", nav_msgs::Path, "gps/calibration/publish_icp_paths", false, 1, true);
     initPublisher(ICP_CALIB_GPS_PATH,  "icp_gps_path",  nav_msgs::Path, "gps/calibration/publish_icp_paths", false, 1, true);
   }
+
+  // Only compute required outputs
+  this->LidarSlam.SetOutputRequirement(this->Publish);
 
   // ***************************************************************************
   // Init ROS subscribers
@@ -150,7 +129,20 @@ LidarSlamNode::LidarSlamNode(ros::NodeHandle& nh, ros::NodeHandle& priv_nh)
   if (this->UseGps)
     this->GpsOdomSub = nh.subscribe("gps_odom", 1, &LidarSlamNode::GpsCallback, this);
 
+  // ***************************************************************************
+  // Launch publisher thread
+  this->PublisherThread = std::thread(&LidarSlamNode::PublishOutput, this);
+
   ROS_INFO_STREAM(BOLD_GREEN("LiDAR SLAM is ready !"));
+}
+
+LidarSlamNode::~LidarSlamNode()
+{
+  // Close waiting lists to free all depending threads
+  // Join the SLAM threads (front end / back end)
+  this->LidarSlam.Stop();
+  // Join the publisher thread
+  this->PublisherThread.join();
 }
 
 //------------------------------------------------------------------------------
@@ -168,12 +160,10 @@ void LidarSlamNode::ScanCallback(const CloudS::Ptr cloudS_ptr)
   // Set the SLAM main input frame at first position
   this->Frames.insert(this->Frames.begin(), cloudS_ptr);
 
-  // Run SLAM : register new frame and update localization and map.
-  this->LidarSlam.AddFrames(this->Frames);
+  // Keep new set of scans in the waiting list.
+  // These scans will be processed by the front end when it is available
+  this->LidarSlam.AddScans(this->Frames);
   this->Frames.clear();
-
-  // Publish SLAM output as requested by user
-  this->PublishOutput();
 }
 
 //------------------------------------------------------------------------------
@@ -195,6 +185,7 @@ void LidarSlamNode::SecondaryScanCallback(const CloudS::Ptr cloudS_ptr)
 //------------------------------------------------------------------------------
 void LidarSlamNode::GpsCallback(const nav_msgs::Odometry& msg)
 {
+  #if 0
   // If GPS/SLAM calibration is needed, save GPS pose for later use
   if (this->UseGps)
   {
@@ -222,6 +213,7 @@ void LidarSlamNode::GpsCallback(const nav_msgs::Odometry& msg)
     // Get the latest transform (we expect a static transform, so timestamp does not matter)
     Utils::Tf2LookupTransform(this->BaseToGpsOffset, this->TfBuffer, this->TrackingFrameId, msg.child_frame_id);
   }
+  #endif
 }
 
 //------------------------------------------------------------------------------
@@ -232,7 +224,7 @@ void LidarSlamNode::SetPoseCallback(const geometry_msgs::PoseWithCovarianceStamp
   if (Utils::Tf2LookupTransform(msgFrameToOdom, this->TfBuffer, msg.header.frame_id, this->OdometryFrameId, msg.header.stamp))
   {
     // Compute pose in odometry frame and set SLAM pose
-    Eigen::Isometry3d odomToBase = msgFrameToOdom.inverse() * Utils::PoseMsgToTransform(msg.pose.pose).GetIsometry();
+    Eigen::Isometry3d odomToBase = msgFrameToOdom.inverse() * Utils::PoseMsgToTransform(msg.pose.pose);
     this->LidarSlam.SetWorldTransformFromGuess(LidarSlam::Transform(odomToBase));
     ROS_WARN_STREAM("SLAM pose set to :\n" << odomToBase.matrix());
     // TODO: properly deal with covariance: rotate it, pass it to SLAM, notify trajectory jump?
@@ -245,6 +237,7 @@ void LidarSlamNode::SlamCommandCallback(const lidar_slam::SlamCommand& msg)
   // Parse command
   switch(msg.command)
   {
+    #if 0
     // Run GPS/SLAM calibration
     case lidar_slam::SlamCommand::GPS_SLAM_CALIBRATION:
       this->GpsSlamCalibration();
@@ -275,10 +268,12 @@ void LidarSlamNode::SlamCommandCallback(const lidar_slam::SlamCommand& msg)
       Eigen::Isometry3d mapToOdom;
       Utils::Tf2LookupTransform(mapToOdom, this->TfBuffer, mapToGps.frameid, this->OdometryFrameId, ros::Time(mapToGps.time));
       Eigen::Isometry3d odomToBase = mapToOdom.inverse() * mapToGps.GetIsometry() * this->BaseToGpsOffset.inverse();
-      this->LidarSlam.SetWorldTransformFromGuess(LidarSlam::Transform(odomToBase, mapToGps.time, mapToGps.frameid));
+      this->LidarSlam.SetWorldTransformFromGuess(odomToBase);
       ROS_WARN_STREAM("SLAM pose set from GPS pose to :\n" << odomToBase.matrix());
       break;
     }
+
+    #endif
 
     // Enable SLAM maps update
     case lidar_slam::SlamCommand::ENABLE_SLAM_MAP_UPDATE:
@@ -329,6 +324,7 @@ void LidarSlamNode::SlamCommandCallback(const lidar_slam::SlamCommand& msg)
 //------------------------------------------------------------------------------
 void LidarSlamNode::GpsSlamCalibration()
 {
+  #if 0
   if (!this->UseGps)
   {
     ROS_ERROR_STREAM("Cannot run GPS/SLAM calibration as GPS logging has not been enabled. "
@@ -421,11 +417,13 @@ void LidarSlamNode::GpsSlamCalibration()
   ROS_INFO_STREAM(BOLD_GREEN("Global transform from '" << gpsFrameId << "' to '" << this->OdometryFrameId << "' " <<
                   "successfully estimated to :\n" << worldToOdom.matrix() << "\n" <<
                   "(tf2 static transform : " << xyz.transpose() << " " << ypr.transpose() << " " << gpsFrameId << " " << this->OdometryFrameId << ")"));
+  #endif // GPS compilation
 }
 
 //------------------------------------------------------------------------------
 void LidarSlamNode::PoseGraphOptimization()
 {
+  #if 0
   if (!this->UseGps)
   {
     ROS_ERROR_STREAM("Cannot run pose graph optimization as GPS logging has not been enabled. "
@@ -469,6 +467,7 @@ void LidarSlamNode::PoseGraphOptimization()
 
   // Update display
   this->PublishOutput();
+  #endif // Compilation of poseGraph
 }
 
 //==============================================================================
@@ -492,100 +491,99 @@ void LidarSlamNode::UpdateBaseToLidarOffset(const std::string& lidarFrameId, uin
 //------------------------------------------------------------------------------
 void LidarSlamNode::PublishOutput()
 {
-  // Publish SLAM pose
-  if (this->Publish[POSE_ODOM] || this->Publish[POSE_TF])
+  // Wait for a result and publish it
+  // GetResult() is locking a mutex with a conditional variable,
+  // Once called, it will block the thread until some result appear or until the end
+  // of the waiting is required by the user.
+  LidarSlam::Publishable output;
+  while (this->LidarSlam.GetResult(output))
   {
-    // Get SLAM pose
-    LidarSlam::Transform odomToBase = this->LidarSlam.GetWorldTransform();
-
-    // Publish as odometry msg
-    if (this->Publish[POSE_ODOM])
+    // Publish SLAM pose
+    if (this->Publish[LidarSlam::POSE_ODOM] || this->Publish[LidarSlam::POSE_TF])
     {
-      nav_msgs::Odometry odomMsg;
-      odomMsg.header.stamp = ros::Time(odomToBase.time);
-      odomMsg.header.frame_id = this->OdometryFrameId;
-      odomMsg.child_frame_id = this->TrackingFrameId;
-      odomMsg.pose.pose = Utils::TransformToPoseMsg(odomToBase);
-      auto covar = this->LidarSlam.GetTransformCovariance();
-      std::copy(covar.begin(), covar.end(), odomMsg.pose.covariance.begin());
-      this->Publishers[POSE_ODOM].publish(odomMsg);
+      // Publish pose as odometry msg
+      if (this->Publish[LidarSlam::POSE_ODOM])
+      {
+        nav_msgs::Odometry odomMsg;
+        odomMsg.header.stamp = ros::Time(output.State.Time);
+        odomMsg.header.frame_id = this->OdometryFrameId;
+        odomMsg.child_frame_id = this->TrackingFrameId;
+        odomMsg.pose.pose = Utils::TransformToPoseMsg(LidarSlam::Transform(output.State.Isometry));
+        std::copy(output.State.Covariance.begin(), output.State.Covariance.end(), odomMsg.pose.covariance.begin());
+        this->Publishers[LidarSlam::POSE_ODOM].publish(odomMsg);
+      }
+
+      // Publish as TF from OdometryFrameId to TrackingFrameId
+      if (this->Publish[LidarSlam::POSE_TF])
+      {
+        geometry_msgs::TransformStamped tfMsg;
+        tfMsg.header.stamp = ros::Time(output.State.Time);
+        tfMsg.header.frame_id = this->OdometryFrameId;
+        tfMsg.child_frame_id = this->TrackingFrameId;
+        tfMsg.transform = Utils::TransformToTfMsg(LidarSlam::Transform(output.State.Isometry));
+        this->TfBroadcaster.sendTransform(tfMsg);
+      }
     }
 
-    // Publish as TF from OdometryFrameId to TrackingFrameId
-    if (this->Publish[POSE_TF])
+    // Publish latency compensated SLAM pose
+    if (this->Publish[LidarSlam::POSE_PREDICTION_ODOM] || this->Publish[LidarSlam::POSE_PREDICTION_TF])
     {
-      geometry_msgs::TransformStamped tfMsg;
-      tfMsg.header.stamp = ros::Time(odomToBase.time);
-      tfMsg.header.frame_id = this->OdometryFrameId;
-      tfMsg.child_frame_id = this->TrackingFrameId;
-      tfMsg.transform = Utils::TransformToTfMsg(odomToBase);
-      this->TfBroadcaster.sendTransform(tfMsg);
-    }
-  }
+      // Publish as odometry msg
+      if (this->Publish[LidarSlam::POSE_PREDICTION_ODOM])
+      {
+        nav_msgs::Odometry odomMsg;
+        odomMsg.header.stamp = ros::Time(output.State.Time);
+        odomMsg.header.frame_id = this->OdometryFrameId;
+        odomMsg.child_frame_id = this->TrackingFrameId + "_prediction";
+        odomMsg.pose.pose = Utils::TransformToPoseMsg(LidarSlam::Transform(output.LatencyCorrectedIsometry));
+        std::copy(output.State.Covariance.begin(), output.State.Covariance.end(), odomMsg.pose.covariance.begin());
+        this->Publishers[LidarSlam::POSE_PREDICTION_ODOM].publish(odomMsg);
+      }
 
-  // Publish latency compensated SLAM pose
-  if (this->Publish[POSE_PREDICTION_ODOM] || this->Publish[POSE_PREDICTION_TF])
-  {
-    // Get latency corrected SLAM pose
-    LidarSlam::Transform odomToBasePred = this->LidarSlam.GetLatencyCompensatedWorldTransform();
-
-    // Publish as odometry msg
-    if (this->Publish[POSE_PREDICTION_ODOM])
-    {
-      nav_msgs::Odometry odomMsg;
-      odomMsg.header.stamp = ros::Time(odomToBasePred.time);
-      odomMsg.header.frame_id = this->OdometryFrameId;
-      odomMsg.child_frame_id = this->TrackingFrameId + "_prediction";
-      odomMsg.pose.pose = Utils::TransformToPoseMsg(odomToBasePred);
-      auto covar = this->LidarSlam.GetTransformCovariance();
-      std::copy(covar.begin(), covar.end(), odomMsg.pose.covariance.begin());
-      this->Publishers[POSE_PREDICTION_ODOM].publish(odomMsg);
+      // Publish as TF from OdometryFrameId to <TrackingFrameId>_prediction
+      if (this->Publish[LidarSlam::POSE_PREDICTION_TF])
+      {
+        geometry_msgs::TransformStamped tfMsg;
+        tfMsg.header.stamp = ros::Time(output.State.Time);
+        tfMsg.header.frame_id = this->OdometryFrameId;
+        tfMsg.child_frame_id = this->TrackingFrameId + "_prediction";
+        tfMsg.transform = Utils::TransformToTfMsg(LidarSlam::Transform(output.LatencyCorrectedIsometry));
+        this->TfBroadcaster.sendTransform(tfMsg);
+      }
     }
 
-    // Publish as TF from OdometryFrameId to <TrackingFrameId>_prediction
-    if (this->Publish[POSE_PREDICTION_TF])
+    // Publish a pointcloud only if required and if someone is listening to it to spare bandwidth.
+    #define publishPointCloud(publisher, pc)                                            \
+      if (this->Publish[LidarSlam::publisher] && this->Publishers[LidarSlam::publisher].getNumSubscribers())  \
+        this->Publishers[LidarSlam::publisher].publish(pc->GetCloud());
+
+    // Keypoints maps
+    publishPointCloud(EDGES_MAP,  output.Maps[LidarSlam::EDGE]);
+    publishPointCloud(PLANES_MAP, output.Maps[LidarSlam::PLANE]);
+    publishPointCloud(BLOBS_MAP,  output.Maps[LidarSlam::BLOB]);
+
+    // Current keypoints
+    publishPointCloud(EDGE_KEYPOINTS,  output.KeypointsWorld[LidarSlam::EDGE]);
+    publishPointCloud(PLANE_KEYPOINTS, output.KeypointsWorld[LidarSlam::PLANE]);
+    publishPointCloud(BLOB_KEYPOINTS,  output.KeypointsWorld[LidarSlam::BLOB]);
+
+    // Registered aggregated (and optionally undistorted) input scans points
+    publishPointCloud(SLAM_REGISTERED_POINTS, output.RegisteredFrame);
+
+    // Overlap estimation
+    if (this->Publish[LidarSlam::CONFIDENCE])
     {
-      geometry_msgs::TransformStamped tfMsg;
-      tfMsg.header.stamp = ros::Time(odomToBasePred.time);
-      tfMsg.header.frame_id = this->OdometryFrameId;
-      tfMsg.child_frame_id = this->TrackingFrameId + "_prediction";
-      tfMsg.transform = Utils::TransformToTfMsg(odomToBasePred);
-      this->TfBroadcaster.sendTransform(tfMsg);
+      // Get SLAM pose
+      lidar_slam::Confidence confidenceMsg;
+      confidenceMsg.header.stamp = ros::Time(output.State.Time);
+      confidenceMsg.header.frame_id = this->OdometryFrameId;
+      confidenceMsg.overlap = output.Overlap;
+      auto covar = output.State.Covariance;
+      std::copy(covar.begin(), covar.end(), confidenceMsg.covariance.begin());
+      confidenceMsg.nb_matches = output.NbMatchedKeypoints;
+      confidenceMsg.comply_motion_limits = output.ComplyMotionLimits;
+      this->Publishers[LidarSlam::CONFIDENCE].publish(confidenceMsg);
     }
-  }
-
-  // Publish a pointcloud only if required and if someone is listening to it to spare bandwidth.
-  #define publishPointCloud(publisher, pc)                                            \
-    if (this->Publish[publisher] && this->Publishers[publisher].getNumSubscribers())  \
-      this->Publishers[publisher].publish(pc);
-
-  // Keypoints maps
-  publishPointCloud(EDGES_MAP,  this->LidarSlam.GetMap(LidarSlam::EDGE));
-  publishPointCloud(PLANES_MAP, this->LidarSlam.GetMap(LidarSlam::PLANE));
-  publishPointCloud(BLOBS_MAP,  this->LidarSlam.GetMap(LidarSlam::BLOB));
-
-  // Current keypoints
-  publishPointCloud(EDGE_KEYPOINTS,  this->LidarSlam.GetKeypoints(LidarSlam::EDGE));
-  publishPointCloud(PLANE_KEYPOINTS, this->LidarSlam.GetKeypoints(LidarSlam::PLANE));
-  publishPointCloud(BLOB_KEYPOINTS,  this->LidarSlam.GetKeypoints(LidarSlam::BLOB));
-
-  // Registered aggregated (and optionally undistorted) input scans points
-  publishPointCloud(SLAM_REGISTERED_POINTS, this->LidarSlam.GetRegisteredFrame());
-
-  // Overlap estimation
-  if (this->Publish[CONFIDENCE])
-  {
-    // Get SLAM pose
-    LidarSlam::Transform odomToBase = this->LidarSlam.GetWorldTransform();
-    lidar_slam::Confidence confidenceMsg;
-    confidenceMsg.header.stamp = ros::Time(odomToBase.time);
-    confidenceMsg.header.frame_id = this->OdometryFrameId;
-    confidenceMsg.overlap = this->LidarSlam.GetOverlapEstimation();
-    auto covar = this->LidarSlam.GetTransformCovariance();
-    std::copy(covar.begin(), covar.end(), confidenceMsg.covariance.begin());
-    confidenceMsg.nb_matches = this->LidarSlam.GetTotalMatchedKeypoints();
-    confidenceMsg.comply_motion_limits = this->LidarSlam.GetComplyMotionLimits();
-    this->Publishers[CONFIDENCE].publish(confidenceMsg);
   }
 }
 
@@ -599,7 +597,7 @@ void LidarSlamNode::SetSlamParameters()
   SetSlamParam(bool,   "slam/use_blobs", UseBlobs)
   SetSlamParam(int,    "slam/verbosity", Verbosity)
   SetSlamParam(int,    "slam/n_threads", NbThreads)
-  SetSlamParam(double, "slam/logging_timeout", LoggingTimeout)
+  SetSlamParam(int,    "slam/logging_max", LoggingMax)
   int egoMotionMode;
   if (this->PrivNh.getParam("slam/ego_motion", egoMotionMode))
   {
@@ -690,7 +688,7 @@ void LidarSlamNode::SetSlamParameters()
   std::vector<float> vel;
   if (this->PrivNh.getParam("slam/confidence/motion_limits/velocity", vel) && vel.size() == 2)
     this->LidarSlam.SetVelocityLimits(Eigen::Map<const Eigen::Array2f>(vel.data()));
-  SetSlamParam(float, "slam/confidence/motion_limits/time_window_duration", TimeWindowDuration)
+  SetSlamParam(float, "slam/confidence/motion_limits/window_width", WindowWidth)
 
   // Keyframes
   SetSlamParam(double, "slam/keyframes/distance_threshold", KfDistanceThreshold)

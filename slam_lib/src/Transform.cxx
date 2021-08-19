@@ -17,49 +17,33 @@
 //==============================================================================
 
 #include "LidarSlam/Transform.h"
-#include "LidarSlam/Utilities.h"
 
 namespace LidarSlam
 {
 
 //------------------------------------------------------------------------------
-Transform::Transform(double x, double y, double z, double roll, double pitch, double yaw,
-                     double t, const std::string& frame)
-  : transform(Utils::XYZRPYtoIsometry(x, y, z, roll, pitch, yaw))
-  , time(t)
-  , frameid(frame)
+Transform::Transform(double x, double y, double z, double roll, double pitch, double yaw)
+  : Isometry(Utils::XYZRPYtoIsometry(x, y, z, roll, pitch, yaw))
 {}
 
 //------------------------------------------------------------------------------
-Transform::Transform(const Eigen::Vector6d& xyzrpy,
-                     double t, const std::string& frame)
-  : transform(Utils::XYZRPYtoIsometry(xyzrpy))
-  , time(t)
-  , frameid(frame)
+Transform::Transform(const Eigen::Vector6d& xyzrpy)
+  : Isometry(Utils::XYZRPYtoIsometry(xyzrpy))
 {}
 
 //------------------------------------------------------------------------------
-Transform::Transform(const Eigen::Vector3d& trans, const Eigen::Vector3d& rpy,
-                     double t, const std::string& frame)
-  : transform(Utils::XYZRPYtoIsometry(trans(0), trans(1), trans(2), rpy(0), rpy(1), rpy(2)))
-  , time(t)
-  , frameid(frame)
+Transform::Transform(const Eigen::Vector3d& trans, const Eigen::Vector3d& rpy)
+  : Isometry(Utils::XYZRPYtoIsometry(trans(0), trans(1), trans(2), rpy(0), rpy(1), rpy(2)))
 {}
 
 //------------------------------------------------------------------------------
-Transform::Transform(const Eigen::Isometry3d& transform,
-                     double t, const std::string& frame)
-  : transform(transform)
-  , time(t)
-  , frameid(frame)
+Transform::Transform(const Eigen::Translation3d& trans, const Eigen::Quaterniond& rot)
+  : Isometry(trans * rot.normalized())
 {}
 
 //------------------------------------------------------------------------------
-Transform::Transform(const Eigen::Translation3d& trans, const Eigen::Quaterniond& rot,
-                     double t, const std::string& frame)
-  : transform(trans * rot.normalized())
-  , time(t)
-  , frameid(frame)
+Transform::Transform(const Eigen::Isometry3d& isometry)
+  : Isometry(isometry)
 {}
 
 } // end of LidarSlam namespace
