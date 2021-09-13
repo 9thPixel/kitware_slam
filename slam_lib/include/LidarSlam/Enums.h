@@ -62,12 +62,20 @@ enum UndistortionMode
   FINAL = 2,
 
   //! Undistortion is iteratively refined using optimized ego-motion:
-  //!  - Begin and end scan poses are linearly interpolated using ego-motion.
+  //!  - Begin and end scan poses are linearly interpolated using ego-motion prior.
   //!  - Scan is linearly undistorted between begin and end scan poses.
   //!  - Scan pose is optimized using rigid registration of undistorted scan and map.
   //!  - Iterate the three previous steps with updated ego-motion and poses.
   //!  - Undistorted scan is added to map.
-  REFINED = 3
+  REFINED = 3,
+
+  //! Undistortion is iteratively refined using optimized ego-motion:
+  //!  - Scan pose is optimized using rigid registration of raw scans onto undistorted maps.
+  //!  - Scan is linearly undistorted between begin and end scan poses.
+  //!  - Scan pose is optimized using undistorted scans and maps.
+  //!  - Iterate the two previous steps with updated ego-motion and poses.
+  //!  - Undistorted scan is added to map.
+  REFINED_WITHOUT_PRIOR = 4
 };
 
 //------------------------------------------------------------------------------

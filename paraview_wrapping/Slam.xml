@@ -397,6 +397,7 @@
           <Entry value="1" text="Init"/>
           <Entry value="2" text="Final"/>
           <Entry value="3" text="Refined"/>
+          <Entry value="4" text="Refined without prior"/>
         </EnumerationDomain>
         <Documentation>
           Undistortion mode, to correct rolling shutter distortion during frame acquisition.
@@ -409,7 +410,9 @@
 
           FINAL: undistortion is performed only once before updating the maps using the optimized ego-motion.
 
-          REFINED: undistortion is iteratively refined using optimized ego-motion.
+          REFINED: undistortion is performed initially using prior ego-motion and iteratively refined using optimized ego-motion.
+
+          REFINED_WITHOUT_PRIOR: undistortion is iteratively refined using optimized ego-motion.
         </Documentation>
       </IntVectorProperty>
 

@@ -969,14 +969,20 @@ void Slam::Localization()
 
   // Init and run undistortion if required
   if (this->Undistortion == UndistortionMode::INIT ||
-      this->Undistortion == UndistortionMode::REFINED)
+      this->Undistortion == UndistortionMode::REFINED ||
+      this->Undistortion == UndistortionMode::REFINED_WITHOUT_PRIOR)
   {
-    IF_VERBOSE(3, Utils::Timer::Init("Localization : initial undistortion"));
     // Init the within frame motion interpolator time bounds
     this->InitUndistortion();
     // Undistort keypoints clouds
-    this->RefineUndistortion();
-    IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Localization : initial undistortion"));
+    if (this->Undistortion == UndistortionMode::INIT ||
+        this->Undistortion == UndistortionMode::REFINED)
+    {
+      IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Localization : initial undistortion"));
+      this->RefineUndistortion();
+      IF_VERBOSE(3, Utils::Timer::Init("Localization : initial undistortion"));
+    }
+
   }
 
   // Get keypoints from maps and build kd-trees for fast nearest neighbors search
@@ -1118,7 +1124,8 @@ void Slam::Localization()
     this->Trelative = this->PreviousTworld.inverse() * this->Tworld;
 
     // Optionally refine undistortion
-    if (this->Undistortion == UndistortionMode::REFINED)
+    if (this->Undistortion == UndistortionMode::REFINED ||
+        this->Undistortion == UndistortionMode::REFINED_WITHOUT_PRIOR)
       this->RefineUndistortion();
 
     IF_VERBOSE(3, Utils::Timer::StopAndDisplay("  Localization : LM optim"));

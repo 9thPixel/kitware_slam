@@ -132,7 +132,13 @@ slam:
   #     - Scan pose is optimized using rigid registration of undistorted scan and map.
   #     - Iterate the three previous steps with updated ego-motion and poses.
   #     - Undistorted scan is added to map.
-  undistortion: 3
+  #  4) REFINED_WITHOUT_PRIOR: undistortion is iteratively refined using optimized ego-motion:
+  #     - Scan pose is optimized using rigid registration of raw scans onto undistorted maps.
+  #     - Scan is linearly undistorted between begin and end scan poses.
+  #     - Scan pose is optimized using undistorted scans and maps.
+  #     - Iterate the two previous steps with updated ego-motion and poses.
+  #     - Undistorted scan is added to map.
+  undistortion: 4
 
   # Verbosity level :
   #  0) print errors, warnings or one time info
