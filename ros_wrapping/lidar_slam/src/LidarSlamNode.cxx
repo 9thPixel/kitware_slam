@@ -618,8 +618,9 @@ void LidarSlamNode::SetSlamParameters()
   if (this->PrivNh.getParam("slam/undistortion", undistortionMode))
   {
     LidarSlam::UndistortionMode undistortion = static_cast<LidarSlam::UndistortionMode>(undistortionMode);
-    if (undistortion != LidarSlam::UndistortionMode::NONE &&
-        undistortion != LidarSlam::UndistortionMode::ONCE &&
+    if (undistortion != LidarSlam::UndistortionMode::NONE  &&
+        undistortion != LidarSlam::UndistortionMode::INIT  &&
+        undistortion != LidarSlam::UndistortionMode::FINAL &&
         undistortion != LidarSlam::UndistortionMode::REFINED)
     {
       ROS_ERROR_STREAM("Invalid undistortion mode (" << undistortion << "). Setting it to 'REFINED'.");

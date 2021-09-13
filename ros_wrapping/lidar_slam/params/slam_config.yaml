@@ -116,18 +116,23 @@ slam:
   #  0) NONE: no undistortion is performed :
   #     - End scan pose is optimized using rigid registration of raw scan and map.
   #     - Raw input scan is added to map.
-  #  1) ONCE: undistortion is performed only one using estimated ego-motion:
+  #  1) INIT: undistortion is performed only once at initialization using estimated ego-motion:
   #     - Begin and end scan poses are linearly interpolated using estimated ego-motion.
   #     - Scan is linearly undistorted between begin and end scan poses.
   #     - Scan pose is iteratively optimized using rigid registration of undistorted scan and map.
   #     - Undistorted scan is added to map.
-  #  2) REFINED: undistortion is iteratively refined using optimized ego-motion:
+  #  2) FINAL: undistortion is performed only once before updating the maps:
+  #     - Scan pose is optimized using distorted scans.
+  #     - Begin and end scan poses are linearly interpolated using the computed pose and the previous one.
+  #     - Scan is linearly undistorted between begin and end scan poses.
+  #     - Undistorted scan is added to map.
+  #  3) REFINED: undistortion is iteratively refined using optimized ego-motion:
   #     - Begin and end scan poses are linearly interpolated using ego-motion.
   #     - Scan is linearly undistorted between begin and end scan poses.
   #     - Scan pose is optimized using rigid registration of undistorted scan and map.
   #     - Iterate the three previous steps with updated ego-motion and poses.
   #     - Undistorted scan is added to map.
-  undistortion: 2
+  undistortion: 3
 
   # Verbosity level :
   #  0) print errors, warnings or one time info

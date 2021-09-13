@@ -391,11 +391,12 @@
       <IntVectorProperty name="Undistortion mode"
                          command="SetUndistortion"
                          number_of_elements="1"
-                         default_values="2">
+                         default_values="3">
         <EnumerationDomain name="enum">
           <Entry value="0" text="Disabled"/>
-          <Entry value="1" text="Once"/>
-          <Entry value="2" text="Refined"/>
+          <Entry value="1" text="Init"/>
+          <Entry value="2" text="Final"/>
+          <Entry value="3" text="Refined"/>
         </EnumerationDomain>
         <Documentation>
           Undistortion mode, to correct rolling shutter distortion during frame acquisition.
@@ -404,7 +405,9 @@
 
           DISABLED: no undistortion is performed.
 
-          ONCE: undistortion is performed only once using estimated ego-motion.
+          INIT: undistortion is performed only once using estimated prior ego-motion.
+
+          FINAL: undistortion is performed only once before updating the maps using the optimized ego-motion.
 
           REFINED: undistortion is iteratively refined using optimized ego-motion.
         </Documentation>

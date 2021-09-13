@@ -654,7 +654,7 @@ Slam::PointCloud::Ptr Slam::GetRegisteredFrame()
   // If the input points have not been aggregated to WORLD coordinates yet,
   // transform and aggregate them
   if (this->RegisteredFrame->header.stamp != this->CurrentFrames[0]->header.stamp)
-    this->RegisteredFrame = this->AggregateFrames(this->CurrentFrames, true);
+    this->RegisteredFrame = this->AggregateFrames(this->CurrentFrames, true, this->Undistortion);
   return this->RegisteredFrame;
 }
 
@@ -772,7 +772,7 @@ void Slam::ExtractKeypoints()
   for (auto k : KeypointTypes)
   {
     if (this->UseKeypoints[k])
-      this->CurrentRawKeypoints[k] = this->AggregateFrames(keypoints[k], false);
+      this->CurrentRawKeypoints[k] = this->AggregateFrames(keypoints[k], false, false);
     else
     {
       this->CurrentRawKeypoints[k].reset(new PointCloud);
@@ -968,7 +968,8 @@ void Slam::Localization()
   this->CurrentUndistortedKeypoints = this->CurrentRawKeypoints;
 
   // Init and run undistortion if required
-  if (this->Undistortion)
+  if (this->Undistortion == UndistortionMode::INIT ||
+      this->Undistortion == UndistortionMode::REFINED)
   {
     IF_VERBOSE(3, Utils::Timer::Init("Localization : initial undistortion"));
     // Init the within frame motion interpolator time bounds
@@ -1163,6 +1164,16 @@ void Slam::UpdateMapsUsingTworld()
                                                  << transSinceLastKf << " m, "
                                                  << Utils::Rad2Deg(rotSinceLastKf) << " °");
 
+  // Init and run undistortion if required
+  if (this->Undistortion == UndistortionMode::FINAL)
+  {
+    IF_VERBOSE(3, Utils::Timer::Init("Localization : final undistortion"));
+    // Init the within frame motion interpolator time bounds
+    this->InitUndistortion();
+    // Undistort keypoints clouds
+    this->RefineUndistortion();
+    IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Localization : final undistortion"));
+  }
   // Check if current frame is a new keyframe
   // If we don't have enough keyframes yet, the threshold is linearly lowered
   constexpr double MIN_KF_NB = 10.;
@@ -1486,7 +1497,7 @@ Slam::PointCloud::Ptr Slam::TransformPointCloud(PointCloud::ConstPtr cloud,
 }
 
 //-----------------------------------------------------------------------------
-Slam::PointCloud::Ptr Slam::AggregateFrames(const std::vector<PointCloud::Ptr>& frames, bool worldCoordinates) const
+Slam::PointCloud::Ptr Slam::AggregateFrames(const std::vector<PointCloud::Ptr>& frames, bool worldCoordinates, bool undistort) const
 {
   PointCloud::Ptr aggregatedFrames(new PointCloud);
   aggregatedFrames->header = Utils::BuildPclHeader(this->CurrentFrames[0]->header.stamp,
@@ -1511,7 +1522,7 @@ Slam::PointCloud::Ptr Slam::AggregateFrames(const std::vector<PointCloud::Ptr>& 
     Eigen::Isometry3d baseToLidar = this->GetBaseToLidarOffset(frame->front().device_id);
 
     // Rigid transform from LIDAR to BASE then undistortion from BASE to WORLD
-    if (worldCoordinates && this->Undistortion)
+    if (worldCoordinates && undistort)
     {
       auto transformInterpolator = this->WithinFrameMotion;
       transformInterpolator.SetTransforms(this->Tworld * this->WithinFrameMotion.GetH0() * baseToLidar,

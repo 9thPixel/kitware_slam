@@ -47,12 +47,19 @@ enum UndistortionMode
   //!  - Raw input scan is added to map.
   NONE = 0,
 
-  //! Undistortion is performed only once using estimated ego-motion:
+  //! Undistortion is performed only once at initialization using estimated ego-motion:
   //!  - Begin and end scan poses are linearly interpolated using estimated ego-motion.
   //!  - Scan is linearly undistorted between begin and end scan poses.
   //!  - Scan pose is iteratively optimized using rigid registration of undistorted scan and map.
   //!  - Undistorted scan is added to map.
-  ONCE = 1,
+  INIT = 1,
+
+  //! Undistortion is performed only once before updating the maps:
+  //!  - Scan pose is optimized using distorted scans.
+  //!  - Begin and end scan poses are linearly interpolated using the computed pose and the previous one.
+  //!  - Scan is linearly undistorted between begin and end scan poses.
+  //!  - Undistorted scan is added to map.
+  FINAL = 2,
 
   //! Undistortion is iteratively refined using optimized ego-motion:
   //!  - Begin and end scan poses are linearly interpolated using ego-motion.
@@ -60,7 +67,7 @@ enum UndistortionMode
   //!  - Scan pose is optimized using rigid registration of undistorted scan and map.
   //!  - Iterate the three previous steps with updated ego-motion and poses.
   //!  - Undistorted scan is added to map.
-  REFINED = 2
+  REFINED = 3
 };
 
 //------------------------------------------------------------------------------

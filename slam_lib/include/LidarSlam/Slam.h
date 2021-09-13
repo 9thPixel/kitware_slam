@@ -766,7 +766,7 @@ private:
   // The output aggregated points timestamps are corrected to be relative to the 1st frame timestamp.
   // NOTE: If transforming to WORLD coordinates, be sure that Tworld/WithinFrameMotion have been updated
   //       (updated during the Localization step).
-  PointCloud::Ptr AggregateFrames(const std::vector<PointCloud::Ptr>& frames, bool worldCoordinates) const;
+  PointCloud::Ptr AggregateFrames(const std::vector<PointCloud::Ptr>& frames, bool worldCoordinates, bool undistort) const;
 };
 
 } // end of LidarSlam namespace
