@@ -618,7 +618,7 @@
       <DoubleVectorProperty name="Edge max model error EM"
                             command="SetEgoMotionEdgeMaxModelError"
                             number_of_elements="1"
-                            default_values="0.2"
+                            default_values="0.1"
                             panel_visibility="advanced">
         <Documentation>
           Max RMSE (in meters) allowed between neighborhood and its fitted line model to
@@ -675,7 +675,7 @@
       <DoubleVectorProperty name="Plane max model error EM"
                             command="SetEgoMotionPlaneMaxModelError"
                             number_of_elements="1"
-                            default_values="0.2"
+                            default_values="0.1"
                             panel_visibility="advanced">
         <Documentation>
           Max RMSE (in meters) allowed between neighborhood and its fitted plane model to
@@ -849,7 +849,7 @@
       <DoubleVectorProperty name="Edge max model error"
                             command="SetLocalizationEdgeMaxModelError"
                             number_of_elements="1"
-                            default_values="0.2"
+                            default_values="0.1"
                             panel_visibility="advanced">
         <Documentation>
           Max RMSE (in meters) allowed between neighborhood and its fitted line model to
@@ -906,7 +906,7 @@
       <DoubleVectorProperty name="Plane max model error"
                             command="SetLocalizationPlaneMaxModelError"
                             number_of_elements="1"
-                            default_values="0.2"
+                            default_values="0.1"
                             panel_visibility="advanced">
         <Documentation>
           Max RMSE (in meters) allowed between neighborhood and its fitted plane model to

@@ -115,7 +115,7 @@ LocalOptimizer::RegistrationError LocalOptimizer::EstimateRegistrationError()
 
   // Covariance computation options
   ceres::Covariance::Options covOptions;
-  covOptions.apply_loss_function = true;
+  covOptions.apply_loss_function = false;
   covOptions.algorithm_type = ceres::CovarianceAlgorithmType::DENSE_SVD;
   covOptions.null_space_rank = -1;
   covOptions.num_threads = this->NbThreads;

@@ -59,16 +59,19 @@ public:
     unsigned int EdgeNbNeighbors = 10;   ///< [>=2] Initial number of edge neighbors to extract, that will be filtered out to keep best candidates
     unsigned int EdgeMinNbNeighbors = 4; ///< [>=2] Min number of resulting filtered edge neighbors to approximate the corresponding line model
     double EdgePcaFactor = 5.0;          ///< To check the line neighborhood shape, the PCA eigenvalues must respect: factor * V1 <= V2
-    double EdgeMaxModelError = 0.2;      ///< [m] Max RMSE allowed between neighborhood and its fitted line model
+    double EdgeMinModelError = 0.01;     ///< [m] Min RMSE used between target neighborhood and its fitted line model (to limit too high weights)
+    double EdgeMaxModelError = 0.1;      ///< [m] Max RMSE allowed between target neighborhood and its fitted line model (to reject bad matches)
 
     // Plane keypoints matching: point-to-plane distance
     unsigned int PlaneNbNeighbors = 5;   ///< [>=3] Number of plane neighbors to extract to approximate the corresponding plane model
     double PlanePcaFactor1 = 35.0;       ///< To check the plane neighborhood shape, the PCA eigenvalues must respect:
     double PlanePcaFactor2 = 8.0;        ///<     factor1 * V0 <= V1 and V2 <= factor2 * V1
-    double PlaneMaxModelError = 0.2;     ///< [m] Max RMSE allowed between neighborhood and its fitted plane model
+    double PlaneMinModelError = 0.01;    ///< [m] Min RMSE used between target neighborhood and its fitted plane model (to limit too high weights)
+    double PlaneMaxModelError = 0.1;     ///< [m] Max RMSE allowed between target neighborhood and its fitted plane model (to reject bad matches)
 
     // Blob keypoints matching: point-to-ellipsoid distance
     unsigned int BlobNbNeighbors = 10;   ///< [>=4] Number of blob neighbors to extract to approximate the corresponding ellipsoid model
+    double BlobMinModelError = 0.01;     ///< [m] Min RMSE used between target neighborhood and its fitted ellipsoid model (to limit too high weights)
 
     // [m] Maximum distance beyond which the residual errors are
     // saturated to robustify the optimization against outlier constraints.
@@ -88,7 +91,6 @@ public:
       NOT_ENOUGH_NEIGHBORS,       ///< Not enough neighbors found to match keypoint
       NEIGHBORS_TOO_FAR,          ///< Neighbors are too far to match keypoint
       BAD_PCA_STRUCTURE,          ///< PCA eigenvalues analysis discards neighborhood fit to model
-      INVALID_NUMERICAL,          ///< Optimization parameter computation has numerical invalidity
       MSE_TOO_LARGE,              ///< Mean squared error to model is too important to accept fitted model
       UNKOWN,                     ///< Unkown status (matching probably not performed yet)
       nStatus
@@ -162,10 +164,10 @@ private:
   //    * A = (n*n.t) for a plane with n being its normal.
   //    * A = C^{-1/2} is the squared information matrix, aka stiffness matrix, where
   //      C is the covariance matrix encoding the shape of the neighborhood for a blob.
-  // - weight attenuates the distance function for outliers
-  CeresTools::Residual BuildResidual(const Eigen::Matrix3d& A, const Eigen::Vector3d& P, const Eigen::Vector3d& X, double weight = 1.);
+  // - saturationThreshold is the Tukey loss scale parameter to reject outliers
+  CeresTools::Residual BuildResidual(const Eigen::Matrix3d& A, const Eigen::Vector3d& P, const Eigen::Vector3d& X, double saturationThreshold);
 
-  // Match the current keypoint with its neighborhood in the map / previous
+  // Match a source keypoint with its target neighborhood in the previous map
   MatchingResults::MatchInfo BuildLineMatch(const KDTree& previousEdges, const Point& p);
   MatchingResults::MatchInfo BuildPlaneMatch(const KDTree& previousPlanes, const Point& p);
   MatchingResults::MatchInfo BuildBlobMatch(const KDTree& previousBlobs, const Point& p);

@@ -75,7 +75,7 @@ KeypointsMatcher::MatchingResults KeypointsMatcher::BuildMatchResiduals(const Po
 
 
 //----------------------------------------------------------------------------
-CeresTools::Residual KeypointsMatcher::BuildResidual(const Eigen::Matrix3d& A, const Eigen::Vector3d& P, const Eigen::Vector3d& X, double weight)
+CeresTools::Residual KeypointsMatcher::BuildResidual(const Eigen::Matrix3d& A, const Eigen::Vector3d& P, const Eigen::Vector3d& X, double saturationThreshold)
 {
   CeresTools::Residual res;
   // Create the point-to-line/plane/blob cost function
@@ -87,17 +87,14 @@ CeresTools::Residual KeypointsMatcher::BuildResidual(const Eigen::Matrix3d& A, c
   //   rho(residual^2) = a^2 / 3                                      for residual^2 >  a^2.
   // a is the scaling parameter of the function
   // See http://ceres-solver.org/nnls_modeling.html#theory for details
-  auto* robustifier = new ceres::TukeyLoss(this->Params.SaturationDistance);
-
-  // Weight the contribution of the given match by its reliability
   // WARNING : in CERES version < 2.0.0, the Tukey loss is badly implemented, so we have to correct the weight by a factor 2
   // See https://github.com/ceres-solver/ceres-solver/commit/6da364713f5b78ddf15b0e0ad92c76362c7c7683 for details
   // This is important for covariance scaling 
   #if (CERES_VERSION_MAJOR < 2)
-    res.Robustifier.reset(new ceres::ScaledLoss(robustifier, 2.0 * weight, ceres::TAKE_OWNERSHIP));
-  // If Ceres version >= 2.0.0, the Tukey loss is corrected.
+    auto* robustifier = new ceres::TukeyLoss(saturationThreshold);
+    res.Robustifier.reset(new ceres::ScaledLoss(robustifier, 2.0, ceres::TAKE_OWNERSHIP));
   #else
-    res.Robustifier.reset(new ceres::ScaledLoss(robustifier, weight, ceres::TAKE_OWNERSHIP));
+    res.Robustifier.reset(new ceres::TukeyLoss(saturationThreshold));
   #endif
   return res;
 }
@@ -125,7 +122,7 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildLineMatch(co
   if (this->Params.SingleEdgePerRing)
     this->GetPerRingLineNeighbors(previousEdges, worldPoint.data(), this->Params.EdgeNbNeighbors, knnIndices, knnSqDist);
   else
-    this->GetRansacLineNeighbors(previousEdges, worldPoint.data(), this->Params.EdgeNbNeighbors, this->Params.EdgeMaxModelError, knnIndices, knnSqDist);
+    this->GetRansacLineNeighbors(previousEdges, worldPoint.data(), this->Params.EdgeNbNeighbors, 2.0 * this->Params.EdgeMaxModelError, knnIndices, knnSqDist);
 
   // If not enough neighbors, abort
   unsigned int neighborhoodSize = knnIndices.size();
@@ -143,10 +140,9 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildLineMatch(co
   // Compute PCA to determine best line approximation of the neighborhood.
   // Thanks to the PCA we will check the shape of the neighborhood and keep it
   // if it is well distributed along a line.
-  Eigen::Vector3d mean;
-  Eigen::Vector3d eigVals;
+  Eigen::Vector3d eigVals, centroid;
   Eigen::Matrix3d eigVecs;
-  Utils::ComputeMeanAndPCA(*previousEdges.GetInputCloud(), knnIndices, mean, eigVecs, eigVals);
+  Utils::ComputeMeanAndPCA(*previousEdges.GetInputCloud(), knnIndices, centroid, eigVecs, eigVals);
 
   // If the first eigen value is significantly higher than the second one,
   // it means that the sourrounding points are distributed on an edge line.
@@ -157,39 +153,34 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildLineMatch(co
   // =============================================
   // Compute point-to-line optimization parameters
 
-  // n is the director vector of the line
-  const Eigen::Vector3d& n = eigVecs.col(2);
+  // Compute the inverse squared out covariance matrix of the target line model:
+  //    A = Covariance^(-1/2)
+  // It is used to compute the Mahalanobis distance, the 3D residual vector being:
+  //    res = A * (pt - centroid)
 
-  // Compute the inverse squared out covariance matrix
-  // of the target line model -> A = Covariance^(-1/2)
-  // It is used to compute the Mahalanobis distance
-  // The residual vector is A*(pt - mean)
-  // NOTE : A^2 = (Id - n*n.t)^2 = Id - n*n.t
-  Eigen::Matrix3d A = Eigen::Matrix3d::Identity() - n * n.transpose();
+  // Clamp the eigen values to keep minimum uncertainty of the model
+  // and avoid very high weights due to low points number statistics
+  double satEigVal0 = std::max(std::pow(this->Params.EdgeMinModelError, 2), eigVals(0));
+  double satEigVal1 = std::max(std::pow(this->Params.EdgeMinModelError, 2), eigVals(1));
 
-  // =========================
-  // Check parameters validity
-
-  // It would be the case if P1 = P2, for instance if the sensor has some dual
-  // returns that hit the same point.
-  if (!std::isfinite(A(0, 0)))
-    return { MatchingResults::MatchStatus::INVALID_NUMERICAL, 0., CeresTools::Residual() };
-
-  // If the MSE is too high, the target model is not accurate enough, discard the match in optimization
-  double mse = eigVals(0) + eigVals(1);
-  if (mse >= std::pow(this->Params.EdgeMaxModelError, 2))
+  // If the MSE is too high, the target model is not accurate enough, discard the match in optimization.
+  // This step is useful only if SingleEdgePerRing parameter is set to true.
+  // If SingleEdgePerRing is false, RANSAC rejects these models, they may appear with NOT_ENOUGH_NEIGHBORS flag.
+  double rmse = std::sqrt(satEigVal0 + satEigVal1);
+  if (rmse >= this->Params.EdgeMaxModelError)
     return { MatchingResults::MatchStatus::MSE_TOO_LARGE, 0., CeresTools::Residual() };
+
+  // Derive A from the inverse of the customized standard deviations along each axis of the line model
+  Eigen::Vector3d eigValsRsqrt(1. / std::sqrt(satEigVal0), 1. / std::sqrt(satEigVal1), 0.);
+  Eigen::Matrix3d A = eigVecs * eigValsRsqrt.asDiagonal() * eigVecs.transpose();
 
   // ===========================================
   // Add valid parameters for later optimization
 
-  // Quality score of the point-to-line match
-  // If the points to model error is too low, assign maximum weight.
-  // Otherwise, assign a weight relative to the points to model error and a user parameter maximum value
-  double fitQualityCoeff = (mse <= 1e-6) ? 1. : 1. - std::sqrt(mse) / this->Params.EdgeMaxModelError;
-
-  CeresTools::Residual res = this->BuildResidual(A, mean, basePoint, fitQualityCoeff);
-  return { MatchingResults::MatchStatus::SUCCESS, fitQualityCoeff, res };
+  // Threshold to scale the SaturationDistance parameter relatively to the current residual
+  CeresTools::Residual res = this->BuildResidual(A, centroid, basePoint, this->Params.SaturationDistance / rmse);
+  // The second element of the result reflects the model quality [1/MaxRMSE = bad model; 1/MinRMSE = good model]
+  return { MatchingResults::MatchStatus::SUCCESS, 1. / rmse, res };
 }
 
 //-----------------------------------------------------------------------------
@@ -229,10 +220,9 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildPlaneMatch(c
   // Compute PCA to determine best plane approximation of the neighborhood.
   // Thanks to the PCA we will check the shape of the neighborhood and keep it
   // if it is well distributed along a plane.
-  Eigen::Vector3d mean;
-  Eigen::Vector3d eigVals;
+  Eigen::Vector3d eigVals, centroid;
   Eigen::Matrix3d eigVecs;
-  Utils::ComputeMeanAndPCA(*previousPlanes.GetInputCloud(), knnIndices, mean, eigVecs, eigVals);
+  Utils::ComputeMeanAndPCA(*previousPlanes.GetInputCloud(), knnIndices, centroid, eigVecs, eigVals);
 
   // If the second eigen value is close to the highest one and bigger than the
   // smallest one, it means that the points are distributed along a plane.
@@ -244,39 +234,30 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildPlaneMatch(c
   // ==============================================
   // Compute point-to-plane optimization parameters
 
-  // n is the normal vector of the plane
-  const Eigen::Vector3d& n = eigVecs.col(0);
+  // Compute the inverse squared out covariance matrix of the target plane model:
+  //    A = Covariance^(-1/2)
+  // It is used to compute the Mahalanobis distance, the 3D residual vector being:
+  //    res = A * (pt - centroid)
 
-  // Compute the inverse squared out covariance matrix
-  // of the target plane model -> A = Covariance^(-1/2)
-  // It is used to compute the Mahalanobis distance
-  // The residual vector is A*(pt - mean)
-  // NOTE : A^2 = (n*n.t)^2 = n*n.t
-  Eigen::Matrix3d A = n * n.transpose();
-
-  // =========================
-  // Check parameters validity
-
-  // It would be the case if P1 = P2, P1 = P3 or P3 = P2, for instance if the
-  // sensor has some dual returns that hit the same point.
-  if (!std::isfinite(A(0, 0)))
-    return { MatchingResults::MatchStatus::INVALID_NUMERICAL, 0., CeresTools::Residual() };
+  // Clamp the eigen values to keep minimum uncertainty of the model
+  // and avoid very high weights due to low points number statistics
+  double satEigVal0 = std::max(std::pow(this->Params.PlaneMinModelError, 2), eigVals(0));
 
   // If the MSE is too high, the target model is not accurate enough, discard the match in optimization
-  double mse = eigVals(0);
-  if (mse >= std::pow(this->Params.PlaneMaxModelError, 2))
+  double rmse = std::sqrt(satEigVal0);
+  if (rmse >= this->Params.PlaneMaxModelError)
     return { MatchingResults::MatchStatus::MSE_TOO_LARGE, 0., CeresTools::Residual() };
+
+  // Derive A from the inverse of the customized standard deviations along each axis of the plane model
+  Eigen::Vector3d eigValsRsqrt(1. / rmse, 0., 0.);
+  Eigen::Matrix3d A = eigVecs * eigValsRsqrt.asDiagonal() * eigVecs.transpose();
 
   // ===========================================
   // Add valid parameters for later optimization
 
-  // Quality score of the point-to-plane match
-  // If the points to model error is too low, assign maximum weight.
-  // Otherwise, assign a weight relative to the points to model error and a user parameter maximum value
-  double fitQualityCoeff = (mse <= 1e-6) ? 1. : 1. - std::sqrt(mse) / this->Params.PlaneMaxModelError;
-
-  CeresTools::Residual res = this->BuildResidual(A, mean, basePoint, fitQualityCoeff);
-  return { MatchingResults::MatchStatus::SUCCESS, fitQualityCoeff, res };
+  CeresTools::Residual res = this->BuildResidual(A, centroid, basePoint, this->Params.SaturationDistance / rmse);
+  // The second element of the result reflects the model quality [1/MaxRMSE = bad model; 1/MinRMSE = good model]
+  return { MatchingResults::MatchStatus::SUCCESS, 1. / rmse, res };
 }
 
 //-----------------------------------------------------------------------------
@@ -316,40 +297,27 @@ KeypointsMatcher::MatchingResults::MatchInfo KeypointsMatcher::BuildBlobMatch(co
   // Compute PCA to determine best ellipsoid approximation of the neighborhood.
   // Thanks to the PCA we will check the shape of the neighborhood and tune a
   // distance function adapted to the distribution (Mahalanobis distance).
-  Eigen::Vector3d mean;
-  Eigen::Vector3d eigVals;
+  Eigen::Vector3d eigVals, centroid;
   Eigen::Matrix3d eigVecs;
-  Utils::ComputeMeanAndPCA(*previousBlobs.GetInputCloud(), knnIndices, mean, eigVecs, eigVals);
+  Utils::ComputeMeanAndPCA(*previousBlobs.GetInputCloud(), knnIndices, centroid, eigVecs, eigVals);
 
-  // Check PCA structure
-  if (eigVals(0) <= 0. || eigVals(1) <= 0.)
-    return { MatchingResults::MatchStatus::BAD_PCA_STRUCTURE, 0., CeresTools::Residual()};
+  // Clamp the eigen values to keep minimum uncertainty of the model
+  // and avoid very high weights due to low points number statistics
+  Eigen::Vector3d satEigVals = eigVals.array().max(std::pow(this->Params.BlobMinModelError, 2));
 
-  // Compute the inverse squared out covariance matrix
-  // of the target neighborhood -> A = Covariance^(-1/2)
-  // It is used to compute the Mahalanobis distance
-  // The residual vector is A*(pt - mean)
-  Eigen::Vector3d eigValsSqrtInv = eigVals.array().rsqrt();
-  Eigen::Matrix3d A = eigVecs * eigValsSqrtInv.asDiagonal() * eigVecs.transpose();
-
-  // =========================
-  // Check parameters validity
-
-  // Check the determinant of the matrix
-  // and check parameters validity:
-  // It would be the case if P1 = P2, for instance if the sensor has some dual
-  // returns that hit the same point.
-  if (!std::isfinite(A(0, 0)) || !std::isfinite(eigValsSqrtInv.prod()))
-    return { MatchingResults::MatchStatus::INVALID_NUMERICAL, 0., CeresTools::Residual() };
+  // Compute the inverse squared out covariance matrix of the target ellipsoid model:
+  //    A = Covariance^(-1/2)
+  // It is used to compute the Mahalanobis distance, the 3D residual vector being:
+  //    res = A * (pt - centroid)
+  Eigen::Vector3d eigValsRsqrt = satEigVals.array().rsqrt();
+  Eigen::Matrix3d A = eigVecs * eigValsRsqrt.asDiagonal() * eigVecs.transpose();
 
   // ===========================================
   // Add valid parameters for later optimization
-
-  // Quality score of the point-to-blob match
-  // The aim is to prevent wrong matching pulling the pointcloud in a bad direction.
-  double fitQualityCoeff = 1.0;
-  CeresTools::Residual res = this->BuildResidual(A, mean, basePoint, fitQualityCoeff);
-  return { MatchingResults::MatchStatus::SUCCESS, fitQualityCoeff, res };
+  double rmse = std::sqrt(eigVals.sum());
+  CeresTools::Residual res = this->BuildResidual(A, centroid, basePoint, this->Params.SaturationDistance / rmse);
+  // The second element of the result reflects the model quality [1/MaxRMSE = bad model; 1/MinRMSE = good model]
+  return { MatchingResults::MatchStatus::SUCCESS, 1. / rmse, res };
 }
 
 //-----------------------------------------------------------------------------
