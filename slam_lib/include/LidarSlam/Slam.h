@@ -410,14 +410,15 @@ public:
   GetMacro(MapUpdate, MappingMode)
   SetMacro(MapUpdate, MappingMode)
 
-  double GetVoxelGridDecayingThreshold();
+  double GetVoxelGridDecayingThreshold() const;
   void SetVoxelGridDecayingThreshold(double decay);
 
-  SamplingMode GetVoxelGridSamplingMode(Keypoint k);
+  SamplingMode GetVoxelGridSamplingMode(Keypoint k) const;
   void SetVoxelGridSamplingMode(Keypoint k, SamplingMode sm);
 
   // Set RollingGrid Parameters
   void ClearMaps();
+  double GetVoxelGridLeafSize(Keypoint k) const;
   void SetVoxelGridLeafSize(Keypoint k, double size);
   void SetVoxelGridSize(int size);
   void SetVoxelGridResolution(double resolution);
