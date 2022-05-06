@@ -1953,7 +1953,7 @@ void Slam::ClearMaps()
 }
 
 //-----------------------------------------------------------------------------
-double Slam::GetVoxelGridDecayingThreshold()
+double Slam::GetVoxelGridDecayingThreshold() const
 {
   return this->LocalMaps.begin()->second->GetDecayingThreshold();
 }
@@ -1966,9 +1966,9 @@ void Slam::SetVoxelGridDecayingThreshold(double decay)
 }
 
 //-----------------------------------------------------------------------------
-SamplingMode Slam::GetVoxelGridSamplingMode(Keypoint k)
+SamplingMode Slam::GetVoxelGridSamplingMode(Keypoint k) const
 {
-  return this->LocalMaps[k]->GetSampling();
+  return this->LocalMaps.at(k)->GetSampling();
 }
 
 //-----------------------------------------------------------------------------
@@ -1981,6 +1981,12 @@ void Slam::SetVoxelGridSamplingMode(Keypoint k, SamplingMode sm)
 void Slam::SetVoxelGridLeafSize(Keypoint k, double size)
 {
   this->LocalMaps[k]->SetLeafSize(size);
+}
+
+//-----------------------------------------------------------------------------
+double Slam::GetVoxelGridLeafSize(Keypoint k) const
+{
+  return this->LocalMaps.at(k)->GetLeafSize();
 }
 
 //-----------------------------------------------------------------------------
