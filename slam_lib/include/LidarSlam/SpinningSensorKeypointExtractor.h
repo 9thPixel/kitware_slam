@@ -160,7 +160,7 @@ private:
   float DistToLineThreshold = 0.20;  // [m]
 
   // Threshold upon depth gap in neighborhood to select an edge keypoint
-  float EdgeDepthGapThreshold = 0.15;  // [m]
+  float EdgeDepthGapThreshold = 0.5;  // [m]
 
   // Threshold upon saliency of a neighborhood to select an edge keypoint
   float EdgeSaliencyThreshold = 1.5;  // [m]
