@@ -22,6 +22,7 @@ default:
       echo "slam_cmake_option_Ceres_DIR=$slam_cmake_option_Ceres_DIR"
       echo "slam_cmake_option_nanoflann_DIR=$slam_cmake_option_nanoflann_DIR"
       echo "slam_cmake_option_Boost_DIR=$slam_cmake_option_Boost_DIR"
+      echo "slam_cmake_option_flann_DIR=$slam_cmake_option_flann_DIR"
       echo "slam_cmake_option_PCL_DIR=$slam_cmake_option_PCL_DIR"
       echo "slam_cmake_option_g2o_DIR=$slam_cmake_option_g2o_DIR"
       echo "slam_cmake_option_ParaView_DIR=$slam_cmake_option_ParaView_DIR"
@@ -132,6 +133,7 @@ build_superbuild:
       $slam_cmake_option_Ceres_DIR
       $slam_cmake_option_nanoflann_DIR
       $slam_cmake_option_Boost_DIR
+      $slam_cmake_option_flann_DIR
       $slam_cmake_option_PCL_DIR
       $slam_cmake_option_g2o_DIR
       $CI_PROJECT_DIR
@@ -360,6 +362,7 @@ ros_test2:
       $slam_cmake_option_Ceres_DIR
       $slam_cmake_option_nanoflann_DIR
       $slam_cmake_option_Boost_DIR
+      $slam_cmake_option_flann_DIR
       $slam_cmake_option_PCL_DIR
       $slam_cmake_option_g2o_DIR
       $slam_cmake_option_ParaView_DIR
