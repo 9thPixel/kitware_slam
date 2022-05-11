@@ -450,6 +450,7 @@ void LidarSlamTestNode::OutputTestResult()
  */
 int main(int argc, char** argv)
 {
+  ROS_INFO_STREAM("Launching test");
   ros::init(argc, argv, "lidar_slam_test");
   ros::NodeHandle n;
   ros::NodeHandle priv_nh("~");
