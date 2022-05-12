@@ -818,7 +818,7 @@ Eigen::Isometry3d Slam::GetLatencyCompensatedWorldTransform() const
 std::unordered_map<std::string, double> Slam::GetDebugInformation() const
 {
   std::unordered_map<std::string, double> map;
-  for (auto k : {EDGE, PLANE})
+  for (Keypoint k : this->UsableKeypoints)
   {
     std::string name = "EgoMotion: " + Utils::Plural(KeypointTypeNames.at(k)) + " used";
     map[name] = this->EgoMotionMatchingResults.at(k).NbMatches();
@@ -1043,7 +1043,7 @@ void Slam::ComputeEgoMotion()
     std::map<Keypoint, KDTree> kdtreePrevious;
     // Kdtrees map initialization to parallelize their
     // construction using OMP and avoid concurrency issues
-    for (auto k : {EDGE, PLANE})
+    for (auto k : this->UsableKeypoints)
       kdtreePrevious[k] = KDTree();
 
     // The iteration is not directly on Keypoint types
@@ -1060,7 +1060,7 @@ void Slam::ComputeEgoMotion()
     if (this->Verbosity >= 2)
     {
       std::cout << "Keypoints extracted from previous frame : ";
-      for (auto k : {EDGE, PLANE})
+      for (auto k : this->UsableKeypoints)
         std::cout << this->PreviousRawKeypoints[k]->size() << " " << Utils::Plural(KeypointTypeNames.at(k)) << " ";
       std::cout << std::endl;
     }
@@ -1105,13 +1105,13 @@ void Slam::ComputeEgoMotion()
       KeypointsMatcher matcher(matchingParams, this->Trelative);
 
       // Loop over keypoints to build the residuals
-      for (auto k : {EDGE, PLANE})
+      for (auto k : this->UsableKeypoints)
         this->EgoMotionMatchingResults[k] = matcher.BuildMatchResiduals(this->CurrentRawKeypoints[k], kdtreePrevious[k], k);
 
       // Count matches and skip this frame
       // if there are too few geometric keypoints matched
       this->TotalMatchedKeypoints = 0;
-      for (auto k : {EDGE, PLANE})
+      for (auto k : this->UsableKeypoints)
         this->TotalMatchedKeypoints += this->EgoMotionMatchingResults[k].NbMatches();
 
       if (this->TotalMatchedKeypoints < this->MinNbMatchedKeypoints)
@@ -1131,7 +1131,7 @@ void Slam::ComputeEgoMotion()
       optimizer.SetNbThreads(this->NbThreads);
 
       // Add LiDAR ICP matches
-      for (auto k : {EDGE, PLANE})
+      for (auto k : this->UsableKeypoints)
         optimizer.AddResiduals(this->EgoMotionMatchingResults[k].Residuals);
 
       // Run LM optimization
@@ -1155,7 +1155,7 @@ void Slam::ComputeEgoMotion()
     if (this->Verbosity >= 2)
     {
       std::cout << "Matched keypoints: " << this->TotalMatchedKeypoints << " (";
-      for (auto k : {EDGE, PLANE})
+      for (auto k : this->UsableKeypoints)
         std::cout << this->EgoMotionMatchingResults[k].NbMatches() << " " << Utils::Plural(KeypointTypeNames.at(k)) << " ";
       std::cout << ")" << std::endl;
     }
