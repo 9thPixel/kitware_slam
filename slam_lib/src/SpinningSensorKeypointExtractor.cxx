@@ -548,6 +548,12 @@ void SpinningSensorKeypointExtractor::ComputeIntensityEdges()
 }
 
 //-----------------------------------------------------------------------------
+void SpinningSensorKeypointExtractor::ComputeIntensityEdges()
+{
+  this->AddKptsUsingCriterion(Keypoint::INTENSITY_EDGE, this->IntensityGap, this->EdgeIntensityGapThreshold, false);
+}
+
+//-----------------------------------------------------------------------------
 void SpinningSensorKeypointExtractor::ComputeBlobs()
 {
   for (unsigned int scanLine = 0; scanLine < this->NbLaserRings; ++scanLine)
