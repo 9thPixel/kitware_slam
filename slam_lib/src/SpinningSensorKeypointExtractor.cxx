@@ -535,16 +535,9 @@ void SpinningSensorKeypointExtractor::ComputePlanes()
 //-----------------------------------------------------------------------------
 void SpinningSensorKeypointExtractor::ComputeEdges()
 {
-  this->AddKptsUsingCriterion(Keypoint::EDGE, this->DepthGap, std::pow(this->EdgeDepthGapThreshold, 2), false, 1);
+  this->AddKptsUsingCriterion(Keypoint::EDGE, this->DepthGap, this->EdgeDepthGapThreshold, false, 1);
   this->AddKptsUsingCriterion(Keypoint::EDGE, this->Angles, this->EdgeSinAngleThreshold, false, 2);
-  this->AddKptsUsingCriterion(Keypoint::EDGE, this->Saliency, std::pow(this->EdgeSaliencyThreshold, 2), false, 3);
-
-}
-
-//-----------------------------------------------------------------------------
-void SpinningSensorKeypointExtractor::ComputeIntensityEdges()
-{
-  this->AddKptsUsingCriterion(Keypoint::INTENSITY_EDGE, this->IntensityGap, this->EdgeIntensityGapThreshold, false);
+  this->AddKptsUsingCriterion(Keypoint::EDGE, this->Saliency, this->EdgeSaliencyThreshold, false, 3);
 }
 
 //-----------------------------------------------------------------------------
