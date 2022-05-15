@@ -364,12 +364,10 @@ void SpinningSensorKeypointExtractor::InvalidateNotUsablePoints()
 void SpinningSensorKeypointExtractor::ComputeCurvature()
 {
   const float sqDistToLineThreshold = this->DistToLineThreshold * this->DistToLineThreshold;  // [m²]
-  const float sqDepthDistCoeff = 0.25;
-  const float minDepthGapDist = 1.5;  // [m]
 
   // loop over scans lines
   #pragma omp parallel for num_threads(this->NbThreads) schedule(guided) \
-          firstprivate(sqDistToLineThreshold, sqDepthDistCoeff, minDepthGapDist)
+          firstprivate(sqDistToLineThreshold)
   for (int scanLine = 0; scanLine < static_cast<int>(this->NbLaserRings); ++scanLine)
   {
     // Useful shortcuts
@@ -462,7 +460,6 @@ void SpinningSensorKeypointExtractor::ComputeCurvature()
           const auto& leftNeighbor = scanLineCloud[leftNeighborId].getVector3fMap();
           distLeft = std::min(distLeft, rightLine.SquaredDistanceToPoint(leftNeighbor));
         }
-        distLeft *= sqDepthDistCoeff;
       }
       else if (leftFlat && !rightFlat)
       {
@@ -472,7 +469,6 @@ void SpinningSensorKeypointExtractor::ComputeCurvature()
           const auto& rightNeighbor = scanLineCloud[rightNeighborId].getVector3fMap();
           distRight = std::min(distRight, leftLine.SquaredDistanceToPoint(rightNeighbor));
         }
-        distRight *= sqDepthDistCoeff;
       }
 
       // No neighborhood is flat.
@@ -493,7 +489,7 @@ void SpinningSensorKeypointExtractor::ComputeCurvature()
         for (const auto& leftNeighborId: leftNeighbors)
         {
           // Left neighborhood depth gap computation
-          if (std::abs(scanLineCloud[leftNeighborId].getVector3fMap().squaredNorm() - sqCurrDepth) > minDepthGapDist)
+          if (std::abs(scanLineCloud[leftNeighborId].getVector3fMap().squaredNorm() - sqCurrDepth) > std::pow(this->EdgeDepthGapThreshold, 2))
           {
             hasLeftEncounteredDepthGap = true;
             farNeighbors.emplace_back(leftNeighborId);
@@ -504,7 +500,7 @@ void SpinningSensorKeypointExtractor::ComputeCurvature()
         for (const auto& rightNeighborId: rightNeighbors)
         {
           // Right neigborhood depth gap computation
-          if (std::abs(scanLineCloud[rightNeighborId].getVector3fMap().squaredNorm() - sqCurrDepth) > minDepthGapDist)
+          if (std::abs(scanLineCloud[rightNeighborId].getVector3fMap().squaredNorm() - sqCurrDepth) > std::pow(this->EdgeDepthGapThreshold, 2))
           {
             hasRightEncounteredDepthGap = true;
             farNeighbors.emplace_back(rightNeighborId);
