@@ -791,7 +791,7 @@
       <IntVectorProperty name="Edge nb of neighbors"
                          command="SetLocalizationEdgeNbNeighbors"
                          number_of_elements="1"
-                         default_values="10"
+                         default_values="9"
                          panel_visibility="advanced">
         <Documentation>
           Initial number of edge neighbors to extract, that will be filtered out
@@ -808,7 +808,7 @@
       <IntVectorProperty name="Edge nb min filtered neighbors"
                          command="SetLocalizationEdgeMinNbNeighbors"
                          number_of_elements="1"
-                         default_values="4"
+                         default_values="5"
                          panel_visibility="advanced">
         <Documentation>
           Min number of resulting filtered edge neighbors (close to best line
@@ -825,7 +825,7 @@
       <DoubleVectorProperty name="Edge max model error"
                             command="SetLocalizationEdgeMaxModelError"
                             number_of_elements="1"
-                            default_values="0.2"
+                            default_values="0.1"
                             panel_visibility="advanced">
         <Documentation>
           Max RMSE (in meters) allowed between neighborhood and its fitted line model to
@@ -839,7 +839,7 @@
       <IntVectorProperty name="Plane nb of neighbors"
                          command="SetLocalizationPlaneNbNeighbors"
                          number_of_elements="1"
-                         default_values="5"
+                         default_values="7"
                          panel_visibility="advanced">
         <Documentation>
           Number of plane neighbors to extract to approximate the corresponding
@@ -990,7 +990,7 @@
       <DoubleVectorProperty name="Keyframe distance threshold"
                             command="SetKfDistanceThreshold"
                             number_of_elements="1"
-                            default_values="0.5"
+                            default_values="0.3"
                             panel_visibility="advanced">
         <Documentation>
           Minimum distance (in meters) to travel since last keyframe to add a new one.
@@ -1128,7 +1128,7 @@
       <DoubleVectorProperty name="Edges map resolution"
                             command="SetVoxelGridLeafSizeEdges"
                             number_of_elements="1"
-                            default_values="0.3"
+                            default_values="0.2"
                             panel_visibility="advanced">
         <Documentation>
           Minimum size of a leaf (in meters) when downsampling the edges map using
@@ -1145,7 +1145,7 @@
       <DoubleVectorProperty name="Intensity edges map resolution"
                             command="SetVoxelGridLeafSizeIntensityEdges"
                             number_of_elements="1"
-                            default_values="0.1"
+                            default_values="0.2"
                             panel_visibility="advanced">
         <Documentation>
           Minimum size of a leaf (in meters) when downsampling the intensity edges map using
@@ -1162,7 +1162,7 @@
       <DoubleVectorProperty name="Planes map resolution"
                             command="SetVoxelGridLeafSizePlanes"
                             number_of_elements="1"
-                            default_values="0.6"
+                            default_values="0.4"
                             panel_visibility="advanced">
         <Documentation>
           Minimum size of a leaf (in meters) when downsampling the planes map using
@@ -1227,7 +1227,7 @@
       <IntVectorProperty name="Min number of frames per voxel"
                             command="SetVoxelGridMinFramesPerVoxel"
                             number_of_elements="1"
-                            default_values="0"
+                            default_values="2"
                             panel_visibility="advanced">
         <Documentation>
           Minimum number of frames that must have reached a map voxel
@@ -1563,7 +1563,7 @@
       <DoubleVectorProperty name="Edge min depth gap"
                             command="SetEdgeDepthGapThreshold"
                             number_of_elements="1"
-                            default_values="0.15"
+                            default_values="0.5"
                             panel_visibility="advanced">
         <Documentation>
           One strategy to consider a point as an edge keypoint is to compute
@@ -1609,7 +1609,7 @@
       <IntVectorProperty name="Maximum keypoints number"
                          command="SetMaxPoints"
                          number_of_elements="1"
-                         default_values="1000"
+                         default_values="2000"
                          panel_visibility="advanced">
         <Documentation>
           Maximum number of keypoints of each type to extract. A voxel grid is used to downsample the keypoints cloud.
@@ -1621,7 +1621,7 @@
       <DoubleVectorProperty name="Voxel grid resolution"
                          command="SetVoxelResolution"
                          number_of_elements="1"
-                         default_values="0.3"
+                         default_values="0.5"
                          panel_visibility="advanced">
         <Documentation>
           Resolution of the voxel grid used to downsample the keypoints cloud.
