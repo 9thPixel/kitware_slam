@@ -198,7 +198,7 @@ void SpinningSensorKeypointExtractor::PrepareDataForNextFrame()
     if (!this->Enabled[k])
       continue;
     this->Keypoints[k].Clear();
-    this->Keypoints[k].Init(minPt.getVector3fMap(), maxPt.getVector3fMap());
+    this->Keypoints[k].Init(minPt.getVector3fMap(), maxPt.getVector3fMap(), this->Scan->size());
   }
 }
 
