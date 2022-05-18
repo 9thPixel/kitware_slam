@@ -1,0 +1,53 @@
+<launch>
+
+  <!-- General args -->
+  <arg name="use_sim_time" default="true" doc="Use simulation time when replaying rosbags with '--clock' option."/>
+  <arg name="rviz" default="true" doc="Visualize results with RViz."/>
+  <arg name="vlp16" default="false" doc="If true, start Velodyne VLP16 transform node."/>
+  <arg name="mapping" default="true" doc="If true, run full in SLAM mode, otherwise run in localization-only mode using static maps."/>
+  <arg name="tags_topic" default="/camera_front/tag_detections" doc="topic from which to get the tag measurements"/>
+
+  <!-- LiDAR pointclouds conversions args. These are only used to generate
+       approximate point-wise timestamps if 'time' field is not usable).
+       These parameters should be set to the same values as ROS Velodyne driver's. -->
+  <arg name="rpm" default="600." doc="Velodyne sensor spinning speed."/>
+  <arg name="timestamp_first_packet" default="false" doc="If Velodyne timestamping is based on the first or last packet of each scan."/>
+
+  <!-- Sim Time, used when replaying rosbag files (with mandatory option 'clock') -->
+  <param name="/use_sim_time" value="$(arg use_sim_time)"/>
+
+  <!-- Run Rviz-->
+  <group if="$(arg rviz)">
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find lidar_slam)/params/slam.rviz"/>
+  </group>
+
+  <!-- Decode raw Velodyne packets to 3D points -->
+  <group if="$(arg vlp16)">
+    <node pkg="nodelet" type="nodelet" name="velodyne_nodelet_manager" args="manager" output="screen"/>
+    <include file="$(find velodyne_pointcloud)/launch/transform_nodelet.launch">
+      <arg name="manager"        value="velodyne_nodelet_manager" />
+      <arg name="model"          value="VLP16"/>
+      <arg name="calibration"    value="$(find velodyne_pointcloud)/params/VLP16db.yaml"/>
+      <arg name="fixed_frame"    value="" />
+      <arg name="target_frame"   value="" />
+      <arg name="max_range"      value="130.0" />
+      <arg name="min_range"      value="0.4" />
+      <arg name="organize_cloud" value="false" />
+    </include>
+  </group>
+
+  <!-- Velodyne points conversion to expected SLAM format -->
+  <node pkg="lidar_conversions" type="velodyne_conversion_node" name="velodyne_conversion" output="screen">
+    <param name="rpm" value="$(arg rpm)"/>
+    <param name="timestamp_first_packet" value="$(arg timestamp_first_packet)"/>
+  </node>
+
+  <!-- LiDAR SLAM : compute TF odom -> base -->
+  <node pkg="lidar_slam" type="lidar_slam_node" name="lidar_slam" output="screen">
+    <rosparam file="$(find lidar_slam)/params/common_slam_config.yaml" command="load"/>
+    <rosparam if="$(arg mapping)" file="$(find lidar_slam)/params/mapping_config.yaml" command="load"/>
+    <rosparam unless="$(arg mapping)" file="$(find lidar_slam)/params/localization_config.yaml" command="load"/>
+    <remap from="tag_detections" to="$(arg tags_topic)"/>
+  </node>
+
+</launch>
