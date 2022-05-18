@@ -1578,7 +1578,7 @@
       <DoubleVectorProperty name="Edge min depth gap"
                             command="SetEdgeDepthGapThreshold"
                             number_of_elements="1"
-                            default_values="0.15"
+                            default_values="1.5"
                             panel_visibility="advanced">
         <Documentation>
           One strategy to consider a point as an edge keypoint is to compute
