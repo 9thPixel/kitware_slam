@@ -323,53 +323,78 @@ void SpinningSensorKeypointExtractor::ComputeCurvature()
 
       // Fit line on the left and right neighborhoods and
       // Indicate if they are flat or not
-      const bool leftFlat = leftLine.FitPCAAndCheckConsistency(scanLineCloud, leftNeighbors);
-      const bool rightFlat = rightLine.FitPCAAndCheckConsistency(scanLineCloud, rightNeighbors);
+      bool leftFlat = leftLine.FitPCAAndCheckConsistency(scanLineCloud, leftNeighbors);
+      bool rightFlat = rightLine.FitPCAAndCheckConsistency(scanLineCloud, rightNeighbors);
 
-      // Measurement of the depth gap
-      float distLeft = 0., distRight = 0.;
+      const float beamLineAngleLeft = std::acos(std::abs(leftLine.Direction.dot(centralPoint) / (centralPoint.norm())));
+      const float beamLineAngleRight = std::acos(std::abs(rightLine.Direction.dot(centralPoint) / (centralPoint.norm())));
 
-      // If both neighborhoods are flat, we can compute the angle between them
-      // as an approximation of the sharpness of the current point
+      leftFlat = leftFlat && beamLineAngleLeft > Utils::Deg2Rad(this->MinBeamSurfaceAngle);
+      rightFlat = rightFlat && beamLineAngleRight > Utils::Deg2Rad(this->MinBeamSurfaceAngle);
+
+      const auto& rightPt = scanLineCloud[index + 1].getVector3fMap();
+      const auto& leftPt = scanLineCloud[index - 1].getVector3fMap();
+
+      const float angleRight = std::acos(std::abs(rightPt.dot(centralPoint) / (rightPt.norm() * centralPoint.norm())));
+      const float angleLeft = std::acos(std::abs(leftPt.dot(centralPoint) / (leftPt.norm() * centralPoint.norm())));
+
       if (leftFlat && rightFlat)
       {
+        // Compute depth gap
         // We check that the current point is not too far from its
         // neighborhood lines. This is because we don't want a point
         // to be considered as an angle point if it is due to gap
         distLeft =  leftLine.DistanceToPoint(centralPoint);
         distRight = rightLine.DistanceToPoint(centralPoint);
+        this->DepthGap[scanLine][index] = std::max(distLeft, distRight);
 
-        // If current point is not too far from estimated lines,
-        // save the sin of angle between these two lines
         // Compute angles
         if ((distLeft < this->DistToLineThreshold) && (distRight < this->DistToLineThreshold))
+        {
           this->Angles[scanLine][index] = (leftLine.Direction.cross(rightLine.Direction)).norm();
+          // Remove previous point from angle inspection if the angle is not maximal locally
+          if (this->Angles[scanLine][index] > this->EdgeSinAngleThreshold)
+          {
+            // Check previously computed angle to keep only the maximum angle keypoint locally
+            for (int indexLeft : leftNeighbors)
+            {
+              if (this->Angles[scanLine][indexLeft] <= this->Angles[scanLine][index])
+                this->Angles[scanLine][indexLeft] = -1;
+              else
+                this->Angles[scanLine][index] = -1;
+            }
+          }
+        }
       }
-
-      // Here one side of the neighborhood is non flat.
-      // Hence it is not worth to estimate the sharpness.
-      // Only the gap will be considered here.
-      // CHECK : looks strange to estimate depth gap without considering current point
       else if (!leftFlat && rightFlat)
       {
-        distLeft = std::numeric_limits<float>::max();
-        for (const auto& leftNeighborId: leftNeighbors)
-        {
-          const auto& leftNeighbor = scanLineCloud[leftNeighborId].getVector3fMap();
-          distLeft = std::min(distLeft, rightLine.DistanceToPoint(leftNeighbor));
-        }
+        // Compute depth gap
+        distRight = rightLine.DistanceToPoint(centralPoint);
+
+        distLeft = leftPt.dot(centralPoint - leftPt) / leftPt.norm();
+        // Check points are consecutive + not on a bended wall
+        // If the points lay on a bended wall, next points space gap should be greater
+        float prevDistLeft = (leftPt - scanLineCloud[index - 2].getVector3fMap()).norm();
+        if (angleLeft < 2 * this->AzimuthalResolution && (distLeft < prevDistLeft || distLeft < distRight))
+          distLeft = -1.f;
+
+        this->DepthGap[scanLine][index] = std::max(distLeft, distRight);
       }
       else if (leftFlat && !rightFlat)
       {
-        distRight = std::numeric_limits<float>::max();
-        for (const auto& rightNeighborId: rightNeighbors)
-        {
-          const auto& rightNeighbor = scanLineCloud[rightNeighborId].getVector3fMap();
-          distRight = std::min(distRight, leftLine.DistanceToPoint(rightNeighbor));
-        }
-      }
+        // Compute depth gap
+        distLeft = leftLine.DistanceToPoint(centralPoint);
 
-      // No neighborhood is flat.
+        distRight = centralPoint.dot(rightPt - centralPoint) / centralPoint.norm();
+        // Check points are consecutive + not on a bended wall
+        // If the points lay on a bended wall, next points depth gap should be greater
+        auto& nextRightPt = scanLineCloud[index + 2].getVector3fMap();
+        float nextDistRight = rightPt.dot(nextRightPt - rightPt) / rightPt.norm();
+        if (angleRight < 2 * this->AzimuthalResolution && (distRight < nextDistRight || distRight < distLeft))
+          distRight = -1.f;
+
+        this->DepthGap[scanLine][index] = std::max(distLeft, distRight);
+      }
       else
       {
         distRight = centralPoint.dot(rightPt - centralPoint) / centralPoint.norm();
@@ -386,10 +411,9 @@ void SpinningSensorKeypointExtractor::ComputeCurvature()
         float prevDistLeft = (leftPt - scanLineCloud[index - 2].getVector3fMap()).norm();
         if (angleLeft < 2 * this->AzimuthalResolution && (distLeft < prevDistLeft || distLeft < distRight))
           distLeft = -1.f;
-      }
 
-      // Store max depth gap
-      this->DepthGap[scanLine][index] = std::max(distLeft, distRight);
+        this->DepthGap[scanLine][index] = std::max(distLeft, distRight);
+      }
     }
   }
 }
