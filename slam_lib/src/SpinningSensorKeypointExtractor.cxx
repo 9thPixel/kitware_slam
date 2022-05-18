@@ -271,7 +271,6 @@ void SpinningSensorKeypointExtractor::ComputeCurvature()
         // Compute intensity gap
         float gap = scanLineCloud[index].intensity - scanLineCloud[index - 1].intensity;
         if (gap > this->EdgeIntensityGapThreshold &&
-            leftFlat && rightFlat &&
             !planeTooInclinatedLeft && !planeTooInclinatedRight &&
             angleRight < 2 * this->AzimuthalResolution && angleLeft < 2 * this->AzimuthalResolution &&
             diffVecRight.norm() < this->MaxDistance && diffVecLeft.norm() < this->MaxDistance)
