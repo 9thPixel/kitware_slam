@@ -207,23 +207,8 @@ void SpinningSensorKeypointExtractor::PrepareDataForNextFrame()
 //-----------------------------------------------------------------------------
 void SpinningSensorKeypointExtractor::InvalidateNotUsablePoints()
 {
-  // Max angle between Lidar Ray and hyptothetic plane normal
-  const float angleBeamNormal = Utils::Deg2Rad(90 - this->MinBeamSurfaceAngle);
-  // If the azimuthal angle was estimated and is plausible,
-  // it is used to invalidate points representing occluded areas border.
-  // Otherwise, we use a default angle (Velodyne 10Hz resolution)
-  float azimuthalResolution = this->AzimuthalResolution;
-  if (azimuthalResolution < 1e-6 || M_PI / 4 < azimuthalResolution)
-  {
-    PRINT_WARNING("Unable to estimate the azimuthal resolution angle: using 0.2°");
-    azimuthalResolution = Utils::Deg2Rad(0.2);
-  }
-  // Coeff to multiply to point depth, in order to obtain the maximal distance
-  // between two neighbors of the same Lidar ray on a plane
-  const float maxPosDiffCoeff = std::sin(azimuthalResolution) / std::cos(azimuthalResolution + angleBeamNormal);
-
   // Loop over scan lines
-  #pragma omp parallel for num_threads(this->NbThreads) schedule(guided) firstprivate(maxPosDiffCoeff)
+  #pragma omp parallel for num_threads(this->NbThreads) schedule(guided)
   for (int scanLine = 0; scanLine < static_cast<int>(this->NbLaserRings); ++scanLine)
   {
     // Useful shortcuts
@@ -250,60 +235,27 @@ void SpinningSensorKeypointExtractor::InvalidateNotUsablePoints()
     for (int index = this->NeighborWidth; index < Npts - this->NeighborWidth; ++index)
     {
       const auto& currentPoint = scanLineCloud[index].getVector3fMap();
-      const float L = currentPoint.norm();
       // Invalidate points which are too close from the sensor
-      if (L < this->MinDistanceToSensor)
+      if (currentPoint.norm() < this->MinDistanceToSensor)
       {
         this->IsPointValid[scanLine][index] = false;
         continue;
       }
 
-      // Compute maximal acceptable distance of two consecutive neighbors
-      // aquired by the same laser, considering they lay on the same plane which
-      // is not too oblique relatively to Lidar ray.
-      // Check that this expected distance is not below range measurements noise.
-      const float maxPosDiff = std::max(L * maxPosDiffCoeff, 0.02f);
-      const float sqMaxPosDiff = maxPosDiff * maxPosDiff;
-
-      // Invalidate occluded points due to depth gap or parallel beam.
-      // If the distance between two successive points is bigger than the
-      // expected length, it means that there is a depth gap. In this case, we
-      // must invalidate the farthests points which belong to the occluded area.
-      const auto& nextPoint = scanLineCloud[index + 1].getVector3fMap();
-      if ((nextPoint - currentPoint).squaredNorm() > sqMaxPosDiff)
+      // Invalidate occluded points due to depth gap.
+      // A depth gap can be detected when the vectors between close neighbors and their beam directions are collinear
+      // The threshold on the colinearity can exclude points on too bended walls
+      // The farthest points must be invalidated because they might belong to an occluded area.
+      const auto& prevPoint = scanLineCloud[index - 1].getVector3fMap();
+      Eigen::Vector3f beamDir = prevPoint / prevPoint.norm();
+      float azimuth = std::acos(std::abs(beamDir.dot(currentPoint) / currentPoint.norm()));
+      float dotProduct = beamDir.dot(currentPoint - prevPoint);
+      if (azimuth < 3 * this->AzimuthalResolution && std::abs(dotProduct) >= this->EdgeDepthGapThreshold)
       {
-        // If current point is the closest, next part is invalidated, starting from next point
-        if (L < nextPoint.norm())
-        {
-          this->IsPointValid[scanLine][index + 1] = false;
-          for (int i = index + 1; i < index + this->NeighborWidth; ++i)
-          {
-            const auto& Y  = scanLineCloud[i].getVector3fMap();
-            const auto& Yn = scanLineCloud[i + 1].getVector3fMap();
-            // If there is a new gap in the neighborhood,
-            // the remaining points of the neighborhood are kept.
-            if ((Yn - Y).squaredNorm() > sqMaxPosDiff)
-              break;
-            // Otherwise, the current neighbor point is disabled
-            this->IsPointValid[scanLine][i + 1] = false;
-          }
-        }
-        // If current point is the farthest, invalidate previous part, starting from current point
-        else
-        {
+        if (dotProduct > 0)
           this->IsPointValid[scanLine][index] = false;
-          for (int i = index - 1; i > index - this->NeighborWidth; --i)
-          {
-            const auto& Yp = scanLineCloud[i].getVector3fMap();
-            const auto&  Y = scanLineCloud[i + 1].getVector3fMap();
-            // If there is a new gap in the neighborhood,
-            // the remaining points of the neighborhood are kept.
-            if ((Y - Yp).squaredNorm() > sqMaxPosDiff)
-              break;
-            // Otherwise, the previous neighbor point is disabled
-            this->IsPointValid[scanLine][i] = false;
-          }
-        }
+        else
+          this->IsPointValid[scanLine][index - 1] = false;
       }
     }
   }
