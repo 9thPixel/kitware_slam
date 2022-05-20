@@ -21,6 +21,19 @@
     <node pkg="rviz" type="rviz" name="rviz" args="-d $(find lidar_slam)/params/slam.rviz"/>
   </group>
 
+  <!-- Decode raw Velodyne packets to 3D points -->
+  <node pkg="nodelet" type="nodelet" name="velodyne_nodelet_manager" args="manager" output="screen"/>
+  <include file="$(find velodyne_pointcloud)/launch/transform_nodelet.launch">
+    <arg name="manager"        value="velodyne_nodelet_manager" />
+    <arg name="model"          value="VLP16"/>
+    <arg name="calibration"    value="$(find velodyne_pointcloud)/params/VLP16db.yaml"/>
+    <arg name="fixed_frame"    value="" />
+    <arg name="target_frame"   value="" />
+    <arg name="max_range"      value="130.0" />
+    <arg name="min_range"      value="0.4" />
+    <arg name="organize_cloud" value="false" />
+  </include>
+
   <!-- Velodyne points conversion -->
   <node name="velodyne_conversion" pkg="lidar_conversions" type="velodyne_conversion_node" output="screen">
     <param name="rpm" value="$(arg rpm)"/>
