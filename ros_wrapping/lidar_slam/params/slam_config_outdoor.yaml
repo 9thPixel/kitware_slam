@@ -305,6 +305,8 @@ slam:
     max_points: 2000                   # Maximum number of keypoints of each type to extract
     voxel_grid_resolution: 0.6         # [m/voxel] Size of a voxel to downsample the extracted keypoints
     min_distance_to_sensor: 1.5        # [m] Minimal point to sensor distance to consider a point as valid.
+    min_azimuth: 0.                    # [°] Minimal azimuth angle to consider the point as keypoint. It is useful to handle discontinuities/permanent occultation of the sensor
+    max_azimuth: 360.                  # [°] Maximal azimuth angle to consider the point as keypoint. It is useful to handle discontinuities/permanent occultation of the sensor
     min_beam_surface_angle: 10.        # [°] Minimal angle between the point surface and the laser beam to consider a point as valid.
     neighbor_width: 4                  # [>1] Width of the neighborhood used to compute discrete differential operators.
     plane_sin_angle_threshold: 0.5     # [0-1] Sharpness threshold to select a planar keypoint (selected if sin angle is less than threshold).
@@ -327,6 +329,8 @@ slam:
     #   max_points: 2000                   # Maximum number of keypoints of each type to extract
     #   voxel_grid_resolution: 0.6         # [m/voxel] Size of a voxel to downsample the extracted keypoints
     #   min_distance_to_sensor: 1.5        # [m] Minimal point to sensor distance to consider a point as valid.
+    #   min_azimuth: -45                   # [°] Minimal azimuth angle to consider the point as keypoint. It is useful to handle discontinuities/permanent occultation of the sensor
+    #   max_azimuth: 45                    # [°] Maximal azimuth angle to consider the point as keypoint. It is useful to handle discontinuities/permanent occultation of the sensor
     #   min_beam_surface_angle: 10.        # [°] Minimal angle between the point surface and the laser beam to consider a point as valid.
     #   neighbor_width: 4                  # [>1] Width of the neighborhood used to compute discrete differential operators.
     #   plane_sin_angle_threshold: 0.5     # [0-1] Sharpness threshold to select a planar keypoint (selected if sin angle is less than threshold).
@@ -343,6 +347,8 @@ slam:
     #   max_points: 2000                   # Maximum number of keypoints of each type to extract
     #   voxel_grid_resolution: 0.6         # [m/voxel] Size of a voxel to downsample the extracted keypoints
     #   min_distance_to_sensor: 1.5        # [m] Minimal point to sensor distance to consider a point as valid.
+    #   min_azimuth: -45                   # [°] Minimal azimuth angle to consider the point as keypoint. It is useful to handle discontinuities/permanent occultation of the sensor
+    #   max_azimuth: 45                    # [°] Maximal azimuth angle to consider the point as keypoint. It is useful to handle discontinuities/permanent occultation of the sensor
     #   min_beam_surface_angle: 10.        # [°] Minimal angle between the point surface and the laser beam to consider a point as valid.
     #   neighbor_width: 4                  # [>1] Width of the neighborhood used to compute discrete differential operators.
     #   plane_sin_angle_threshold: 0.5     # [0-1] Sharpness threshold to select a planar keypoint (selected if sin angle is less than threshold).

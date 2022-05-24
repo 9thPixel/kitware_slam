@@ -237,6 +237,9 @@ void SpinningSensorKeypointExtractor::ComputeCurvature()
   const float cosMinBeamSurfaceAngle = std::cos(Utils::Deg2Rad(this->MinBeamSurfaceAngle));
   const float cosMaxAzimuth = std::cos(1.5 * this->AzimuthalResolution);
   const float cosSpaceGapAngle = std::cos(this->EdgeNbGapPoints * this->AzimuthalResolution);
+  const float azimuthMinRad = Utils::Deg2Rad(this->AzimuthMin);
+  const float azimuthMaxRad = Utils::Deg2Rad(this->AzimuthMax);
+
   // loop over scans lines
   #pragma omp parallel for num_threads(this->NbThreads) schedule(guided)
   for (int scanLine = 0; scanLine < static_cast<int>(this->NbLaserRings); ++scanLine)
@@ -256,7 +259,14 @@ void SpinningSensorKeypointExtractor::ComputeCurvature()
       const Eigen::Vector3f& centralPoint = scanLineCloud[index].getVector3fMap();
       float centralDepth = centralPoint.norm();
 
+      // Check distance to sensor
       if (centralDepth < this->MinDistanceToSensor)
+        continue;
+
+      // Check azimuth angle
+      float cosAzimuth = centralPoint.x() / (std::pow(centralPoint.x(), 2) + std::pow(centralPoint.y(), 2));
+      float azimuth = centralPoint.y() > 0? std::acos(cosAzimuth) : M_PI - std::acos(cosAzimuth);
+      if (azimuth < azimuthMinRad || (azimuth > azimuthMaxRad && azimuth - 2 * M_PI < azimuthMinRad))
         continue;
 
       // Fill left and right neighborhoods
