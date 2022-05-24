@@ -40,6 +40,8 @@ bool LineFitting::FitPCAAndCheckConsistency(const SpinningSensorKeypointExtracto
   if (LineLength < this->MinLineLength)
     return false;
 
+  float widthTheshold = std::max(this->MaxLineWidth, LineLength / this->LengthWidthRatio);
+
   float maxDist = FLT_MAX;
   Eigen::Vector3f bestDirection;
 
@@ -66,7 +68,7 @@ bool LineFitting::FitPCAAndCheckConsistency(const SpinningSensorKeypointExtracto
       for (int idx : indices)
       {
         currentMaxDist = std::max(currentMaxDist, this->DistanceToPoint(cloud[idx].getVector3fMap()));
-        if (currentMaxDist > this->MaxLineWidth)
+        if (currentMaxDist > widthTheshold)
           break;
       }
 
@@ -78,7 +80,7 @@ bool LineFitting::FitPCAAndCheckConsistency(const SpinningSensorKeypointExtracto
     }
   }
 
-  if (maxDist > this->MaxLineWidth)
+  if (maxDist > widthTheshold)
     return false;
 
   this->Direction = bestDirection;
