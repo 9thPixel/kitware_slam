@@ -1953,8 +1953,8 @@ void Slam::SetBaseToLidarOffset(const Eigen::Isometry3d& transform, uint8_t devi
 //-----------------------------------------------------------------------------
 void Slam::ClearMaps()
 {
-  for (auto k : this->UsableKeypoints)
-    this->LocalMaps[k]->Reset();
+  for (auto kmap: this->LocalMaps)
+    kmap.second->Reset();
 }
 
 //-----------------------------------------------------------------------------
