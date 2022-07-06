@@ -30,6 +30,7 @@ namespace
   // Mapping between RSLidar laser id and vertical laser id
   // TODO add laser ID mappings for RS32, RSBPEARL and RSBPEARL_MINI ?
   const std::array<uint16_t, 16> LASER_ID_MAPPING_RS16 = {0, 1, 2, 3, 4, 5, 6, 7, 15, 14, 13, 12, 11, 10, 9, 8};
+  const std::array<uint16_t, 32> LASER_ID_MAPPING_HELIOS32 = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
 }
 
 RobosenseToLidarNode::RobosenseToLidarNode(ros::NodeHandle& nh, ros::NodeHandle& priv_nh)
@@ -82,6 +83,11 @@ void RobosenseToLidarNode::Callback(const CloudRS& cloudRS)
   {
     const PointRS& rsPoint = cloudRS[i];
 
+    if (std::isnan(rsPoint.getVector3fMap().x()) ||
+        (i >= 32 && (rsPoint.getVector3fMap() - cloudRS[i-32].getVector3fMap()).norm() < 1e-6) ||
+        rsPoint.getVector3fMap().norm() < 1e-6)
+      continue;
+
     // Check that input point does not have NaNs as even invalid points are
     // returned by the RSLidar driver
     if (!Utils::IsFinite(rsPoint))
@@ -103,10 +109,25 @@ void RobosenseToLidarNode::Callback(const CloudRS& cloudRS)
     // Compute laser ID
     // Use LaserIdMapping if given, otherwise use RS16's if input has 16 rings,
     // otherwise do not correct laser_id.
-    // CHECK this operation for other sensors than RS16
-    uint16_t laser_id = i / cloudRS.width;
-    slamPoint.laser_id = useLaserIdMapping ? this->LaserIdMapping[laser_id] :
-                                             (nLasers == 16) ? LASER_ID_MAPPING_RS16[laser_id] : laser_id;
+    // CHECK this operation for other sensors than RS16 and HELIOS32 (Helios 5515)
+    // All points are supposed to be stored (nan or 0 for no laser ray return)
+    if (nLasers == 16)
+    {
+      // Points are ordered by ring
+      uint16_t laser_id = i / cloudRS.width;
+      slamPoint.laser_id = useLaserIdMapping ? this->LaserIdMapping[laser_id] : LASER_ID_MAPPING_RS16[laser_id];
+    }
+    else if (nLasers == 32)
+    {
+      // Points are ordered by timestamp
+      uint16_t laser_id = i % nLasers;
+      slamPoint.laser_id = useLaserIdMapping ? this->LaserIdMapping[laser_id] : LASER_ID_MAPPING_HELIOS32[laser_id];
+    }
+    else
+    {
+      uint16_t laser_id = i / cloudRS.width;
+      slamPoint.laser_id = useLaserIdMapping ? this->LaserIdMapping[laser_id] : laser_id;
+    }
 
     // Build approximate point-wise timestamp from point id.
     // 'frame advancement' is 0 for first point, and should match 1 for last point
