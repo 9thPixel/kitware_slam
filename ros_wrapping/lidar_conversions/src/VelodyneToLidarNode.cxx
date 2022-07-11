@@ -64,6 +64,9 @@ void VelodyneToLidarNode::Callback(const CloudV& cloudV)
 
   // Copy pointcloud metadata
   Utils::CopyPointCloudMetadata(cloudV, cloudS);
+  cloudS.header.seq = this->NbFrames;
+  ++this->NbFrames;
+  cloudS.header.stamp = uint64_t(this->NbFrames * 0.1 * 1e6);
 
   // Check wether to use custom laser ID mapping or leave it untouched
   bool useLaserIdMapping = !this->LaserIdMapping.empty();
@@ -84,8 +87,10 @@ void VelodyneToLidarNode::Callback(const CloudV& cloudV)
     slamPoint.x = velodynePoint.x;
     slamPoint.y = velodynePoint.y;
     slamPoint.z = velodynePoint.z;
-    slamPoint.intensity = velodynePoint.intensity;
-    slamPoint.laser_id = useLaserIdMapping ? this->LaserIdMapping[velodynePoint.ring] : velodynePoint.ring;
+    slamPoint.intensity = 100 - (int((velodynePoint.z + 2) * 100./6.) % 100); //velodynePoint.intensity;
+    float z_angle = (180. / M_PI) * (M_PI/2 - std::acos(slamPoint.z / slamPoint.getVector3fMap().norm()));
+    slamPoint.laser_id = std::round( (z_angle + 24.9) / 0.4 );
+    // useLaserIdMapping ? this->LaserIdMapping[velodynePoint.ring] : velodynePoint.ring;
     slamPoint.device_id = this->DeviceId;
 
     // Use time field if available

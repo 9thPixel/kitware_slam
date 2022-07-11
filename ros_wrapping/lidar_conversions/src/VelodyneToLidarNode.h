@@ -78,6 +78,8 @@ private:
   // These parameters should be set to the same values as ROS Velodyne driver's.
   double Rpm = 600;  ///< Spinning speed of sensor [rpm]
   bool TimestampFirstPacket = false;  ///< Wether timestamping is based on the first or last packet of each scan
+
+  int NbFrames = 0;
 };
 
 }  // end of namespace lidar_conversions
