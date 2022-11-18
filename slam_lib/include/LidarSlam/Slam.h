@@ -93,6 +93,10 @@
 #include "LidarSlam/PoseGraphOptimizer.h"
 #endif  // USE_G2O
 
+#ifdef USE_BASALT
+#include <basalt/spline/se3_spline.h>
+#endif //USE_BASALT
+
 #define SetMacro(name,type) void Set##name (type _arg) { name = _arg; }
 #define GetMacro(name,type) type Get##name () const { return name; }
 

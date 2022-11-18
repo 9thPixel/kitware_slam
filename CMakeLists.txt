@@ -101,6 +101,15 @@ else()
   message("Lidar SLAM : OpenMP not found")
 endif()
 
+# Find optional basalt (used to improve Ego-Motion and Undistortion)
+option(ENABLE_basalt "Use Basalt, to make Spline for better Ego-Motion model" ON)
+if(ENABLE_basalt)
+  find_package(basalt-headers QUIET)
+  if (NOT basalt-headers_FOUND)
+    message("Lidar SLAM : basalt not found")
+  endif()
+endif()
+
 #-------------------------
 #  Build and install
 #-------------------------

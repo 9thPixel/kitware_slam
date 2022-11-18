@@ -5,6 +5,13 @@ if (g2o_FOUND)
   add_definitions(-DUSE_G2O=1)
 endif()
 
+# If basalt is available, compile Spline stuff
+if (basalt-headers_FOUND)
+  set(SLAM_basalt_sources)
+  set(basalt_target basalt-headers)
+  add_definitions(-DUSE_BASALT=1)
+endif()
+
 # Generate export symbols on Windows to use this lib
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
@@ -31,6 +38,8 @@ target_link_libraries(LidarSlam
   PRIVATE
     ${Eigen3_target}
     ${OpenMP_target}
+    ${basalt_target}
+
 )
 
 target_include_directories(LidarSlam PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

@@ -8,6 +8,7 @@ option(WITH_NANOFLANN "Whether to install nanoflann" ON)
 option(WITH_PCL "Whether to install PCL" OFF)
 option(WITH_CERES "Whether to install Ceres" ON)
 option(WITH_G2O "Whether to install G2O" OFF)
+option(WITH_BASALT "Whether to install Basalt" OFF)
 
 # -----------------------------------------------------------------------------------------------
 # Read CMAKE Arguments
@@ -204,4 +205,41 @@ if (WITH_G2O)
                 ${GENERIC_PROJECTS_ARGS}
             )
 
+endif ()
+
+# -----------------------------------------------------------------------------------------------
+# INSTALL basalt-headers and his dependencies Sophus and cereal
+if (WITH_BASALT)
+    message(INFO "${LOG_PREFIX} Generating basalt dependency")
+
+    # Patch command for making Basalt packageable
+    set(basalt_patch_cmd ${CMAKE_COMMAND} -E
+        copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/patch/fixBasalt.patch <SOURCE_DIR>
+        && git checkout <SOURCE_DIR>/CMakeLists.txt
+        && rm -f <SOURCE_DIR>/cmake/basalt-headers.cmake.in
+        && git apply <SOURCE_DIR>/fixBasalt.patch
+    )
+    ExternalProject_Add(
+        Basalt_ext
+        DEPENDS Eigen3_ext
+
+        GIT_REPOSITORY https://gitlab.com/VladyslavUsenko/basalt-headers
+        GIT_TAG 86ebcf48df350d9332103971299009fc7a66d0ef
+        GIT_SUBMODULES thirdparty/Sophus thirdparty/cereal
+
+        PATCH_COMMAND ${basalt_patch_cmd}
+
+        CMAKE_ARGS
+            -DBASALT_BUILTIN_EIGEN:BOOL=OFF
+            -DBUILD_TESTING:BOOL=OFF
+            -DWITH_ERROR:BOOL=OFF
+            -DCEREAL_INSTALL:BOOL=ON
+            -DSOPHUS_INSTALL:BOOL=ON
+            -DBUILD_DOC:BOOL=OFF
+            -DBUILD_SANDBOX:BOOL=OFF
+            -DTHREAD_SAFE:BOOL=ON
+            -DSOPHUS_USE_BASIC_LOGGING:BOOL=ON
+            -DEigen3_DIR=${CMAKE_INSTALL_PREFIX}/share/eigen3/cmake
+            ${GENERIC_PROJECTS_ARGS}
+        )
 endif ()
