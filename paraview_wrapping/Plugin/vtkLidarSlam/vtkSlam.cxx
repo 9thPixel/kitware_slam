@@ -1320,6 +1320,31 @@ void vtkSlam::SetUndistortion(int mode)
 }
 
 //-----------------------------------------------------------------------------
+int vtkSlam::GetInterpoModel()
+{
+  int interpoModel = static_cast<int>(this->SlamAlgo->GetInterpoModel());
+  vtkDebugMacro(<< this->GetClassName() << "(" << this << "): returning Interpolation Model of " << interpoModel);
+  return interpoModel;
+}
+
+//-----------------------------------------------------------------------------
+void vtkSlam::SetInterpoModel(int model)
+{
+  LidarSlam::Interpolation::Model interpoModel = static_cast<LidarSlam::Interpolation::Model>(model);
+  if (interpoModel > LidarSlam::Interpolation::Model::CUBIC_SPLINE)
+  {
+    vtkErrorMacro("Invalid Interpolation Model (" << model << "), ignoring setting.");
+    return;
+  }
+  vtkDebugMacro(<< this->GetClassName() << "(" << this << "): setting Interpolation Model to " << model);
+  if (this->SlamAlgo->GetInterpoModel() != interpoModel)
+  {
+    this->SlamAlgo->SetInterpoModel(interpoModel);
+    this->ParametersModificationTime.Modified();
+  }
+}
+
+//-----------------------------------------------------------------------------
 void vtkSlam::SetBaseToLidarTranslation(double x, double y, double z)
 {
   vtkDebugMacro(<< "Setting BaseToLidarTranslation to " << x << " " << y << " " << z);

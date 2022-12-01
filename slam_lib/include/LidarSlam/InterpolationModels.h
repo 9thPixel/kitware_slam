@@ -31,7 +31,6 @@ namespace Interpolation
 enum Model
 {
   LINEAR,             // Linear interpolation between 2 transformations
-  LINEAR_SPLINE,      // Linear interpolation between N transformations
   QUADRATIC_SPLINE,   // Quadratic spline interpolation between N transformations (at least 3)
   CUBIC_SPLINE,       // Cubic spline interpolation between N transformations (at least 4)
 };
@@ -61,8 +60,8 @@ class Linear : public IModel
   public:
     Linear() = delete;
     Linear(const std::vector<LidarState> &vecState);
-    Eigen::Isometry3d operator()(double t) const;
-    void RecomputeModel(const std::vector<LidarState> &vecState);
+    Eigen::Isometry3d operator()(double t) const override;
+    void RecomputeModel(const std::vector<LidarState> &vecState) override;
 
   private:
     std::array<double, 2> Time;
@@ -82,8 +81,8 @@ class Spline : public IModel
   public:
     Spline() = delete;
     Spline(const std::vector<LidarState> &vecState, unsigned int degree);
-    Eigen::Isometry3d operator()(double t) const;
-    void RecomputeModel(const std::vector<LidarState> &vecState);
+    Eigen::Isometry3d operator()(double t) const override;
+    void RecomputeModel(const std::vector<LidarState> &vecState) override;
     void RecomputeModel(const std::vector<LidarState> &vecState, unsigned int degree);
 
   private:
@@ -111,8 +110,8 @@ class Slerp : public IModel
   public:
     Slerp() = delete;
     Slerp(const std::vector<LidarState> &vecState);
-    Eigen::Isometry3d operator()(double t) const;
-    void RecomputeModel(const std::vector<LidarState> &vecState);
+    Eigen::Isometry3d operator()(double t) const override;
+    void RecomputeModel(const std::vector<LidarState> &vecState) override;
 
   private:
     std::array<double,2> Time;
@@ -130,8 +129,8 @@ class NSlerp : public IModel
   public:
     NSlerp() = delete;
     NSlerp(const std::vector<LidarState> &vecState);
-    Eigen::Isometry3d operator()(double t) const;
-    void RecomputeModel(const std::vector<LidarState> &vecState);
+    Eigen::Isometry3d operator()(double t) const override;
+    void RecomputeModel(const std::vector<LidarState> &vecState) override;
 
   private:
     std::vector<double> VecTime;
@@ -160,8 +159,8 @@ class NSlerp : public IModel
                   bool onlyNecessary = true);
       void SetOnlyNecessary(bool onlyNecessary);
       void SetModel(const std::vector<LidarState>& vecState, Model interpolationModel);
-      void RecomputeModel(const std::vector<LidarState> &vecState);
-      Eigen::Isometry3d operator()(double t) const;
+      void RecomputeModel(const std::vector<LidarState> &vecState) override;
+      Eigen::Isometry3d operator()(double t) const override;
 
     private:
       // Option for model to take only the number of transformations required

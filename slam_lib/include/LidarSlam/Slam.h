@@ -219,6 +219,9 @@ public:
   SetMacro(Undistortion, UndistortionMode)
   GetMacro(Undistortion, UndistortionMode)
 
+  SetMacro(InterpoModel, Interpolation::Model);
+  GetMacro(InterpoModel, Interpolation::Model);
+
   void SetLoggingTimeout(double lMax);
   GetMacro(LoggingTimeout, double)
 

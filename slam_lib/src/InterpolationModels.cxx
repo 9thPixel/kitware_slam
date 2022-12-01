@@ -290,9 +290,7 @@ void Trajectory::SetModel(const std::vector<LidarState>& vecState, Model interpo
   int nbrDataSpline = 0;
   if (this->OnlyNecessary)
   {
-    if (interpolationModel == Model::LINEAR_SPLINE)
-      nbrDataSpline = 2;
-    else if (interpolationModel == Model::QUADRATIC_SPLINE)
+    if (interpolationModel == Model::QUADRATIC_SPLINE)
       nbrDataSpline = 3;
     else if (interpolationModel == Model::CUBIC_SPLINE)
       nbrDataSpline = 4;
@@ -301,8 +299,6 @@ void Trajectory::SetModel(const std::vector<LidarState>& vecState, Model interpo
   // Choose translation model
   if (interpolationModel == Model::LINEAR)
     this->TranslationPtr = CreateModel<Linear>(vecState, 2);
-  if (interpolationModel == Model::LINEAR_SPLINE)
-    this->TranslationPtr = CreateModel<Spline>(vecState, nbrDataSpline, 1);
   if (interpolationModel == Model::QUADRATIC_SPLINE)
     this->TranslationPtr = CreateModel<Spline>(vecState, nbrDataSpline, 2);
   if (interpolationModel == Model::CUBIC_SPLINE)

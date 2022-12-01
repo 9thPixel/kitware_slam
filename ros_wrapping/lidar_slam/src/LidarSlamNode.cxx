@@ -858,6 +858,16 @@ void LidarSlamNode::SetSlamParameters()
     }
     LidarSlam.SetUndistortion(undistortion);
   }
+  int interpolationModel;
+  if (this->PrivNh.getParam("slam/interpolation_model", interpolationModel))
+  {
+    if (interpolationModel > LidarSlam::Interpolation::Model::CUBIC_SPLINE)
+    {
+      ROS_ERROR_STREAM("Invalid interpolation model (" << interpolationModel << "). Setting it to 'LINEAR'.");
+      interpolationModel = LidarSlam::Interpolation::Model::LINEAR;
+    }
+    LidarSlam.SetInterpoModel(static_cast<LidarSlam::Interpolation::Model>(interpolationModel));
+  }
 
   int pointCloudStorage;
   if (this->PrivNh.getParam("slam/logging/storage_type", pointCloudStorage))

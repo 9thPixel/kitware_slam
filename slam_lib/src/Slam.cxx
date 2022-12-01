@@ -1902,7 +1902,7 @@ Slam::PointCloud::Ptr Slam::AggregateFrames(const std::vector<PointCloud::Ptr>& 
       auto copyArray = this->WithinFrameMotion;
       copyArray.SetTransforms(this->Tworld * this->WithinFrameMotion.GetVec()[0].Isometry * baseToLidar,
                               this->Tworld * this->WithinFrameMotion.GetVec()[1].Isometry * baseToLidar);
-      const Interpolation::Trajectory linearInterpolator(copyArray.GetVec(), Interpolation::Model::LINEAR_SPLINE);
+      const Interpolation::Trajectory linearInterpolator(copyArray.GetVec(), Interpolation::Model::LINEAR);
 
       #pragma omp parallel for num_threads(this->NbThreads)
       for (int i = startIdx; i < endIdx; ++i)
