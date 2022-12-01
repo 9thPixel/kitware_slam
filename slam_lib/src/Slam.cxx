@@ -2297,7 +2297,21 @@ bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState
   {
     Keypoint k = static_cast<Keypoint>(this->UsableKeypoints[i]);
     if (!loopClosureRevisitedSubMaps[k]->IsSubMapKdTreeValid())
-      loopClosureRevisitedSubMaps[k]->BuildKdTree(true); // true to build kdtree on all grid points
+    {
+      if(this->UsePGOConstraints[PGOConstraint::BUNDLE_ADJUSTMENT])
+      {
+        // Estimate query keypoints bounding box
+        PointCloud queryWorldKeypoints;
+        pcl::transformPointCloud(*loopClosureQueryKeypoints[k], queryWorldKeypoints, loopClosureTworld.matrix());
+        Eigen::Vector4f minPoint, maxPoint;
+        pcl::getMinMax3D(queryWorldKeypoints, minPoint, maxPoint);
+        // Build submap of all points lying in this bounding box
+        loopClosureRevisitedSubMaps[k]->BuildSubMap(minPoint.head<3>().array(), maxPoint.head<3>().array());
+        loopClosureRevisitedSubMaps[k]->BuildKdTree(); // build kdtree on the submap
+      }
+      else
+        loopClosureRevisitedSubMaps[k]->BuildKdTree(true); // true to build kdtree on all grid points
+    }
   }
 
   if (this->Verbosity >= 2)
