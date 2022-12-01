@@ -2383,6 +2383,102 @@
         </Hints>
       </PropertyGroup>
 
+      <!-- ============================ Bundle Adjustment ============================ -->
+      <DoubleVectorProperty name="Bundle adjustment frequency"
+                         command="SetBAFrequency"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced">
+        <Documentation>
+          Set frequency of the bundle adjustment. e.g. If frequency equals to 4, the bundle adjustment is triggered each 4 meters.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="Interval size"
+                         command="SetBAInterval"
+                         number_of_elements="1"
+                         default_values="1">
+        <Documentation>
+          Set the interval distance (in meters) between the query frame and the revisit frame.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="Start frame index"
+                         command="SetBAStartFrameIdx"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="advanced">
+        <Documentation>
+          Set the start frame for bundle adjustment.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="End frame index"
+                         command="SetBAEndFrameIdx"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced">
+        <Documentation>
+          Set the end frame for bundle adjustment.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="Query map start range BA"
+                         command="SetBAQueryMapStartRange"
+                         number_of_elements="1"
+                         default_values="-2"
+                         panel_visibility="advanced">
+        <Documentation>
+          The parameter for query sub map size in meters. Sub maps is built with frames in the range
+          [frame index + start range, frame index + end range]
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="Query map end range BA"
+                         command="SetBAQueryMapEndRange"
+                         number_of_elements="1"
+                         default_values="2"
+                         panel_visibility="advanced">
+        <Documentation>
+          The parameter for query sub map size in meters. Sub maps is built with frames in the range
+          [frame index + start range, frame index + end range]
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="Revisited map start range BA"
+                         command="SetBARevisitedMapStartRange"
+                         number_of_elements="1"
+                         default_values="-10">
+        <Documentation>
+          The parameter for revisited sub map size in meters. Sub maps is built with frames in the range
+          [frame index + start range, frame index + end range]
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="Revisited map end range BA"
+                         command="SetBARevisitedMapEndRange"
+                         number_of_elements="1"
+                         default_values="10">
+        <Documentation>
+          The parameter for revisited sub map size in meters. Sub maps is built with frames in the range
+          [frame index + start range, frame index + end range]
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <PropertyGroup label="Bundle adjustment parameters">
+        <Property name="Bundle adjustment frequency" />
+        <Property name="Interval size" />
+        <Property name="Start frame index" />
+        <Property name="End frame index" />
+        <Property name="Query map start range BA" />
+        <Property name="Query map end range BA" />
+        <Property name="Revisited map start range BA" />
+        <Property name="Revisited map end range BA" />
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator" mode="visibility" property="Use bundle adjustment constraint" value="1" />
+        </Hints>
+      </PropertyGroup>
+
     </SourceProxy>
   </ProxyGroup>
   <!-- End Online Slam -->

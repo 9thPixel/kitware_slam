@@ -2119,3 +2119,45 @@ void vtkSlam::LoadLoopDetectionIndices(const std::string& fileName)
   // Refresh view
   this->ParametersModificationTime.Modified();
 }
+
+//-----------------------------------------------------------------------------
+void vtkSlam::SetBAStartFrameIdx(unsigned int startIdx)
+{
+  // Check the input frame index can be found in Logstates
+  const std::list<LidarSlam::LidarState>& lidarStates = this->SlamAlgo->GetLogStates();
+  if (lidarStates.empty())
+    return;
+  if (startIdx < lidarStates.front().Index || startIdx > lidarStates.back().Index )
+  {
+    vtkWarningMacro(<< "The input bundle adjustment start frame index is not valid. Please enter a frame index between ["
+                    << lidarStates.front().Index << ", " << lidarStates.back().Index << "].");
+    return;
+  }
+  vtkDebugMacro(<< "Setting BAStartFrameIdx to " << startIdx);
+  if (this->SlamAlgo->GetBAStartFrameIdx() != startIdx)
+  {
+    this->SlamAlgo->SetBAStartFrameIdx(startIdx);
+    this->ParametersModificationTime.Modified();
+  }
+}
+
+//-----------------------------------------------------------------------------
+void vtkSlam::SetBAEndFrameIdx(unsigned int endIdx)
+{
+  // Check the input frame index can be found in Logstates
+  const std::list<LidarSlam::LidarState>& lidarStates = this->SlamAlgo->GetLogStates();
+  if (lidarStates.empty())
+    return;
+  if (endIdx < lidarStates.front().Index || endIdx > lidarStates.back().Index )
+  {
+    vtkWarningMacro(<< "The input bundle adjustment end frame index is not valid. Please enter a frame index between ["
+                    << lidarStates.front().Index << ", " << lidarStates.back().Index << "].");
+    return;
+  }
+  vtkDebugMacro(<< "Setting BAEndFrameIdx to " << endIdx);
+  if (this->SlamAlgo->GetBAEndFrameIdx() != endIdx)
+  {
+    this->SlamAlgo->SetBAEndFrameIdx(endIdx);
+    this->ParametersModificationTime.Modified();
+  }
+}
