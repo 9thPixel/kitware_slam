@@ -729,10 +729,11 @@ bool Slam::OptimizeGraph()
     return false;
   }
 
-  if ((!this->UsePGOConstraints[PGOConstraint::LANDMARK]     || !this->LmHasData())  &&
-      (!this->UsePGOConstraints[PGOConstraint::GPS]          || !this->GpsHasData()) &&
-      (!this->UsePGOConstraints[PGOConstraint::EXT_POSE]     || !this->PoseHasData()) &&
-      (!this->UsePGOConstraints[PGOConstraint::LOOP_CLOSURE] || this->LoopDetections.empty()))
+  if ((!this->UsePGOConstraints[PGOConstraint::LANDMARK]     || !this->LmHasData())           &&
+      (!this->UsePGOConstraints[PGOConstraint::GPS]          || !this->GpsHasData())          &&
+      (!this->UsePGOConstraints[PGOConstraint::EXT_POSE]     || !this->PoseHasData())         &&
+      (!this->UsePGOConstraints[PGOConstraint::LOOP_CLOSURE] || this->LoopDetections.empty()) &&
+      !this->UsePGOConstraints[PGOConstraint::BUNDLE_ADJUSTMENT])
   {
     PRINT_WARNING("No external constraint found, graph cannot be optimized");
     return false;
@@ -894,6 +895,31 @@ bool Slam::OptimizeGraph()
       graphManager.AddExtPoseConstraint(itState->Index, poseSynchMeasure);
 
       externalConstraint = true;
+    }
+  }
+
+  if (this->UsePGOConstraints[PGOConstraint::BUNDLE_ADJUSTMENT])
+  {
+    auto itQueryState = this->LogStates.begin();
+    auto itRevisitedState = itQueryState;
+    while (itQueryState->Index < this->BAStartFrameIdx)
+      ++itQueryState;
+    while (itQueryState->Index <= this->BAEndFrameIdx)
+    {
+      itRevisitedState = this->FetchStateIndex(itQueryState, this->BAInterval);
+      Eigen::Isometry3d bundleAdjustmentTransform;
+      Eigen::Matrix6d bundleAdjustmentCovariance;
+      if (this->LoopClosureRegistration(itQueryState, itRevisitedState, this->BAParams,
+                                        bundleAdjustmentTransform, bundleAdjustmentCovariance))
+      {
+        // Add a loop closure constraint into pose graph for bundle adjustment
+        graphManager.AddLoopClosureConstraint(itQueryState->Index, itRevisitedState->Index,
+                                              bundleAdjustmentTransform, bundleAdjustmentCovariance);
+        externalConstraint = true;
+      }
+
+      // Move to next query frame
+      itQueryState = this->FetchStateIndex(itQueryState, this->BAFrequency);
     }
   }
 

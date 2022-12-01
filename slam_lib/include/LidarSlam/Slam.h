@@ -837,6 +837,33 @@ public:
   SetNestedStructParamsMacro(Loop, OptParams, FinalSaturationDistance, double)
 
   // ---------------------------------------------------------------------------
+  //   Bundle Adjustment parameters
+  // ---------------------------------------------------------------------------
+  GetMacro(BAFrequency, double)
+  SetMacro(BAFrequency, double)
+
+  GetMacro(BAInterval, double)
+  SetMacro(BAInterval, double)
+
+  GetMacro(BAStartFrameIdx, unsigned int)
+  SetMacro(BAStartFrameIdx, unsigned int)
+
+  GetMacro(BAEndFrameIdx, unsigned int)
+  SetMacro(BAEndFrameIdx, unsigned int)
+
+  GetStructParamsMacro(BA, QueryMapStartRange, double)
+  SetStructParamsMacro(BA, QueryMapStartRange, double)
+
+  GetStructParamsMacro(BA, QueryMapEndRange, double)
+  SetStructParamsMacro(BA, QueryMapEndRange, double)
+
+  GetStructParamsMacro(BA, RevisitedMapStartRange, double)
+  SetStructParamsMacro(BA, RevisitedMapStartRange, double)
+
+  GetStructParamsMacro(BA, RevisitedMapEndRange, double)
+  SetStructParamsMacro(BA, RevisitedMapEndRange, double)
+
+  // ---------------------------------------------------------------------------
   //   Confidence estimation
   // ---------------------------------------------------------------------------
 
@@ -1080,6 +1107,23 @@ private:
   // Transform between the query frame and the revisited frame that has been found by the automatic loop detector
   // This pose can be used as a pose prior in LoopClosureRegistration step
   Eigen::Isometry3d LoopDetectionTransform = Eigen::Isometry3d::Identity();
+
+  // ---------------------------------------------------------------------------
+  //   Bundle Adjustment
+  // ---------------------------------------------------------------------------
+
+  // Loop closure registration parameters for bundle adjustment
+  LoopClosure::Parameters BAParams;
+
+  // The bundle adjustment frequency. e.g. BAFrequency = 4 means to launch a LoopClosureRegistration each 4 meters.
+  double BAFrequency = 2;
+
+  // Set the interval distance (in meters) between a query frame and a revisited frame
+  double BAInterval = 3;
+
+  // The bundle adjustment is applied between BAStartFrameIdx and BAEndFrameIdx
+  unsigned int BAStartFrameIdx = 0;
+  unsigned int BAEndFrameIdx = 1;
 
   // ---------------------------------------------------------------------------
   //   Optimization data
