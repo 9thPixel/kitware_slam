@@ -43,7 +43,7 @@ class IModel
 {
   public:
     virtual Eigen::Isometry3d operator()(double t) const = 0;
-    virtual void RecomputeModel(const std::vector<LidarState> &vecState) = 0;
+    virtual void RecomputeModel(const std::vector<PoseStamped> &vecPose) = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -59,9 +59,9 @@ class Linear : public IModel
 {
   public:
     Linear() = delete;
-    Linear(const std::vector<LidarState> &vecState);
+    Linear(const std::vector<PoseStamped> &vecPose);
     Eigen::Isometry3d operator()(double t) const override;
-    void RecomputeModel(const std::vector<LidarState> &vecState) override;
+    void RecomputeModel(const std::vector<PoseStamped> &vecPose) override;
 
   private:
     std::array<double, 2> Time;
@@ -80,10 +80,10 @@ class Spline : public IModel
 
   public:
     Spline() = delete;
-    Spline(const std::vector<LidarState> &vecState, unsigned int degree);
+    Spline(const std::vector<PoseStamped> &vecPose, unsigned int degree);
     Eigen::Isometry3d operator()(double t) const override;
-    void RecomputeModel(const std::vector<LidarState> &vecState) override;
-    void RecomputeModel(const std::vector<LidarState> &vecState, unsigned int degree);
+    void RecomputeModel(const std::vector<PoseStamped> &vecPose) override;
+    void RecomputeModel(const std::vector<PoseStamped> &vecPose, unsigned int degree);
 
   private:
     //spline model
@@ -109,9 +109,9 @@ class Slerp : public IModel
 {
   public:
     Slerp() = delete;
-    Slerp(const std::vector<LidarState> &vecState);
+    Slerp(const std::vector<PoseStamped> &vecPose);
     Eigen::Isometry3d operator()(double t) const override;
-    void RecomputeModel(const std::vector<LidarState> &vecState) override;
+    void RecomputeModel(const std::vector<PoseStamped> &vecPose) override;
 
   private:
     std::array<double,2> Time;
@@ -128,9 +128,9 @@ class NSlerp : public IModel
 {
   public:
     NSlerp() = delete;
-    NSlerp(const std::vector<LidarState> &vecState);
+    NSlerp(const std::vector<PoseStamped> &vecPose);
     Eigen::Isometry3d operator()(double t) const override;
-    void RecomputeModel(const std::vector<LidarState> &vecState) override;
+    void RecomputeModel(const std::vector<PoseStamped> &vecPose) override;
 
   private:
     std::vector<double> VecTime;
@@ -146,7 +146,7 @@ class NSlerp : public IModel
 /**
  * @brief Trajectory interpolation function
  *        Combine a rotation interpolation model with a translation interpolation model
- * @param vecState           data transformations and time
+ * @param vecPose           data transformations and time
  * @param interpolationModel model of interpolation choosen
  */
   class Trajectory : public IModel
@@ -155,11 +155,11 @@ class NSlerp : public IModel
 
     public:
       Trajectory() = delete;
-      Trajectory(const std::vector<LidarState>& vecState, Model interpolationModel,
+      Trajectory(const std::vector<PoseStamped>& vecPose, Model interpolationModel,
                   bool onlyNecessary = true);
       void SetOnlyNecessary(bool onlyNecessary);
-      void SetModel(const std::vector<LidarState>& vecState, Model interpolationModel);
-      void RecomputeModel(const std::vector<LidarState> &vecState) override;
+      void SetModel(const std::vector<PoseStamped>& vecPose, Model interpolationModel);
+      void RecomputeModel(const std::vector<PoseStamped> &vecPose) override;
       Eigen::Isometry3d operator()(double t) const override;
 
     private:
@@ -180,42 +180,42 @@ class NSlerp : public IModel
 /**
  * @brief Create an interpolation model
  * T : type of the model
- * vecState : data for interpolation
+ * vecPose : data for interpolation
  * numberData : number data used (0 is all)
  */
 template <typename T>
-std::unique_ptr<T> CreateModel(const std::vector<LidarState>& vecState, int numberData = 0)
+std::unique_ptr<T> CreateModel(const std::vector<PoseStamped>& vecPose, int numberData = 0)
 {
   // Cut to the number of data needed
-  if (numberData && vecState.size() > numberData)
+  if (numberData && vecPose.size() > numberData)
   {
-    const std::vector<LidarState> necessaryData{vecState.end() - (1 + numberData), vecState.end() - 1};
+    const std::vector<PoseStamped> necessaryData{vecPose.end() - (1 + numberData), vecPose.end() - 1};
     return (std::make_unique<T>(necessaryData));
   }
-  return (std::make_unique<T>(vecState));
+  return (std::make_unique<T>(vecPose));
 }
 
 // Template for Spline case
 template <typename T>
-std::unique_ptr<T> CreateModel(const std::vector<LidarState>& vecState, int numberData, int degree)
+std::unique_ptr<T> CreateModel(const std::vector<PoseStamped>& vecPose, int numberData, int degree)
 {
   // Cut to the number of data needed
-  if (numberData && vecState.size() > numberData)
+  if (numberData && vecPose.size() > numberData)
   {
-    const std::vector<LidarState> necessaryData{vecState.end() - (1 + numberData), vecState.end() - 1};
+    const std::vector<PoseStamped> necessaryData{vecPose.end() - (1 + numberData), vecPose.end() - 1};
     return (std::make_unique<T>(necessaryData, degree));
   }
-  return (std::make_unique<T>(vecState, degree));
+  return (std::make_unique<T>(vecPose, degree));
 }
 
 /**
  * @brief Compute a one-time interpolation for transformation at time t
- * @param vecState Dataset use for interpolation
+ * @param vecPose Dataset use for interpolation
  * @param time Time where to interpolate
  * @param model Model of interpolation (see enum Model)
  * @param onlyNecessary Does the model only use the necessary number of points to compute the interpolation
  */
-Eigen::Isometry3d ComputeTransfo(const std::vector<LidarState>& vecState, double time,
+Eigen::Isometry3d ComputeTransfo(const std::vector<PoseStamped>& vecPose, double time,
                                        Model model, bool onlyNecessary = true);
 
 }  // end of Interpolation namespace

@@ -19,7 +19,7 @@ add_library(LidarSlam
   src/Utilities.cxx
   src/VoxelGrid.cxx
   src/InterpolationModels.cxx
-  src/StateVector.cxx
+  src/State.cxx
   ${SLAM_g2o_sources}
 )
 

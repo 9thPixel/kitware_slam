@@ -80,7 +80,6 @@
 #include "LidarSlam/KeypointsMatcher.h"
 #include "LidarSlam/LocalOptimizer.h"
 #include "LidarSlam/InterpolationModels.h"
-#include "LidarSlam/StateVector.h"
 #include "LidarSlam/RollingGrid.h"
 #include "LidarSlam/PointCloudStorage.h"
 #include "LidarSlam/ExternalSensorManagers.h"
@@ -590,7 +589,7 @@ private:
   // relatively to the same BASE pose at frame header timestamp.
   // This will use the point-wise 'time' field, representing the time offset
   // in seconds to add to the frame header timestamp.
-  StateVector WithinFrameMotion;
+  PoseStampedVector WithinFrameMotion;
 
   // Model to interpolate for various things : Ego-Motion, External sensors or Undistortion
   Interpolation::Model InterpoModel = Interpolation::LINEAR;

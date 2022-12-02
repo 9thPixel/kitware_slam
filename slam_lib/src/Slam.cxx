@@ -80,7 +80,6 @@
 #include "LidarSlam/KDTreePCLAdaptor.h"
 #include "LidarSlam/ConfidenceEstimators.h"
 #include "LidarSlam/InterpolationModels.h"
-#include "LidarSlam/StateVector.h"
 
 // CERES
 #include <ceres/solver.h>
@@ -306,13 +305,11 @@ void Slam::AddFrames(const std::vector<PointCloud::Ptr>& frames)
   if (this->InterpoModel != this->PreviousInterpoModel)
   {
     const static std::string modelStr[3] = {"Linear", "Quadratic", "Cubic"};
-    const static std::vector<LidarState> vecState{
-                              LidarState{Eigen::Isometry3d::Identity(), {}, 0.},
-                              LidarState{Eigen::Isometry3d::Identity(), {}, 1.}};
-    // Change interpolation object with new model and reset data
-    this->MotionInterpo.SetModel(vecState, this->InterpoModel);
+    const static PoseStampedVector vecPose;
+    // Change interpolation model and reset data
+    this->MotionInterpo.SetModel(vecPose.GetVec(), this->InterpoModel);
     this->PreviousInterpoModel = this->InterpoModel;
-    PRINT_VERBOSE(3, "Interpolation model changed to " << modelStr[InterpoModel]);
+    PRINT_VERBOSE(3, "Interpolation model changed to " << modelStr[this->InterpoModel]);
   }
 
   // Compute the edge and planar keypoints
@@ -796,9 +793,9 @@ Eigen::Isometry3d Slam::GetLatencyCompensatedWorldTransform() const
   }
 
   // Extrapolate H0 and H1 to get expected Hpred at current time
-  std::vector<LidarState> vecState{LidarState{previous.Isometry, {}, previous.Time},
-                                 LidarState{current.Isometry, {}, current.Time}};
-  Eigen::Isometry3d Hpred = Interpolation::ComputeTransfo(vecState, current.Time + this->Latency, this->InterpoModel);
+  std::vector<PoseStamped> vecPose{PoseStamped{previous.Isometry, previous.Time},
+                                   PoseStamped{current.Isometry, current.Time}};
+  Eigen::Isometry3d Hpred = Interpolation::ComputeTransfo(vecPose, current.Time + this->Latency, this->InterpoModel);
   return Hpred;
 }
 
@@ -1084,8 +1081,8 @@ void Slam::ComputeEgoMotion()
       PRINT_WARNING("Unable to extrapolate scan pose from previous motion : extrapolation time is too far.")
     else
     {
-      std::vector<LidarState> vecState{LidarState{T0, {}, t0}, LidarState{T1, {}, t1}};
-      Eigen::Isometry3d nextTworldEstimation = Interpolation::ComputeTransfo(vecState, this->CurrentTime, this->InterpoModel);
+      std::vector<PoseStamped> vecPose{PoseStamped{T0, t0}, PoseStamped{T1, t1}};
+      Eigen::Isometry3d nextTworldEstimation = Interpolation::ComputeTransfo(vecPose, this->CurrentTime, this->InterpoModel);
       this->Trelative = this->Tworld.inverse() * nextTworldEstimation;
     }
   }
@@ -1594,9 +1591,9 @@ Eigen::Isometry3d Slam::InterpolateScanPose(double time)
     return this->Tworld;
   }
 
-  std::vector<LidarState> vecState{LidarState{this->LogStates.back().Isometry, {}, prevPoseTime},
-                                   LidarState{this->Tworld, {}, this->CurrentTime}};
-  return Interpolation::ComputeTransfo(vecState, this->CurrentTime + time, this->InterpoModel);
+  std::vector<PoseStamped> vecPose{PoseStamped{this->LogStates.back().Isometry, prevPoseTime},
+                                   PoseStamped{this->Tworld, this->CurrentTime}};
+  return Interpolation::ComputeTransfo(vecPose, this->CurrentTime + time, this->InterpoModel);
 }
 
 //-----------------------------------------------------------------------------
@@ -1683,8 +1680,8 @@ void Slam::RefineUndistortion()
   auto prevUndist = this->WithinFrameMotion.GetVec();
 
   // Get previously applied undistortion
-  Eigen::Isometry3d previousBaseBegin = prevUndist[0].Isometry;
-  Eigen::Isometry3d previousBaseEnd = prevUndist[1].Isometry;
+  Eigen::Isometry3d previousBaseBegin = prevUndist[0].Pose;
+  Eigen::Isometry3d previousBaseEnd = prevUndist[1].Pose;
 
   // Extrapolate first and last poses to update within frame motion interpolator
   Eigen::Isometry3d worldToBaseBegin = this->InterpolateScanPose(prevUndist[0].Time);
@@ -1900,8 +1897,8 @@ Slam::PointCloud::Ptr Slam::AggregateFrames(const std::vector<PointCloud::Ptr>& 
     if (worldCoordinates && this->Undistortion)
     {
       auto copyArray = this->WithinFrameMotion;
-      copyArray.SetTransforms(this->Tworld * this->WithinFrameMotion.GetVec()[0].Isometry * baseToLidar,
-                              this->Tworld * this->WithinFrameMotion.GetVec()[1].Isometry * baseToLidar);
+      copyArray.SetTransforms(this->Tworld * this->WithinFrameMotion.GetVec()[0].Pose * baseToLidar,
+                              this->Tworld * this->WithinFrameMotion.GetVec()[1].Pose * baseToLidar);
       const Interpolation::Trajectory linearInterpolator(copyArray.GetVec(), Interpolation::Model::LINEAR);
 
       #pragma omp parallel for num_threads(this->NbThreads)

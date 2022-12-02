@@ -324,9 +324,9 @@ bool LandmarkManager::UpdateAbsolutePose(const Eigen::Isometry3d& baseTransform,
   synchMeas.Time = lidarTime;
   synchMeas.Covariance = bounds.first->Covariance;
   // Interpolate landmark relative pose at LiDAR timestamp
-  std::vector<LidarState> vecState{LidarState{bounds.first->TransfoRelative, {}, bounds.first->Time},
-                                   LidarState{bounds.second->TransfoRelative, {}, bounds.second->Time}};
-  synchMeas.TransfoRelative = Interpolation::ComputeTransfo(vecState, lidarTime, this->InterpoModel);
+  std::vector<PoseStamped> vecPose{PoseStamped{bounds.first->TransfoRelative, bounds.first->Time},
+                                   PoseStamped{bounds.second->TransfoRelative, bounds.second->Time}};
+  synchMeas.TransfoRelative = Interpolation::ComputeTransfo(vecPose, lidarTime, this->InterpoModel);
 
   // Rotate covariance if required
   if (this->CovarianceRotation)
@@ -516,9 +516,9 @@ bool PoseManager::ComputeSynchronizedMeasure(double lidarTime, PoseMeasurement& 
 
   // Interpolate external pose at LiDAR timestamp
   synchMeas.Time = lidarTime;
-  std::vector<LidarState> vecState{LidarState{bounds.first->Pose, {}, bounds.first->Time},
-                                   LidarState{bounds.second->Pose, {}, bounds.second->Time}};
-  synchMeas.Pose = Interpolation::ComputeTransfo(vecState, lidarTime, this->InterpoModel);
+  std::vector<PoseStamped> vecPose{PoseStamped{bounds.first->Pose, bounds.first->Time},
+                                   PoseStamped{bounds.second->Pose, bounds.second->Time}};
+  synchMeas.Pose = Interpolation::ComputeTransfo(vecPose, lidarTime, this->InterpoModel);
 
   // Rotated covariance if required
   if (this->CovarianceRotation)

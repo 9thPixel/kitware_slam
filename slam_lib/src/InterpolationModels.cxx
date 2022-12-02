@@ -31,11 +31,11 @@ namespace Interpolation
 
 /**
  * @brief Create linear interpolation class from 2 translations
- * @param vecState vector of state containing time and transformation for each frame
+ * @param vecPose vector of state containing time and transformation for each frame
  */
-Linear::Linear(const std::vector<LidarState> &vecState)
+Linear::Linear(const std::vector<PoseStamped> &vecPose)
 {
-  this->RecomputeModel(vecState);
+  this->RecomputeModel(vecPose);
 }
 
 /**
@@ -56,30 +56,30 @@ Eigen::Isometry3d Linear::operator()(double t) const
   return (trans * Eigen::Quaterniond::Identity());
 }
 
-void Linear::RecomputeModel(const std::vector<LidarState>& vecState)
+void Linear::RecomputeModel(const std::vector<PoseStamped>& vecPose)
 {
-  if (vecState.size() < 1)
+  if (vecPose.size() < 1)
   {
     PRINT_ERROR("No data for Linear interpolation, use null data");
     Time = {0., 1.};
     Transf = {Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
     return;
   }
-  if (vecState.size() == 1)
+  if (vecPose.size() == 1)
     PRINT_WARNING("Only one data for Linear translation, perform constant interpolation");
-  if (vecState.size() > 2)
+  if (vecPose.size() > 2)
     PRINT_WARNING("Linear interpolation has more than 2 transformations, only use the 2 last ones");
-  const auto &stateStart = vecState.crbegin()[1];
-  const auto &stateEnd = vecState.back();
+  const auto &stateStart = vecPose.crbegin()[1];
+  const auto &stateEnd = vecPose.back();
   Time = {stateStart.Time, stateEnd.Time};
-  Transf = {stateStart.Isometry.translation().matrix(), stateEnd.Isometry.translation().matrix()};
+  Transf = {stateStart.Pose.translation().matrix(), stateEnd.Pose.translation().matrix()};
 }
 
 // -------------------------------- Spline -----------------------------------
 
-Spline::Spline(const std::vector<LidarState> &vecState, unsigned int degree)
+Spline::Spline(const std::vector<PoseStamped> &vecPose, unsigned int degree)
 {
-  this->RecomputeModel(vecState, degree);
+  this->RecomputeModel(vecPose, degree);
 }
 
 Eigen::Isometry3d Spline::operator()(double t) const
@@ -87,43 +87,43 @@ Eigen::Isometry3d Spline::operator()(double t) const
   return (Eigen::Translation3d(this->SplineModel(ScaledValue(t))) * Eigen::Quaterniond::Identity());
 }
 
-void Spline::RecomputeModel(const std::vector<LidarState> &vecState)
+void Spline::RecomputeModel(const std::vector<PoseStamped> &vecPose)
 {
-  this->RecomputeModel(vecState, this->Degree);
+  this->RecomputeModel(vecPose, this->Degree);
 }
 
 /**
  * @brief Recompute a Spline model from new data and a certain degree
  *        Use Eigen module to generate Spline
- * @param vecState
+ * @param vecPose
  * @param degree
  */
-void Spline::RecomputeModel(const std::vector<LidarState> &vecState, unsigned int degree)
+void Spline::RecomputeModel(const std::vector<PoseStamped> &vecPose, unsigned int degree)
 {
-  size_t size = std::max((int)vecState.size(), 2);
+  size_t size = std::max((int)vecPose.size(), 2);
   Eigen::VectorXd timeVec(size);
   Eigen::Matrix<double, 3, Eigen::Dynamic> knotMat(3, size);
 
   // If not enough data or impossible degree, give up recomputation
-  if (vecState.empty() || !degree)
+  if (vecPose.empty() || !degree)
   {
     PRINT_ERROR("No data for Spline interpolation, use null data");
     knotMat = Eigen::ArrayXXd::Zero(3, 2);
   }
 
-  for (int i = 0; i < vecState.size(); ++i)
+  for (int i = 0; i < vecPose.size(); ++i)
   {
-    timeVec[i] = vecState[i].Time;
-    knotMat.col(i) = vecState[i].Isometry.translation();
+    timeVec[i] = vecPose[i].Time;
+    knotMat.col(i) = vecPose[i].Pose.translation();
   }
-  if (vecState.size() == 1)
+  if (vecPose.size() == 1)
   {
     PRINT_WARNING("Only one data for spline, compute constant translation");
     // Duplicate value to do a constant Spline
     timeVec[1] = timeVec[0] + 1;
     knotMat.block(0, 1, 3, 1) = knotMat.block(0, 0, 3, 1);
   }
-  Degree = std::min((unsigned int)vecState.size() - 1, degree);
+  Degree = std::min((unsigned int)vecPose.size() - 1, degree);
   MinTime = timeVec.minCoeff();
   MaxTime = timeVec.maxCoeff();
   // Need scaled values in Eigen model
@@ -148,11 +148,11 @@ Eigen::RowVectorXd Spline::ScaledValues(Eigen::VectorXd const &t_vec) const
 
 /**
  * @brief Create Slerp interpolation from 2 rotations
- * @param vecState  vector of state containing time and transformation for each frame
+ * @param vecPose  vector of state containing time and transformation for each frame
  */
-Slerp::Slerp(const std::vector<LidarState>& vecState)
+Slerp::Slerp(const std::vector<PoseStamped>& vecPose)
 {
-  RecomputeModel(vecState);
+  RecomputeModel(vecPose);
 }
 
 /**
@@ -172,30 +172,30 @@ Eigen::Isometry3d Slerp::operator()(double t) const
   return (Eigen::Translation3d::Identity() * rot);
 }
 
-void Slerp::RecomputeModel(const std::vector<LidarState> &vecState)
+void Slerp::RecomputeModel(const std::vector<PoseStamped> &vecPose)
 {
-  if (vecState.empty())
+  if (vecPose.empty())
   {
     PRINT_ERROR("No data for Slerp interpolation, compute identity rotation");
     Time = {0., 1.};
     Rot = {Eigen::Quaterniond::Identity(), Eigen::Quaterniond::Identity()};
     return;
   }
-  if (vecState.size() == 1)
+  if (vecPose.size() == 1)
     PRINT_WARNING("Slerp has only one transformation, compute constant rotation");
-  if (vecState.size() > 2)
+  if (vecPose.size() > 2)
     PRINT_WARNING("Slerp has more than 2 transformations, only use the 2 last ones");
-  const auto &stateStart = vecState.crbegin()[1];
-  const auto &stateEnd = vecState.back();
+  const auto &stateStart = vecPose.crbegin()[1];
+  const auto &stateEnd = vecPose.back();
   Time = {stateStart.Time, stateEnd.Time};
-  Rot = {Eigen::Quaterniond(stateStart.Isometry.linear()), Eigen::Quaterniond(stateEnd.Isometry.linear())};
+  Rot = {Eigen::Quaterniond(stateStart.Pose.linear()), Eigen::Quaterniond(stateEnd.Pose.linear())};
 }
 
 // -------------------------------- N-Slerp ------------------------------------
 
-NSlerp::NSlerp(const std::vector<LidarState> &vecState)
+NSlerp::NSlerp(const std::vector<PoseStamped> &vecPose)
 {
-  this->RecomputeModel(vecState);
+  this->RecomputeModel(vecPose);
 }
 
 Eigen::Isometry3d NSlerp::operator()(double t) const
@@ -220,11 +220,11 @@ Eigen::Isometry3d NSlerp::operator()(double t) const
   return (Eigen::Translation3d::Identity() * rot);
 }
 
-void NSlerp::RecomputeModel(const std::vector<LidarState> &vecState)
+void NSlerp::RecomputeModel(const std::vector<PoseStamped> &vecPose)
 {
   this->VecTime.clear();
   this->VecRot.clear();
-  if (vecState.empty())
+  if (vecPose.empty())
   {
     PRINT_ERROR("No data for NSlerp interpolation, compute identity rotation");
     this->VecTime.push_back(0.);
@@ -232,16 +232,16 @@ void NSlerp::RecomputeModel(const std::vector<LidarState> &vecState)
     this->VecRot.push_back(Eigen::Quaterniond::Identity());
     this->VecRot.push_back(Eigen::Quaterniond::Identity());
   }
-  for (const auto &state : vecState)
+  for (const auto &state : vecPose)
   {
     this->VecTime.push_back(state.Time);
-    this->VecRot.push_back(Eigen::Quaterniond(state.Isometry.linear()));
+    this->VecRot.push_back(Eigen::Quaterniond(state.Pose.linear()));
   }
-  if (vecState.size() == 1)
+  if (vecPose.size() == 1)
   {
     PRINT_WARNING("Only one data for N-Slerp, compute constant rotation");
-    this->VecTime.push_back(vecState[0].Time + 1.);
-    this->VecRot.push_back(Eigen::Quaterniond(vecState[0].Isometry.linear()));
+    this->VecTime.push_back(vecPose[0].Time + 1.);
+    this->VecRot.push_back(Eigen::Quaterniond(vecPose[0].Pose.linear()));
   }
 }
 
@@ -273,10 +273,10 @@ std::pair<size_t, size_t> NSlerp::binarySearch(const double t) const
 //   Trajectory Model
 // ---------------------------------------------------------------------------
 
-Trajectory::Trajectory(const std::vector<LidarState>& vecState, Model interpolationModel,
+Trajectory::Trajectory(const std::vector<PoseStamped>& vecPose, Model interpolationModel,
                         bool onlyNecessary): OnlyNecessary(onlyNecessary)
 {
-  SetModel(vecState, interpolationModel);
+  SetModel(vecPose, interpolationModel);
 }
 
 void Trajectory::SetOnlyNecessary(bool onlyNecessary)
@@ -284,7 +284,7 @@ void Trajectory::SetOnlyNecessary(bool onlyNecessary)
   this->OnlyNecessary = onlyNecessary;
 }
 
-void Trajectory::SetModel(const std::vector<LidarState>& vecState, Model interpolationModel)
+void Trajectory::SetModel(const std::vector<PoseStamped>& vecPose, Model interpolationModel)
 {
   // Determine number of data needed for Spline
   int nbrDataSpline = 0;
@@ -298,23 +298,23 @@ void Trajectory::SetModel(const std::vector<LidarState>& vecState, Model interpo
 
   // Choose translation model
   if (interpolationModel == Model::LINEAR)
-    this->TranslationPtr = CreateModel<Linear>(vecState, 2);
+    this->TranslationPtr = CreateModel<Linear>(vecPose, 2);
   if (interpolationModel == Model::QUADRATIC_SPLINE)
-    this->TranslationPtr = CreateModel<Spline>(vecState, nbrDataSpline, 2);
+    this->TranslationPtr = CreateModel<Spline>(vecPose, nbrDataSpline, 2);
   if (interpolationModel == Model::CUBIC_SPLINE)
-    this->TranslationPtr = CreateModel<Spline>(vecState, nbrDataSpline, 3);
+    this->TranslationPtr = CreateModel<Spline>(vecPose, nbrDataSpline, 3);
 
   // Choose rotation model
-  if (this->OnlyNecessary || vecState.size() <= 2)
-    this->RotationPtr = CreateModel<Slerp>(vecState, 2);
+  if (this->OnlyNecessary || vecPose.size() <= 2)
+    this->RotationPtr = CreateModel<Slerp>(vecPose, 2);
   else
-    this->RotationPtr = CreateModel<NSlerp>(vecState);
+    this->RotationPtr = CreateModel<NSlerp>(vecPose);
 }
 
-void Trajectory::RecomputeModel(const std::vector<LidarState> &vecState)
+void Trajectory::RecomputeModel(const std::vector<PoseStamped> &vecPose)
 {
-  this->TranslationPtr->RecomputeModel(vecState);
-  this->RotationPtr->RecomputeModel(vecState);
+  this->TranslationPtr->RecomputeModel(vecPose);
+  this->RotationPtr->RecomputeModel(vecPose);
 }
 
 Eigen::Isometry3d Trajectory::operator()(double t) const
@@ -326,10 +326,10 @@ Eigen::Isometry3d Trajectory::operator()(double t) const
 //   Interpolation utilities
 // ---------------------------------------------------------------------------
 
-Eigen::Isometry3d ComputeTransfo(const std::vector<LidarState>& vecState, double time,
+Eigen::Isometry3d ComputeTransfo(const std::vector<PoseStamped>& vecPose, double time,
                                        Model model, bool onlyNecessary)
 {
-  Trajectory interpo(vecState, model, onlyNecessary);
+  Trajectory interpo(vecPose, model, onlyNecessary);
   return (interpo(time));
 }
 
