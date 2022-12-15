@@ -926,7 +926,7 @@ void Slam::ExtractKeypoints()
   PRINT_VERBOSE(2, "========== Keypoints extraction ==========");
 
   // Current keypoints become previous ones
-  this->PreviousRawKeypoints = this->CurrentRawKeypoints;
+  this->PreviousRawKeypoints = this->CurrentUndistortedKeypoints;
 
   // Extract keypoints from each input cloud
   std::map<Keypoint, std::vector<PointCloud::Ptr>> keypoints;
@@ -1220,9 +1220,15 @@ void Slam::Localization()
   this->Tworld = this->Tworld * this->Trelative;
 
   // Init undistorted keypoints clouds from raw points
-  // Warning : pointer copy = points modification :
-  // do not use CurrentRawKeypoints after this step
-  this->CurrentUndistortedKeypoints = this->CurrentRawKeypoints;
+  // make a deep copy of the pcl
+  int nbKeypointTypes = static_cast<int>(this->UsableKeypoints.size());
+  #pragma omp parallel for num_threads(std::min(this->NbThreads, nbKeypointTypes))
+  for (int i = 0; i < nbKeypointTypes; ++i)
+  {
+    Keypoint k = static_cast<Keypoint>(this->UsableKeypoints[i]);
+    *this->CurrentUndistortedKeypoints[k] = *this->CurrentRawKeypoints[k];
+  }
+
   // Init and run undistortion if required
   if (this->Undistortion)
   {
@@ -1245,7 +1251,6 @@ void Slam::Localization()
 
   // The iteration is not directly on Keypoint types
   // because of openMP behaviour which needs int iteration on MSVC
-  int nbKeypointTypes = static_cast<int>(this->UsableKeypoints.size());
   #pragma omp parallel for num_threads(std::min(this->NbThreads, nbKeypointTypes))
   for (int i = 0; i < nbKeypointTypes; ++i)
   {
