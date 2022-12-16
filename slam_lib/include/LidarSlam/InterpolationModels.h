@@ -20,7 +20,6 @@
 
 #include <vector>
 #include <Eigen/Geometry>
-#include <climits>
 #include <unsupported/Eigen/Splines>
 #include "LidarSlam/State.h"
 
@@ -29,12 +28,12 @@ namespace LidarSlam
 namespace Interpolation
 {
 // List models of interpolation for transformation matrices
-enum class Model
+enum Model
 {
   LINEAR,             // Linear interpolation between 2 transformations
   LINEAR_SPLINE,      // Linear interpolation between N transformations
-  QUADRATIC_SPLINE,   // Quadratic interpolation between N transformations (at least 3)
-  CUBIC_SPLINE,       // Cubic interpolation between N transformations (at least 4)
+  QUADRATIC_SPLINE,   // Quadratic spline interpolation between N transformations (at least 3)
+  CUBIC_SPLINE,       // Cubic spline interpolation between N transformations (at least 4)
 };
 
 /**
@@ -211,11 +210,14 @@ std::unique_ptr<T> CreateModel(const std::vector<LidarState>& vecState, int numb
 }
 
 /**
- * @brief Interpolate linearly between two isometries.
- * The translation will be interpolated linearly and the rotation spherical linearly.
+ * @brief Compute a one-time interpolation for transformation at time t
+ * @param vecState Dataset use for interpolation
+ * @param time Time where to interpolate
+ * @param model Model of interpolation (see enum Model)
+ * @param onlyNecessary Does the model only use the necessary number of points to compute the interpolation
  */
-Eigen::Isometry3d LinearInterpolation(const Eigen::Isometry3d& H0, const Eigen::Isometry3d& H1,
-                                      double t, double t0 = 0., double t1 = 1.);
+Eigen::Isometry3d ComputeTransfo(const std::vector<LidarState>& vecState, double time,
+                                       Model model, bool onlyNecessary = true);
 
 }  // end of Interpolation namespace
 }  // end of LidarSlam namespace

@@ -588,7 +588,15 @@ private:
   // This will use the point-wise 'time' field, representing the time offset
   // in seconds to add to the frame header timestamp.
   StateVector WithinFrameMotion;
-  Interpolation::Trajectory MotionInterpo = {WithinFrameMotion.GetVec(), Interpolation::Model::LINEAR_SPLINE};
+
+  // Model to interpolate for various things : Ego-Motion, External sensors or Undistortion
+  Interpolation::Model InterpoModel = Interpolation::LINEAR;
+
+  // Used to check if Interpolation model changed
+  Interpolation::Model PreviousInterpoModel = Interpolation::LINEAR;
+
+  Interpolation::Trajectory MotionInterpo = {WithinFrameMotion.GetVec(), InterpoModel};
+
   // **** LOGGING ****
 
   // Log info on each pose

@@ -302,6 +302,19 @@ void Slam::AddFrames(const std::vector<PointCloud::Ptr>& frames)
                    " (at time " << this->CurrentTime << ")" << std::scientific);
   PRINT_VERBOSE(2, "#########################################################\n");
 
+  // Check if Motion interpolation model changed
+  if (this->InterpoModel != this->PreviousInterpoModel)
+  {
+    const static std::string modelStr[3] = {"Linear", "Quadratic", "Cubic"};
+    const static std::vector<LidarState> vecState{
+                              LidarState{Eigen::Isometry3d::Identity(), {}, 0.},
+                              LidarState{Eigen::Isometry3d::Identity(), {}, 1.}};
+    // Change interpolation object with new model and reset data
+    this->MotionInterpo.SetModel(vecState, this->InterpoModel);
+    this->PreviousInterpoModel = this->InterpoModel;
+    PRINT_VERBOSE(3, "Interpolation model changed to " << modelStr[InterpoModel]);
+  }
+
   // Compute the edge and planar keypoints
   IF_VERBOSE(3, Utils::Timer::Init("Keypoints extraction"));
   this->ExtractKeypoints();
@@ -783,7 +796,9 @@ Eigen::Isometry3d Slam::GetLatencyCompensatedWorldTransform() const
   }
 
   // Extrapolate H0 and H1 to get expected Hpred at current time
-  Eigen::Isometry3d Hpred = Interpolation::LinearInterpolation(previous.Isometry, current.Isometry, current.Time + this->Latency, previous.Time, current.Time);
+  std::vector<LidarState> vecState{LidarState{previous.Isometry, {}, previous.Time},
+                                 LidarState{current.Isometry, {}, current.Time}};
+  Eigen::Isometry3d Hpred = Interpolation::ComputeTransfo(vecState, current.Time + this->Latency, this->InterpoModel);
   return Hpred;
 }
 
@@ -1069,7 +1084,8 @@ void Slam::ComputeEgoMotion()
       PRINT_WARNING("Unable to extrapolate scan pose from previous motion : extrapolation time is too far.")
     else
     {
-      Eigen::Isometry3d nextTworldEstimation = Interpolation::LinearInterpolation(T0, T1, this->CurrentTime, t0, t1);
+      std::vector<LidarState> vecState{LidarState{T0, {}, t0}, LidarState{T1, {}, t1}};
+      Eigen::Isometry3d nextTworldEstimation = Interpolation::ComputeTransfo(vecState, this->CurrentTime, this->InterpoModel);
       this->Trelative = this->Tworld.inverse() * nextTworldEstimation;
     }
   }
@@ -1578,7 +1594,9 @@ Eigen::Isometry3d Slam::InterpolateScanPose(double time)
     return this->Tworld;
   }
 
-  return Interpolation::LinearInterpolation(this->LogStates.back().Isometry, this->Tworld, this->CurrentTime + time, prevPoseTime, this->CurrentTime);
+  std::vector<LidarState> vecState{LidarState{this->LogStates.back().Isometry, {}, prevPoseTime},
+                                   LidarState{this->Tworld, {}, this->CurrentTime}};
+  return Interpolation::ComputeTransfo(vecState, this->CurrentTime + time, this->InterpoModel);
 }
 
 //-----------------------------------------------------------------------------
@@ -1955,7 +1973,9 @@ void Slam::InitLandmarkManager(int id)
                                                                  this->SensorTimeThreshold,
                                                                  this->SensorMaxMeasures,
                                                                  this->LandmarkPositionOnly,
-                                                                 this->Verbosity >= 3);
+                                                                 this->Verbosity >= 3,
+                                                                 "Tag detector",
+                                                                 this->InterpoModel);
   this->LandmarksManagers[id].SetWeight(this->LandmarkWeight);
   this->LandmarksManagers[id].SetSaturationDistance(this->LandmarkSaturationDistance);
   // The calibration can be modified afterwards
@@ -1978,7 +1998,9 @@ void Slam::InitPoseSensor()
                                                                      this->SensorTimeOffset,
                                                                      this->SensorTimeThreshold,
                                                                      this->SensorMaxMeasures,
-                                                                     this->Verbosity >= 3);
+                                                                     this->Verbosity >= 3,
+                                                                     "Pose sensor",
+                                                                     this->InterpoModel);
 }
 
 // Sensor data

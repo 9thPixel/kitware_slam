@@ -89,17 +89,22 @@ template <typename T>
 class SensorManager
 {
 public:
+  // type of interpolation
+  using TypeInterpo = LidarSlam::Interpolation::Model;
+
   SensorManager(const std::string& name = "BaseSensor")
   : SensorName(name), PreviousIt(Measures.begin()) {}
 
   SensorManager(double timeOffset, double timeThreshold, unsigned int maxMeas,
-                bool verbose = false, const std::string& name = "BaseSensor")
+                bool verbose = false, const std::string& name = "BaseSensor",
+                TypeInterpo model = TypeInterpo::LINEAR)
   : TimeOffset(timeOffset),
     TimeThreshold(timeThreshold),
     MaxMeasures(maxMeas),
     Verbose(verbose),
     SensorName(name),
-    PreviousIt(Measures.begin())
+    PreviousIt(Measures.begin()),
+    InterpoModel(model)
   {}
 
   // -----------------Setters/Getters-----------------
@@ -123,6 +128,9 @@ public:
 
   GetSensorMacro(Verbose, bool)
   SetSensorMacro(Verbose, bool)
+
+  GetSensorMacro(InterpoModel, TypeInterpo);
+  SetSensorMacro(InterpoModel, TypeInterpo);
 
   GetSensorMacro(MaxMeasures, unsigned int)
   void SetMaxMeasures(unsigned int maxMeas)
@@ -298,6 +306,8 @@ protected:
   unsigned int MaxMeasures = 1e6;
   // Verbose boolean to enable/disable debug info
   bool Verbose = false;
+  // Model used to interpolate/extrapolate measures
+  TypeInterpo InterpoModel = TypeInterpo::LINEAR;
   // Sensor name for output
   std::string SensorName;
   // Iterator pointing to the last measure used
@@ -393,7 +403,8 @@ public:
   LandmarkManager(const std::string& name = "Tag detector") : SensorManager(name){}
   LandmarkManager(const LandmarkManager& lmManager);
   LandmarkManager(double timeOffset, double timeThresh, unsigned int maxMeas, bool positionOnly = true,
-                  bool verbose = false, const std::string& name = "Tag detector");
+                  bool verbose = false, const std::string& name = "Tag detector",
+                  TypeInterpo model = TypeInterpo::LINEAR);
 
   void operator=(const LandmarkManager& lmManager);
 
@@ -501,8 +512,9 @@ public:
   PoseManager(const std::string& name = "Pose sensor") : SensorManager(name){}
 
   PoseManager(double w, double timeOffset, double timeThresh, unsigned int maxMeas,
-              bool verbose = false, const std::string& name = "Pose sensor")
-  : SensorManager(timeOffset, timeThresh, maxMeas, verbose, name) {this->Weight = w;}
+              bool verbose = false, const std::string& name = "Pose sensor",
+              TypeInterpo model = TypeInterpo::LINEAR)
+  : SensorManager(timeOffset, timeThresh, maxMeas, verbose, name, model) {this->Weight = w;}
 
   void Reset(bool resetMeas = false);
 

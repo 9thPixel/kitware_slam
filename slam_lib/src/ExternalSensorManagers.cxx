@@ -218,8 +218,9 @@ void LandmarkManager::Reset(bool resetMeas)
 
 // ---------------------------------------------------------------------------
 LandmarkManager::LandmarkManager(double timeOffset, double timeThresh, unsigned int maxMeas,
-                                 bool positionOnly, bool verbose, const std::string& name)
-                : SensorManager(timeOffset, timeThresh, maxMeas, verbose, name),
+                                 bool positionOnly, bool verbose, const std::string& name,
+                                 TypeInterpo model)
+                : SensorManager(timeOffset, timeThresh, maxMeas, verbose, name, model),
                   PositionOnly(positionOnly),
                   CovarianceRotation(false)
 {}
@@ -323,7 +324,10 @@ bool LandmarkManager::UpdateAbsolutePose(const Eigen::Isometry3d& baseTransform,
   synchMeas.Time = lidarTime;
   synchMeas.Covariance = bounds.first->Covariance;
   // Interpolate landmark relative pose at LiDAR timestamp
-  synchMeas.TransfoRelative = Interpolation::LinearInterpolation(bounds.first->TransfoRelative, bounds.second->TransfoRelative, lidarTime, bounds.first->Time, bounds.second->Time);
+  std::vector<LidarState> vecState{LidarState{bounds.first->TransfoRelative, {}, bounds.first->Time},
+                                   LidarState{bounds.second->TransfoRelative, {}, bounds.second->Time}};
+  synchMeas.TransfoRelative = Interpolation::ComputeTransfo(vecState, lidarTime, this->InterpoModel);
+
   // Rotate covariance if required
   if (this->CovarianceRotation)
   {
@@ -512,7 +516,9 @@ bool PoseManager::ComputeSynchronizedMeasure(double lidarTime, PoseMeasurement& 
 
   // Interpolate external pose at LiDAR timestamp
   synchMeas.Time = lidarTime;
-  synchMeas.Pose = Interpolation::LinearInterpolation(bounds.first->Pose, bounds.second->Pose, lidarTime, bounds.first->Time, bounds.second->Time);
+  std::vector<LidarState> vecState{LidarState{bounds.first->Pose, {}, bounds.first->Time},
+                                   LidarState{bounds.second->Pose, {}, bounds.second->Time}};
+  synchMeas.Pose = Interpolation::ComputeTransfo(vecState, lidarTime, this->InterpoModel);
 
   // Rotated covariance if required
   if (this->CovarianceRotation)

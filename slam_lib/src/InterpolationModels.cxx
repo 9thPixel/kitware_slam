@@ -327,18 +327,14 @@ Eigen::Isometry3d Trajectory::operator()(double t) const
 }
 
 // ---------------------------------------------------------------------------
-//   Interpolation functions
+//   Interpolation utilities
 // ---------------------------------------------------------------------------
 
-Eigen::Isometry3d LinearInterpolation(const Eigen::Isometry3d& H0, const Eigen::Isometry3d& H1,
-                                      double t, double t0, double t1)
+Eigen::Isometry3d ComputeTransfo(const std::vector<LidarState>& vecState, double time,
+                                       Model model, bool onlyNecessary)
 {
-  if(t0 == t1 || H0.isApprox(H1))
-    return H1;
-  const double time = (t - t0) / (t1 - t0);
-  Eigen::Quaterniond rot(Eigen::Quaterniond(H0.linear()).slerp(time, Eigen::Quaterniond(H1.linear())));
-  Eigen::Translation3d trans(H0.translation() + time * (H1.translation() - H0.translation()));
-  return trans * rot;
+  Trajectory interpo(vecState, model, onlyNecessary);
+  return (interpo(time));
 }
 
 }  // end of Interpolation namespace
