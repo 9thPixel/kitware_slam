@@ -309,17 +309,54 @@ void Trajectory::SetModel(const std::vector<PoseStamped>& vecPose, Model interpo
     this->RotationPtr = CreateModel<Slerp>(vecPose, 2);
   else
     this->RotationPtr = CreateModel<NSlerp>(vecPose);
+
+  this->VecKnot = vecPose;
 }
+
+void Trajectory::InitModel(Model interpolationModel)
+{
+  std::vector<PoseStamped> vecPose = {PoseStamped(), PoseStamped()};
+  this->SetModel(vecPose, interpolationModel);
+}
+
 
 void Trajectory::RecomputeModel(const std::vector<PoseStamped> &vecPose)
 {
-  this->TranslationPtr->RecomputeModel(vecPose);
-  this->RotationPtr->RecomputeModel(vecPose);
+  this->SetVec(vecPose);
+  this->TranslationPtr->RecomputeModel(this->VecKnot);
+  this->RotationPtr->RecomputeModel(this->VecKnot);
 }
 
 Eigen::Isometry3d Trajectory::operator()(double t) const
 {
   return ((*this->TranslationPtr)(t) * (*this->RotationPtr)(t));
+}
+
+// VecKnot management functions
+
+void Trajectory::SetVec(const std::vector<PoseStamped>& vecPose)
+{
+  this->VecKnot = vecPose;
+}
+
+Eigen::Isometry3d Trajectory::ComputeTransformRange(double t1, double t2) const
+{
+  return ((*this)(t1).inverse() * (*this)(t2));
+}
+
+const std::vector<PoseStamped> &Trajectory::GetVec(void) const
+{
+  return (this->VecKnot);
+}
+
+// Reset interpolation with identity transformation
+void  Trajectory::Reset(void)
+{
+  this->VecKnot.clear();
+  for (size_t i = 0; i < this->VecKnot.size(); ++i)
+    this->VecKnot.emplace_back(Eigen::Isometry3d::Identity(), (double)i);
+  this->TranslationPtr->RecomputeModel(this->VecKnot);
+  this->RotationPtr->RecomputeModel(this->VecKnot);
 }
 
 // ---------------------------------------------------------------------------

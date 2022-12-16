@@ -62,27 +62,4 @@ struct PoseStamped
   PoseStamped(const Eigen::UnalignedIsometry3d &pose, double time): Pose(pose), Time(time){}
 };
 
-// Wrapping of a PoseStamped vector
-class PoseStampedVector
-{
-  public:
-    PoseStampedVector(void);
-    PoseStampedVector(PoseStamped start, PoseStamped end);
-    PoseStampedVector(const std::vector<PoseStamped>& vecPose);
-    PoseStampedVector& operator=(const PoseStampedVector& rhs);
-    // Setter
-    void SetVec(const std::vector<PoseStamped>& VecPose);
-    void SetTransforms(const Eigen::Isometry3d& HStart, const Eigen::Isometry3d& HEnd);
-    void SetTimes(double TStart, double TEnd);
-    Eigen::Isometry3d GetTransformRange(void) const;
-    double GetTimeRange(void) const;
-
-    // Getter
-    const std::vector<PoseStamped>& GetVec(void) const;
-
-
-  private:
-    std::vector<PoseStamped> VecPose;
-};
-
 } // end of LidarSlam namespace

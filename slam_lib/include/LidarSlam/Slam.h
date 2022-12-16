@@ -589,15 +589,17 @@ private:
   // relatively to the same BASE pose at frame header timestamp.
   // This will use the point-wise 'time' field, representing the time offset
   // in seconds to add to the frame header timestamp.
-  PoseStampedVector WithinFrameMotion;
+
+  // Time range of the current frame
+  double TMinFrame = 0., TMaxFrame = 0.;
 
   // Model to interpolate for various things : Ego-Motion, External sensors or Undistortion
   Interpolation::Model InterpoModel = Interpolation::LINEAR;
 
-  // Used to check if Interpolation model changed
+  // Use to check update of InterpoModel
   Interpolation::Model PreviousInterpoModel = Interpolation::LINEAR;
 
-  Interpolation::Trajectory MotionInterpo = {WithinFrameMotion.GetVec(), InterpoModel};
+  Interpolation::Trajectory MotionInterpo = {{PoseStamped(), PoseStamped()}, this->InterpoModel};
 
   // **** LOGGING ****
 
@@ -966,7 +968,7 @@ private:
   // If worldCoordinates=true, it returns points in WORLD coordinates (optionally undistorted).
   // The LIDAR to BASE offsets specific to each sensor are properly added.
   // The output aggregated points timestamps are corrected to be relative to the 1st frame timestamp.
-  // NOTE: If transforming to WORLD coordinates, be sure that Tworld/WithinFrameMotion have been updated
+  // NOTE: If transforming to WORLD coordinates, be sure that Tworld/MotionInterpo have been updated
   //       (updated during the Localization step).
   PointCloud::Ptr AggregateFrames(const std::vector<PointCloud::Ptr>& frames, bool worldCoordinates) const;
 

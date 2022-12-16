@@ -158,19 +158,32 @@ class NSlerp : public IModel
       Trajectory(const std::vector<PoseStamped>& vecPose, Model interpolationModel,
                   bool onlyNecessary = true);
       void SetOnlyNecessary(bool onlyNecessary);
+      // Init interpolation model with identity isometry
+      void InitModel(Model interpolationModel);
       void SetModel(const std::vector<PoseStamped>& vecPose, Model interpolationModel);
       void RecomputeModel(const std::vector<PoseStamped> &vecPose) override;
       Eigen::Isometry3d operator()(double t) const override;
+      // Compute the range between the interpolation of t1 and t2
+      Eigen::Isometry3d ComputeTransformRange(double t1, double t2) const;
+
+      // vector member functions
+      void SetVec(const std::vector<PoseStamped>& VecPose);
+      const std::vector<PoseStamped> &GetVec(void) const;
+      void Reset(void);
 
     private:
       // Option for model to take only the number of transformations required
       // using the last data in priority
       // ex: a cubic translation will use the last 4 and a SLERP will use only the last 2
       bool OnlyNecessary = true;
+
       // Separate transformation models into a translation model and a rotation model
       // Idea from Sommer_Efficient_Derivative_Computation_for_Cumulative_B-Splines_on_Lie_Groups paper
       ModelPtr TranslationPtr;
       ModelPtr RotationPtr;
+
+      // Vector of points used for interpolation (knot points)
+      std::vector<PoseStamped> VecKnot;
   };
 
 // ---------------------------------------------------------------------------
