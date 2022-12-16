@@ -79,7 +79,8 @@
 #include "LidarSlam/SpinningSensorKeypointExtractor.h"
 #include "LidarSlam/KeypointsMatcher.h"
 #include "LidarSlam/LocalOptimizer.h"
-#include "LidarSlam/MotionModel.h"
+#include "LidarSlam/InterpolationModels.h"
+#include "LidarSlam/StateVector.h"
 #include "LidarSlam/RollingGrid.h"
 #include "LidarSlam/PointCloudStorage.h"
 #include "LidarSlam/ExternalSensorManagers.h"
@@ -586,8 +587,8 @@ private:
   // relatively to the same BASE pose at frame header timestamp.
   // This will use the point-wise 'time' field, representing the time offset
   // in seconds to add to the frame header timestamp.
-  LinearTransformInterpolator<double> WithinFrameMotion;
-
+  StateVector WithinFrameMotion;
+  Interpolation::Trajectory MotionInterpo = {WithinFrameMotion.GetVec(), Interpolation::Model::LINEAR_SPLINE};
   // **** LOGGING ****
 
   // Log info on each pose

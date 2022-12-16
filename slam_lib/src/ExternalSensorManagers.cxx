@@ -323,7 +323,7 @@ bool LandmarkManager::UpdateAbsolutePose(const Eigen::Isometry3d& baseTransform,
   synchMeas.Time = lidarTime;
   synchMeas.Covariance = bounds.first->Covariance;
   // Interpolate landmark relative pose at LiDAR timestamp
-  synchMeas.TransfoRelative = LinearInterpolation(bounds.first->TransfoRelative, bounds.second->TransfoRelative, lidarTime, bounds.first->Time, bounds.second->Time);
+  synchMeas.TransfoRelative = Interpolation::LinearInterpolation(bounds.first->TransfoRelative, bounds.second->TransfoRelative, lidarTime, bounds.first->Time, bounds.second->Time);
   // Rotate covariance if required
   if (this->CovarianceRotation)
   {
@@ -512,7 +512,7 @@ bool PoseManager::ComputeSynchronizedMeasure(double lidarTime, PoseMeasurement& 
 
   // Interpolate external pose at LiDAR timestamp
   synchMeas.Time = lidarTime;
-  synchMeas.Pose = LinearInterpolation(bounds.first->Pose, bounds.second->Pose, lidarTime, bounds.first->Time, bounds.second->Time);
+  synchMeas.Pose = Interpolation::LinearInterpolation(bounds.first->Pose, bounds.second->Pose, lidarTime, bounds.first->Time, bounds.second->Time);
 
   // Rotated covariance if required
   if (this->CovarianceRotation)
@@ -532,7 +532,7 @@ bool PoseManager::ComputeSynchronizedMeasureBase(double lidarTime, PoseMeasureme
   if (!this->ComputeSynchronizedMeasure(lidarTime, synchMeas, trackTime))
     return false;
 
-  // Rotated covariance for calibration if required 
+  // Rotated covariance for calibration if required
   if (this->CovarianceRotation)
   {
     Eigen::Vector6d pose = Utils::IsometryToXYZRPY(synchMeas.Pose);

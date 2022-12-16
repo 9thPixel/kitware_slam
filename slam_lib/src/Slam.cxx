@@ -79,6 +79,8 @@
 #include "LidarSlam/Utilities.h"
 #include "LidarSlam/KDTreePCLAdaptor.h"
 #include "LidarSlam/ConfidenceEstimators.h"
+#include "LidarSlam/InterpolationModels.h"
+#include "LidarSlam/StateVector.h"
 
 // CERES
 #include <ceres/solver.h>
@@ -386,7 +388,7 @@ void Slam::AddFrames(const std::vector<PointCloud::Ptr>& frames)
     std::cout << "========== SLAM results ==========\n";
     if (this->Undistortion)
     {
-      Eigen::Isometry3d motion = this->WithinFrameMotion.GetTransformRange();
+      auto motion = this->WithinFrameMotion.GetTransformRange();
       std::cout << "Within frame motion:\n"
                    " translation = [" << motion.translation().transpose()                                        << "] m\n"
                    " rotation    = [" << Utils::Rad2Deg(Utils::RotationMatrixToRPY(motion.linear())).transpose() << "] °\n";
@@ -781,7 +783,7 @@ Eigen::Isometry3d Slam::GetLatencyCompensatedWorldTransform() const
   }
 
   // Extrapolate H0 and H1 to get expected Hpred at current time
-  Eigen::Isometry3d Hpred = LinearInterpolation(previous.Isometry, current.Isometry, current.Time + this->Latency, previous.Time, current.Time);
+  Eigen::Isometry3d Hpred = Interpolation::LinearInterpolation(previous.Isometry, current.Isometry, current.Time + this->Latency, previous.Time, current.Time);
   return Hpred;
 }
 
@@ -1067,7 +1069,7 @@ void Slam::ComputeEgoMotion()
       PRINT_WARNING("Unable to extrapolate scan pose from previous motion : extrapolation time is too far.")
     else
     {
-      Eigen::Isometry3d nextTworldEstimation = LinearInterpolation(T0, T1, this->CurrentTime, t0, t1);
+      Eigen::Isometry3d nextTworldEstimation = Interpolation::LinearInterpolation(T0, T1, this->CurrentTime, t0, t1);
       this->Trelative = this->Tworld.inverse() * nextTworldEstimation;
     }
   }
@@ -1576,7 +1578,7 @@ Eigen::Isometry3d Slam::InterpolateScanPose(double time)
     return this->Tworld;
   }
 
-  return LinearInterpolation(this->LogStates.back().Isometry, this->Tworld, this->CurrentTime + time, prevPoseTime, this->CurrentTime);
+  return Interpolation::LinearInterpolation(this->LogStates.back().Isometry, this->Tworld, this->CurrentTime + time, prevPoseTime, this->CurrentTime);
 }
 
 //-----------------------------------------------------------------------------
@@ -1594,9 +1596,12 @@ void Slam::InitUndistortion()
     }
   }
 
-  // Update interpolator timestamps and reset transforms
+  // Update timestamps and reset transforms
   this->WithinFrameMotion.SetTimes(frameFirstTime, frameLastTime);
   this->WithinFrameMotion.SetTransforms(Eigen::Isometry3d::Identity(), Eigen::Isometry3d::Identity());
+
+  // Reset Interpolator with new data
+  this->MotionInterpo.RecomputeModel(this->WithinFrameMotion.GetVec());
 
   // Check time values
   if (this->WithinFrameMotion.GetTimeRange() < 1e-6)
@@ -1656,22 +1661,23 @@ void Slam::UndistortWithPoseMeasurement()
 //-----------------------------------------------------------------------------
 void Slam::RefineUndistortion()
 {
+  // Get Previous States
+  auto prevUndist = this->WithinFrameMotion.GetVec();
+
   // Get previously applied undistortion
-  Eigen::Isometry3d previousBaseBegin = this->WithinFrameMotion.GetH0();
-  Eigen::Isometry3d previousBaseEnd = this->WithinFrameMotion.GetH1();
+  Eigen::Isometry3d previousBaseBegin = prevUndist[0].Isometry;
+  Eigen::Isometry3d previousBaseEnd = prevUndist[1].Isometry;
 
   // Extrapolate first and last poses to update within frame motion interpolator
-  Eigen::Isometry3d worldToBaseBegin = this->InterpolateScanPose(this->WithinFrameMotion.GetTime0());
-  Eigen::Isometry3d worldToBaseEnd = this->InterpolateScanPose(this->WithinFrameMotion.GetTime1());
+  Eigen::Isometry3d worldToBaseBegin = this->InterpolateScanPose(prevUndist[0].Time);
+  Eigen::Isometry3d worldToBaseEnd = this->InterpolateScanPose(prevUndist[1].Time);
   Eigen::Isometry3d baseToWorld = this->Tworld.inverse();
   Eigen::Isometry3d newBaseBegin = baseToWorld * worldToBaseBegin;
   Eigen::Isometry3d newBaseEnd = baseToWorld * worldToBaseEnd;
   this->WithinFrameMotion.SetTransforms(newBaseBegin, newBaseEnd);
 
-  // Init the interpolator to use to remove previous undistortion and apply updated one
-  auto transformInterpolator = this->WithinFrameMotion;
-  transformInterpolator.SetTransforms(newBaseBegin * previousBaseBegin.inverse(),
-                                      newBaseEnd   * previousBaseEnd.inverse());
+  // Update interpolator with new motion
+  this->MotionInterpo.RecomputeModel(this->WithinFrameMotion.GetVec());
 
   // Refine undistortion of keypoints clouds
   for (auto k : this->UsableKeypoints)
@@ -1680,8 +1686,10 @@ void Slam::RefineUndistortion()
     #pragma omp parallel for num_threads(this->NbThreads)
     for (int i = 0; i < nbPoints; ++i)
     {
+      const auto& rawPoint = this->CurrentRawKeypoints[k]->at(i);
       auto& point = this->CurrentUndistortedKeypoints[k]->at(i);
-      Utils::TransformPoint(point, transformInterpolator(point.time));
+      // Apply new interpolation
+      point = Utils::TransformPoint(rawPoint, this->MotionInterpo(point.time));
     }
   }
 }
@@ -1873,15 +1881,17 @@ Slam::PointCloud::Ptr Slam::AggregateFrames(const std::vector<PointCloud::Ptr>& 
     // Rigid transform from LIDAR to BASE then undistortion from BASE to WORLD
     if (worldCoordinates && this->Undistortion)
     {
-      auto transformInterpolator = this->WithinFrameMotion;
-      transformInterpolator.SetTransforms(this->Tworld * this->WithinFrameMotion.GetH0() * baseToLidar,
-                                          this->Tworld * this->WithinFrameMotion.GetH1() * baseToLidar);
+      auto copyArray = this->WithinFrameMotion;
+      copyArray.SetTransforms(this->Tworld * this->WithinFrameMotion.GetVec()[0].Isometry * baseToLidar,
+                              this->Tworld * this->WithinFrameMotion.GetVec()[1].Isometry * baseToLidar);
+      const Interpolation::Trajectory linearInterpolator(copyArray.GetVec(), Interpolation::Model::LINEAR_SPLINE);
+
       #pragma omp parallel for num_threads(this->NbThreads)
       for (int i = startIdx; i < endIdx; ++i)
       {
         auto& point = aggregatedFrames->at(i);
         point.time += timeOffset;
-        Utils::TransformPoint(point, transformInterpolator(point.time));
+        Utils::TransformPoint(point, linearInterpolator(point.time));
       }
     }
 

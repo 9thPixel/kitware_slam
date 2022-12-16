@@ -20,7 +20,7 @@
 
 #include "LidarSlam/CeresCostFunctions.h" // for residual structure + ceres
 #include "LidarSlam/Utilities.h"
-#include "LidarSlam/MotionModel.h"
+#include "LidarSlam/InterpolationModels.h"
 #include <list>
 #include <cfloat>
 #include <mutex>
