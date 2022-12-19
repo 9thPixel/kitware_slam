@@ -90,7 +90,8 @@ class SensorManager
 {
 public:
   // type of interpolation
-  using TypeInterpo = LidarSlam::Interpolation::Model;
+  using TypeInterpo = Interpolation::Model;
+  using ListIterT   = typename std::list<T>::iterator;
 
   SensorManager(const std::string& name = "BaseSensor")
   : SensorName(name), PreviousIt(Measures.begin()) {}
@@ -198,6 +199,35 @@ public:
     return this->Measures.size() > 1;
   }
 
+  // Add the right number of measurement needed for interpolation
+  // 2 for linear model     :  {bounds1, bounds2}
+  // +1 for quadratic model :  {prevBounds1, bounds1, bounds2}
+  // +2 for cubic model     :  {prevBounds1, bounds1, bounds2, nextBounds2}
+  std::vector<T> GetInterpoMeasurements(std::pair<typename std::list<T>::const_iterator, typename std::list<T>::const_iterator> bounds)
+  {
+    int extraData = 0;
+    if (this->InterpoModel >= TypeInterpo::QUADRATIC_SPLINE)
+      ++extraData;
+    if (this->InterpoModel >= TypeInterpo::CUBIC_SPLINE)
+      ++extraData;
+
+    auto startIt = bounds.first;
+    auto endIt  = ++bounds.second;
+    while ((startIt != this->Measures.begin() || endIt != this->Measures.end()) && extraData > 0)
+    {
+      if (startIt != this->Measures.begin() && extraData > 0)
+      {
+        --startIt;
+        --extraData;
+      }
+      if (endIt != this->Measures.end()  && extraData > 0)
+      {
+        ++endIt;
+        --extraData;
+      }
+    }
+    return std::vector<T>(startIt, endIt);
+  }
   // Compute the interpolated measure to be synchronized with SLAM output (at lidarTime)
   // 'trackTime' allows to keep a time track and to speed up multiple searches
   // when following chronological order
@@ -263,7 +293,7 @@ protected:
     // Update the previous iterator for next call
     if (trackTime)
       this->PreviousIt = prevIt;
-    
+
     // Check the time between the 2 measurements
     // Do not interpolate if the time is too long
     if (!this->CheckBounds(prevIt,postIt))
@@ -442,6 +472,9 @@ public:
 
 private:
   bool HasBeenUsed(double lidarTime);
+  // Does lidarTime is out of current interpolation bounds
+  bool IsOutOfBounds(double lidarTime);
+  bool RecomputeInterpo(double lidarTime, bool trackTime);
 
 private:
   // Absolute pose of the landmark in the global frame
@@ -465,6 +498,11 @@ private:
   // Allow to rotate the covariance
   // Can be disabled if the covariance is fixed or not used (e.g. for local constraint)
   bool CovarianceRotation = false;
+  // Bounds of the interpolation, recomputed it if the interpolation is off-limits
+  std::pair<ListIterT, ListIterT> Bounds = {this->Measures.end(), this->Measures.end()};
+  // Class who perform interpolation
+  Interpolation::Trajectory Interpolator = {std::vector<PoseStamped>{PoseStamped(), PoseStamped()},
+                                            this->InterpoModel};
 };
 
 // ---------------------------------------------------------------------------
@@ -542,6 +580,11 @@ public:
   bool ComputeConstraint(double lidarTime) override;
 
 private:
+  // Does lidarTime is out of current interpolation bounds
+  bool IsOutOfBounds(double lidarTime);
+  bool RecomputeInterpo(double lidarTime, bool trackTime);
+
+private:
   double PrevLidarTime = -1.;
   Eigen::Isometry3d PrevPoseTransform = Eigen::Isometry3d::Identity();
   // Allow to rotate the covariance
@@ -554,6 +597,11 @@ private:
   // Do not use the 2 measures if time difference is too long and motion difference is too large and return false
   // Otherwise return true
   bool CheckBounds(std::list<PoseMeasurement>::iterator& prevIt, std::list<PoseMeasurement>::iterator& postIt) override;
+  // Bounds of the interpolation, recomputed it if the interpolation is off-limits
+  std::pair<ListIterT, ListIterT> Bounds = {this->Measures.end(), this->Measures.end()};
+  // Class who perform interpolation
+  Interpolation::Trajectory Interpolator = {std::vector<PoseStamped>{PoseStamped(), PoseStamped()},
+                                            this->InterpoModel};
 };
 
 

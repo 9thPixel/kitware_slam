@@ -309,31 +309,63 @@ bool LandmarkManager::UpdateAbsolutePose(const Eigen::Isometry3d& baseTransform,
 }
 
 // ---------------------------------------------------------------------------
- bool LandmarkManager::ComputeSynchronizedMeasure(double lidarTime, LandmarkMeasurement& synchMeas, bool trackTime)
+bool LandmarkManager::IsOutOfBounds(double lidarTime)
+{
+  // Are the bounds valid
+  if (this->Bounds.first == this->Measures.end() ||
+      this->Bounds.first == this->Bounds.second)
+    return (true);
+  // Is lidarTime out of the bounds
+  if ((lidarTime < this->Bounds.first->Time && this->Bounds.first != this->Measures.begin())
+      || (lidarTime > this->Bounds.second->Time && std::next(this->Bounds.second) != this->Measures.end()))
+    return (true);
+  return (false);
+}
+
+// ---------------------------------------------------------------------------
+bool LandmarkManager::RecomputeInterpo(double lidarTime, bool trackTime)
+{
+  std::vector<PoseStamped> vecPoseStamped;
+
+  // Get surrounded data and cast them into PoseStamped
+  this->Bounds = this->GetMeasureBounds(lidarTime, trackTime);
+  if (this->Bounds.first == this->Bounds.second)
+    return false;
+  auto vecLandmarkMeasures = this->GetInterpoMeasurements(this->Bounds);
+  for (auto ldmark : vecLandmarkMeasures)
+    vecPoseStamped.emplace_back(ldmark.TransfoRelative, ldmark.Time);
+  // Recompute interpolation
+  this->Interpolator.SetModel(vecPoseStamped, this->InterpoModel);
+  return (true);
+}
+
+// ---------------------------------------------------------------------------
+bool LandmarkManager::ComputeSynchronizedMeasure(double lidarTime, LandmarkMeasurement& synchMeas, bool trackTime)
 {
   if (!this->HasData())
     return false;
 
   std::lock_guard<std::mutex> lock(this->Mtx);
-  // Compute the two closest measures to current Lidar frame
   lidarTime -= this->TimeOffset;
-  auto bounds = this->GetMeasureBounds(lidarTime, trackTime);
-  if (bounds.first == bounds.second)
-    return false;
+
+  // If Data are not initiated or out of the bounds, recompute interpolation
+  if (this->IsOutOfBounds(lidarTime))
+  {
+    if (!RecomputeInterpo(lidarTime, trackTime))
+      return false;
+  }
+
   // Fill measure
   synchMeas.Time = lidarTime;
-  synchMeas.Covariance = bounds.first->Covariance;
+  synchMeas.Covariance = this->Bounds.first->Covariance;
   // Interpolate landmark relative pose at LiDAR timestamp
-  std::vector<PoseStamped> vecPose{PoseStamped{bounds.first->TransfoRelative, bounds.first->Time},
-                                   PoseStamped{bounds.second->TransfoRelative, bounds.second->Time}};
-  synchMeas.TransfoRelative = Interpolation::ComputeTransfo(vecPose, lidarTime, this->InterpoModel);
-
+  synchMeas.TransfoRelative = this->Interpolator(lidarTime);
   // Rotate covariance if required
   if (this->CovarianceRotation)
   {
-    Eigen::Isometry3d update = bounds.first->TransfoRelative.inverse() * synchMeas.TransfoRelative;
-    Eigen::Vector6d xyzrpy = Utils::IsometryToXYZRPY(bounds.first->TransfoRelative);
-    synchMeas.Covariance = CeresTools::RotateCovariance(xyzrpy, bounds.first->Covariance, update); // new = init * update
+    Eigen::Isometry3d update = this->Bounds.first->TransfoRelative.inverse() * synchMeas.TransfoRelative;
+    Eigen::Vector6d xyzrpy = Utils::IsometryToXYZRPY(this->Bounds.first->TransfoRelative);
+    synchMeas.Covariance = CeresTools::RotateCovariance(xyzrpy, this->Bounds.first->Covariance, update); // new = init * update
   }
 
   // Update RelativeTransform for AbsolutePose update
@@ -502,6 +534,37 @@ void PoseManager::Reset(bool resetMeas)
 }
 
 // ---------------------------------------------------------------------------
+bool PoseManager::IsOutOfBounds(double lidarTime)
+{
+  // Are the bounds valid
+  if (this->Bounds.first == this->Measures.end() ||
+      this->Bounds.first == this->Bounds.second)
+    return (true);
+  // Is lidarTime out of the bounds
+  if ((lidarTime < this->Bounds.first->Time && this->Bounds.first != this->Measures.begin())
+      || (lidarTime > this->Bounds.second->Time && std::next(this->Bounds.second) != this->Measures.end()))
+    return (true);
+  return (false);
+}
+
+// ---------------------------------------------------------------------------
+bool PoseManager::RecomputeInterpo(double lidarTime, bool trackTime)
+{
+  std::vector<PoseStamped> vecPoseStamped;
+
+  // Get surrounded data and cast them into PoseStamped
+  this->Bounds = this->GetMeasureBounds(lidarTime, trackTime);
+  if (this->Bounds.first == this->Bounds.second)
+    return false;
+  auto vecMeasurement = this->GetInterpoMeasurements(this->Bounds);
+    for (auto measurement : vecMeasurement)
+      vecPoseStamped.emplace_back(measurement.Pose, measurement.Time);
+  // Recompute interpolation
+  this->Interpolator.SetModel(vecPoseStamped, this->InterpoModel);
+  return (true);
+}
+
+// ---------------------------------------------------------------------------
 bool PoseManager::ComputeSynchronizedMeasure(double lidarTime, PoseMeasurement& synchMeas, bool trackTime)
 {
   if (this->Measures.size() <= 1)
@@ -510,22 +573,24 @@ bool PoseManager::ComputeSynchronizedMeasure(double lidarTime, PoseMeasurement& 
   std::lock_guard<std::mutex> lock(this->Mtx);
   // Compute the two closest measures to current Lidar frame
   lidarTime -= this->TimeOffset;
-  auto bounds = this->GetMeasureBounds(lidarTime, trackTime);
-  if (bounds.first == bounds.second)
-    return false;
 
-  // Interpolate external pose at LiDAR timestamp
+  // If Data are not initiated or out of the bounds, recompute interpolation
+  if (this->IsOutOfBounds(lidarTime))
+  {
+    if (!RecomputeInterpo(lidarTime, trackTime))
+      return false;
+  }
+
   synchMeas.Time = lidarTime;
-  std::vector<PoseStamped> vecPose{PoseStamped{bounds.first->Pose, bounds.first->Time},
-                                   PoseStamped{bounds.second->Pose, bounds.second->Time}};
-  synchMeas.Pose = Interpolation::ComputeTransfo(vecPose, lidarTime, this->InterpoModel);
+  // Interpolate external pose at LiDAR timestamp
+  synchMeas.Pose = this->Interpolator(lidarTime);
 
   // Rotated covariance if required
   if (this->CovarianceRotation)
   {
-    Eigen::Isometry3d Trel = bounds.second->Pose.inverse() * synchMeas.Pose;
-    Eigen::Vector6d pose = Utils::IsometryToXYZRPY(bounds.second->Pose);
-    synchMeas.Covariance = bounds.second->Covariance;
+    Eigen::Isometry3d Trel = this->Bounds.second->Pose.inverse() * synchMeas.Pose;
+    Eigen::Vector6d pose = Utils::IsometryToXYZRPY(this->Bounds.second->Pose);
+    synchMeas.Covariance = this->Bounds.second->Covariance;
     CeresTools::RotateCovariance(pose, synchMeas.Covariance, Trel);
   }
 
