@@ -284,39 +284,62 @@ void Trajectory::SetOnlyNecessary(bool onlyNecessary)
   this->OnlyNecessary = onlyNecessary;
 }
 
-void Trajectory::SetModel(const std::vector<PoseStamped>& vecPose, Model interpolationModel)
+// Determine number of data needed
+void Trajectory::SelectNbData(Model interpolationModel, const std::vector<PoseStamped>& vecPose)
 {
-  // Determine number of data needed for Spline
-  int nbrDataSpline = 0;
-  if (this->OnlyNecessary)
-  {
-    if (interpolationModel == Model::QUADRATIC_SPLINE)
-      nbrDataSpline = 3;
-    else if (interpolationModel == Model::CUBIC_SPLINE)
-      nbrDataSpline = 4;
-  }
+  this->NbData = 0;
+  if (interpolationModel == Model::LINEAR)
+    this->NbData = 2;
+  else if (this->OnlyNecessary && interpolationModel >= Model::QUADRATIC_SPLINE)
+    this->NbData = 3;
+  else if (this->OnlyNecessary && interpolationModel >= Model::CUBIC_SPLINE)
+    this->NbData = 4;
+  else
+    this->NbData = std::max(this->DefaultNbData, vecPose.size());
+}
 
+// Create the models of interpolation
+void Trajectory::CreateModels(Model interpolationModel)
+{
   // Choose translation model
   if (interpolationModel == Model::LINEAR)
-    this->TranslationPtr = CreateModel<Linear>(vecPose, 2);
+    this->TranslationPtr = std::make_unique<Linear>(this->VecKnot);
   if (interpolationModel == Model::QUADRATIC_SPLINE)
-    this->TranslationPtr = CreateModel<Spline>(vecPose, nbrDataSpline, 2);
+    this->TranslationPtr = std::make_unique<Spline>(this->VecKnot, 2);
   if (interpolationModel == Model::CUBIC_SPLINE)
-    this->TranslationPtr = CreateModel<Spline>(vecPose, nbrDataSpline, 3);
+    this->TranslationPtr = std::make_unique<Spline>(this->VecKnot, 3);
 
   // Choose rotation model
-  if (this->OnlyNecessary || vecPose.size() <= 2)
-    this->RotationPtr = CreateModel<Slerp>(vecPose, 2);
+  if (this->NbData == 2)
+    this->RotationPtr = std::make_unique<Slerp>(this->VecKnot);
   else
-    this->RotationPtr = CreateModel<NSlerp>(vecPose);
+    this->RotationPtr = std::make_unique<NSlerp>(this->VecKnot);
+}
 
-  this->VecKnot = vecPose;
+void Trajectory::SetModel(const std::vector<PoseStamped>& vecPose, Model interpolationModel)
+{
+  this->SelectNbData(interpolationModel, vecPose);
+
+  // Save data
+  if (vecPose.size() < this->NbData)
+    PRINT_WARNING("Interpolation : insufficient number of knots, use simpler model");
+  if (this->NbData && this->NbData < vecPose.size())
+    this->VecKnot = {vecPose.end() - this->NbData, vecPose.end()};
+  else
+    this->VecKnot = vecPose;
+
+  this->CreateModels(interpolationModel);
 }
 
 void Trajectory::InitModel(Model interpolationModel)
 {
-  std::vector<PoseStamped> vecPose = {PoseStamped(), PoseStamped()};
-  this->SetModel(vecPose, interpolationModel);
+  this->SelectNbData(interpolationModel, std::vector<PoseStamped>{});
+
+  this->VecKnot.clear();
+  for (size_t i = 0; i < this->NbData; ++i)
+    this->VecKnot.emplace_back(Eigen::Isometry3d::Identity(), (double)i);
+
+  this->CreateModels(interpolationModel);
 }
 
 
@@ -336,7 +359,12 @@ Eigen::Isometry3d Trajectory::operator()(double t) const
 
 void Trajectory::SetVec(const std::vector<PoseStamped>& vecPose)
 {
-  this->VecKnot = vecPose;
+  if (this->NbData && this->NbData < vecPose.size())
+    this->VecKnot = {vecPose.end() - this->NbData, vecPose.end()};
+  else
+    this->VecKnot = vecPose;
+  if (this->VecKnot.size() < this->NbData)
+    PRINT_WARNING("Interpolation : insufficient number of knots, use simpler model");
 }
 
 Eigen::Isometry3d Trajectory::ComputeTransformRange(double t1, double t2) const
@@ -353,7 +381,7 @@ const std::vector<PoseStamped> &Trajectory::GetVec(void) const
 void  Trajectory::Reset(void)
 {
   this->VecKnot.clear();
-  for (size_t i = 0; i < this->VecKnot.size(); ++i)
+  for (size_t i = 0; i < this->NbData; ++i)
     this->VecKnot.emplace_back(Eigen::Isometry3d::Identity(), (double)i);
   this->TranslationPtr->RecomputeModel(this->VecKnot);
   this->RotationPtr->RecomputeModel(this->VecKnot);
@@ -368,6 +396,17 @@ Eigen::Isometry3d ComputeTransfo(const std::vector<PoseStamped>& vecPose, double
 {
   Trajectory interpo(vecPose, model, onlyNecessary);
   return (interpo(time));
+}
+
+void PrintVecPoseStamped(const std::vector<PoseStamped>& vecPose)
+{
+  for (size_t i = 0; i < vecPose.size(); ++i)
+  {
+    std::cout << "vecPose[" << i << "] :\n"
+    " translation = [" << vecPose[i].Pose.translation().transpose()                                        << "] m\n"
+    " rotation    = [" << Utils::Rad2Deg(Utils::RotationMatrixToRPY(vecPose[i].Pose.linear())).transpose() << "] °\n"
+    " time = " << vecPose[i].Time << "] s\n";
+  }
 }
 
 }  // end of Interpolation namespace

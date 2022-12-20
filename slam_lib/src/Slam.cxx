@@ -399,7 +399,7 @@ void Slam::AddFrames(const std::vector<PointCloud::Ptr>& frames)
     std::cout << "========== SLAM results ==========\n";
     if (this->Undistortion)
     {
-      Eigen::Isometry3d motion = this->MotionInterpo.ComputeTransformRange(this->TMinFrame, this->TMaxFrame);
+      Eigen::Isometry3d motion = this->MotionInterpo.ComputeTransformRange(this->TMinFrame + this->CurrentTime, this->TMaxFrame + this->CurrentTime);
       std::cout << "Within frame motion:\n"
                    " translation = [" << motion.translation().transpose()                                        << "] m\n"
                    " rotation    = [" << Utils::Rad2Deg(Utils::RotationMatrixToRPY(motion.linear())).transpose() << "] °\n";
@@ -712,7 +712,7 @@ void Slam::ResetStatePoses(ExternalSensors::PoseManager& newTrajectoryManager)
   double startTime = newTrajectoryManager.GetMeasures().front().Time;
   double endTime   = newTrajectoryManager.GetMeasures().back().Time;
   if (startTime > this->LogStates.back().Time || endTime < this->LogStates.front().Time)
-  { 
+  {
     PRINT_WARNING("Unable to reset poses with new trajectory : timestamps are different from lidar time.");
     return;
   }
@@ -721,8 +721,8 @@ void Slam::ResetStatePoses(ExternalSensors::PoseManager& newTrajectoryManager)
   // Get iterator pointing to the first measurement after new trajectory time
   while (itState->Time < startTime)
     ++itState;
-  
-  // Save the state before endTime of new trajectory 
+
+  // Save the state before endTime of new trajectory
   // when new trajectory is shorter than Logstates
   Eigen::Isometry3d endTimeState = Eigen::Isometry3d::Identity();
   auto itEndTimeState = itState;
@@ -734,7 +734,7 @@ void Slam::ResetStatePoses(ExternalSensors::PoseManager& newTrajectoryManager)
     endTimeState = itEndTimeState->Isometry;
   }
 
-  // Virtual measure with synchronized timestamp 
+  // Virtual measure with synchronized timestamp
   ExternalSensors::PoseMeasurement synchMeas;
   while (itState->Time <= endTime && itState != this->LogStates.end())
   {
@@ -774,12 +774,11 @@ Eigen::Isometry3d Slam::GetLatencyCompensatedWorldTransform() const
     return Eigen::Isometry3d::Identity();
   else if (trajectorySize == 1)
     return this->LogStates.back().Isometry;
+
   auto itSt = this->LogStates.end();
   const LidarState& current = *(--itSt);
   const LidarState& previous = *(--itSt);
-
-  // Linearly compute normalized timestamp of Hpred.
-  // We expect H0 and H1 to match with time 0 and 1.
+  // Compute normalized timestamp of Hpred for extrapolation
   // If timestamps are not defined or too close, extrapolation is impossible.
   if (std::abs(current.Time - previous.Time) < 1e-6)
   {
@@ -793,9 +792,22 @@ Eigen::Isometry3d Slam::GetLatencyCompensatedWorldTransform() const
     return current.Isometry;
   }
 
-  // Extrapolate H0 and H1 to get expected Hpred at current time
-  std::vector<PoseStamped> vecPose{PoseStamped{previous.Isometry, previous.Time},
-                                   PoseStamped{current.Isometry, current.Time}};
+  // Create vector of PoseStamped for extrapolation
+  std::vector<PoseStamped> vecPose({{current.Isometry, current.Time}, {previous.Isometry, previous.Time}});
+
+  // Add extra PoseStamped if the extrapolation model need more
+  int extraData = std::min(this->MotionInterpo.GetNbData(), this->LogStates.size()) - 2;
+  itSt--;
+  while (extraData > 0 && std::abs(this->Latency / (itSt->Time - vecPose.back().Time)) < MaxExtrapolationRatio
+    && !itSt->Isometry.isApprox(Eigen::Isometry3d::Identity()))
+  {
+    vecPose.emplace_back(itSt->Isometry, itSt->Time);
+    extraData--;
+    itSt--;
+  }
+  std::reverse(vecPose.begin(), vecPose.end());
+
+  // Extrapolate to get expected Hpred at current time
   Eigen::Isometry3d Hpred = Interpolation::ComputeTransfo(vecPose, current.Time + this->Latency, this->InterpoModel);
   return Hpred;
 }
@@ -1064,25 +1076,39 @@ void Slam::ComputeEgoMotion()
       PRINT_WARNING("External poses are empty : cannot use them to compute ego motion")
   }
 
-  // Linearly extrapolate previous motion to estimate new pose
+  // Extrapolate previous motion to estimate new pose
+  // Add extra PoseStamped if the ego-motion model need more
   if (this->LogStates.size() >= 2 && (
       (this->EgoMotion == EgoMotionMode::MOTION_EXTRAPOLATION ||
        this->EgoMotion == EgoMotionMode::MOTION_EXTRAPOLATION_AND_REGISTRATION) ||
       (this->EgoMotion == EgoMotionMode::EXTERNAL_OR_MOTION_EXTRAPOLATION &&
        !externalAvailable)))
   {
-    // Estimate new Tworld with a constant velocity model
     auto itSt = this->LogStates.end();
-
+    const double t2 = (--itSt)->Time;
+    const Eigen::Isometry3d& T2 = itSt->Isometry;
     const double t1 = (--itSt)->Time;
     const Eigen::Isometry3d& T1 = itSt->Isometry;
-    const double t0 = (--itSt)->Time;
-    const Eigen::Isometry3d& T0 = itSt->Isometry;
-    if (std::abs((this->CurrentTime - t1) / (t1 - t0)) > this->MaxExtrapolationRatio)
+    if (std::abs((this->CurrentTime - t2) / (t2 - t1)) > this->MaxExtrapolationRatio)
       PRINT_WARNING("Unable to extrapolate scan pose from previous motion : extrapolation time is too far.")
     else
     {
-      std::vector<PoseStamped> vecPose{PoseStamped{T0, t0}, PoseStamped{T1, t1}};
+      // Construct vector of PoseStamped to compute interpolation
+      std::vector<PoseStamped> vecPose{{T2, t2}, {T1, t1}};
+
+      // Add additional elements if the interpolation model need it
+      int extraData = std::min(this->MotionInterpo.GetNbData(), this->LogStates.size()) - 2;
+      itSt--;
+      while (extraData > 0 && std::abs(itSt->Time - vecPose.back().Time) < this->SensorTimeThreshold
+              && !itSt->Isometry.isApprox(Eigen::Isometry3d::Identity()))
+      {
+        vecPose.emplace_back(itSt->Isometry, itSt->Time);
+        --extraData;
+        --itSt;
+      }
+
+      // Estimate new Tworld with the interpolation model
+      std::reverse(vecPose.begin(), vecPose.end());
       Eigen::Isometry3d nextTworldEstimation = Interpolation::ComputeTransfo(vecPose, this->CurrentTime, this->InterpoModel);
       this->Trelative = this->Tworld.inverse() * nextTworldEstimation;
     }
@@ -1580,24 +1606,6 @@ LidarState& Slam::GetLastState()
 //==============================================================================
 
 //-----------------------------------------------------------------------------
-Eigen::Isometry3d Slam::InterpolateScanPose(double time)
-{
-  if (this->LogStates.empty())
-    return this->Tworld;
-
-  const double prevPoseTime = this->LogStates.back().Time;
-  if (std::abs(time / (this->CurrentTime - prevPoseTime)) > this->MaxExtrapolationRatio)
-  {
-    PRINT_WARNING("Unable to interpolate scan pose from motion : extrapolation time is too far.");
-    return this->Tworld;
-  }
-
-  std::vector<PoseStamped> vecPose{PoseStamped{this->LogStates.back().Isometry, prevPoseTime},
-                                   PoseStamped{this->Tworld, this->CurrentTime}};
-  return Interpolation::ComputeTransfo(vecPose, this->CurrentTime + time, this->InterpoModel);
-}
-
-//-----------------------------------------------------------------------------
 void Slam::InitUndistortion()
 {
   // Get 'time' field range
@@ -1675,14 +1683,36 @@ void Slam::UndistortWithPoseMeasurement()
 //-----------------------------------------------------------------------------
 void Slam::RefineUndistortion()
 {
-  //* TEST interpolation with EgoMotion and previous points directly
-  //! Add protection of maxInterpolationRation
-  std::vector<PoseStamped> vecPose;
+  // Check if frame time are valid to make undistortion
+  if (this->TMinFrame == this->TMaxFrame)
+  {
+    PRINT_WARNING("Invalid time, undistortion ignored");
+    return;
+  }
+  else if (this->LogStates.empty())
+    return;
+
+  // Construct vector to compute interpolation model with previous logstates
   Eigen::Isometry3d baseToWorld = this->Tworld.inverse();
-  vecPose.emplace_back(baseToWorld * this->LogStates.back().Isometry, this->LogStates.back().Time - this->CurrentTime);
-  vecPose.emplace_back(Eigen::Isometry3d::Identity(), 0);
+  std::vector<PoseStamped> vecPose{{Eigen::Isometry3d::Identity(), this->CurrentTime}};
+  int nbLog = std::min(this->MotionInterpo.GetNbData() - 1, this->LogStates.size());
+  auto itLogState = --this->LogStates.end();
+
+  while (nbLog > 0 && std::abs(vecPose.back().Time - itLogState->Time) < this->SensorTimeThreshold)
+  {
+    // Put the logstates Pose into Current Frame Referential
+    vecPose.emplace_back(baseToWorld * itLogState->Isometry, itLogState->Time);
+    --itLogState;
+    --nbLog;
+  }
+  std::reverse(vecPose.begin(), vecPose.end());
+
+  // If logstates are unusable, doesn't undistorted
+  if (vecPose.size() < 2)
+    vecPose.emplace_back(Eigen::Isometry3d::Identity(), vecPose.back().Time + 1);
+
+  // Update interpolation model for Undistortion
   this->MotionInterpo.RecomputeModel(vecPose);
-  // *
 
   // Refine undistortion of keypoints clouds
   for (auto k : this->UsableKeypoints)
@@ -1693,7 +1723,7 @@ void Slam::RefineUndistortion()
     {
       const auto& rawPoint = this->CurrentRawKeypoints[k]->at(i);
       auto& point = this->CurrentUndistortedKeypoints[k]->at(i);
-      point = Utils::TransformPoint(rawPoint, this->MotionInterpo(point.time));
+      point = Utils::TransformPoint(rawPoint, this->MotionInterpo(point.time + this->CurrentTime));
     }
   }
 }
@@ -1895,7 +1925,7 @@ Slam::PointCloud::Ptr Slam::AggregateFrames(const std::vector<PointCloud::Ptr>& 
       {
         auto& point = aggregatedFrames->at(i);
         point.time += timeOffset;
-        Utils::TransformPoint(point, undistInterpolator(point.time));
+        Utils::TransformPoint(point, undistInterpolator(point.time + this->CurrentTime));
       }
     }
 

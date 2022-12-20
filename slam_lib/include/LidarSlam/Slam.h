@@ -750,8 +750,8 @@ private:
   double SensorTimeOffset = 0.;
 
   // Maximum time difference (s) between two measurements to
-  // allow the measures interpolation and the integration
-  // of a sensor constraint in the optimization
+  // allow the measures interpolation/extrapolation and the
+  // integration of a sensor constraint in the optimization
   double SensorTimeThreshold = 0.5;
 
   // Maximum number of sensor measurements stored
@@ -930,14 +930,11 @@ private:
   // input scan header. This can be done using estimated egomotion and assuming
   // a constant velocity during a sweep.
 
-  // Extra/Interpolate scan pose using previous motion from previous and current poses.
-  // 'time' arg is the time offset in seconds to current frame header.stamp.
-  Eigen::Isometry3d InterpolateScanPose(double time);
-
   // Init undistortion interpolator time bounds based on point-wise time field.
   void InitUndistortion();
 
   // Update the undistortion interpolator poses bounds,
+  // using previous motion from previous and current poses.
   // and refine the undistortion of the current keypoints clouds.
   void RefineUndistortion();
 

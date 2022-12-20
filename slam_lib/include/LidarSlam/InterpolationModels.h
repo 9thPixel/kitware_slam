@@ -169,12 +169,13 @@ class NSlerp : public IModel
       // vector member functions
       void SetVec(const std::vector<PoseStamped>& VecPose);
       const std::vector<PoseStamped> &GetVec(void) const;
+      size_t GetNbData(void) const {return this->NbData;}
       void Reset(void);
 
     private:
-      // Option for model to take only the number of transformations required
-      // using the last data in priority
-      // ex: a cubic translation will use the last 4 and a SLERP will use only the last 2
+      // Option for model to take only the minimal number of
+      // transformations required, using the last data in priority
+      // ex: a cubic  will use the last 4 and a linear will use only the last 2
       bool OnlyNecessary = true;
 
       // Separate transformation models into a translation model and a rotation model
@@ -182,44 +183,22 @@ class NSlerp : public IModel
       ModelPtr TranslationPtr;
       ModelPtr RotationPtr;
 
+      // Default number if onlyNecessary is false
+      const size_t DefaultNbData = 10;
+      // Number points used to compute the model
+      size_t NbData = 0;
       // Vector of points used for interpolation (knot points)
       std::vector<PoseStamped> VecKnot;
+
+      // Utilities Trajectory
+      void SelectNbData(Model interpolationModel, const std::vector<PoseStamped>& vecPose);
+      void CreateModels(Model interpolationModel);
+
   };
 
 // ---------------------------------------------------------------------------
 //   Interpolation utilities
 // ---------------------------------------------------------------------------
-
-/**
- * @brief Create an interpolation model
- * T : type of the model
- * vecPose : data for interpolation
- * numberData : number data used (0 is all)
- */
-template <typename T>
-std::unique_ptr<T> CreateModel(const std::vector<PoseStamped>& vecPose, int numberData = 0)
-{
-  // Cut to the number of data needed
-  if (numberData && vecPose.size() > numberData)
-  {
-    const std::vector<PoseStamped> necessaryData{vecPose.end() - (1 + numberData), vecPose.end() - 1};
-    return (std::make_unique<T>(necessaryData));
-  }
-  return (std::make_unique<T>(vecPose));
-}
-
-// Template for Spline case
-template <typename T>
-std::unique_ptr<T> CreateModel(const std::vector<PoseStamped>& vecPose, int numberData, int degree)
-{
-  // Cut to the number of data needed
-  if (numberData && vecPose.size() > numberData)
-  {
-    const std::vector<PoseStamped> necessaryData{vecPose.end() - (1 + numberData), vecPose.end() - 1};
-    return (std::make_unique<T>(necessaryData, degree));
-  }
-  return (std::make_unique<T>(vecPose, degree));
-}
 
 /**
  * @brief Compute a one-time interpolation for transformation at time t
@@ -230,6 +209,9 @@ std::unique_ptr<T> CreateModel(const std::vector<PoseStamped>& vecPose, int numb
  */
 Eigen::Isometry3d ComputeTransfo(const std::vector<PoseStamped>& vecPose, double time,
                                        Model model, bool onlyNecessary = true);
+
+// Use for debugging the PoseStamped vector
+void PrintVecPoseStamped(const std::vector<PoseStamped>& vecPose);
 
 }  // end of Interpolation namespace
 }  // end of LidarSlam namespace
