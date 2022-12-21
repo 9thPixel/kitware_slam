@@ -19,6 +19,10 @@
 #include "LidarSlam/InterpolationModels.h"
 #include <cmath>
 
+#if USE_BASALT == 1
+  #include <LidarSlam/BasaltSpline.h>
+#endif
+
 namespace LidarSlam
 {
 namespace Interpolation
@@ -75,30 +79,30 @@ void Linear::RecomputeModel(const std::vector<PoseStamped>& vecPose)
   Transf = {stateStart.Pose.translation().matrix(), stateEnd.Pose.translation().matrix()};
 }
 
-// -------------------------------- Spline -----------------------------------
+// -------------------------------- EigenSpline -----------------------------------
 
-Spline::Spline(const std::vector<PoseStamped> &vecPose, unsigned int degree)
+EigenSpline::EigenSpline(const std::vector<PoseStamped> &vecPose, unsigned int degree)
 {
   this->RecomputeModel(vecPose, degree);
 }
 
-Eigen::Isometry3d Spline::operator()(double t) const
+Eigen::Isometry3d EigenSpline::operator()(double t) const
 {
   return (Eigen::Translation3d(this->SplineModel(ScaledValue(t))) * Eigen::Quaterniond::Identity());
 }
 
-void Spline::RecomputeModel(const std::vector<PoseStamped> &vecPose)
+void EigenSpline::RecomputeModel(const std::vector<PoseStamped> &vecPose)
 {
   this->RecomputeModel(vecPose, this->Degree);
 }
 
 /**
  * @brief Recompute a Spline model from new data and a certain degree
- *        Use Eigen module to generate Spline
+ *        using Eigen module
  * @param vecPose
  * @param degree
  */
-void Spline::RecomputeModel(const std::vector<PoseStamped> &vecPose, unsigned int degree)
+void EigenSpline::RecomputeModel(const std::vector<PoseStamped> &vecPose, unsigned int degree)
 {
   size_t size = std::max((int)vecPose.size(), 2);
   Eigen::VectorXd timeVec(size);
@@ -107,7 +111,7 @@ void Spline::RecomputeModel(const std::vector<PoseStamped> &vecPose, unsigned in
   // If not enough data or impossible degree, give up recomputation
   if (vecPose.empty() || !degree)
   {
-    PRINT_ERROR("No data for Spline interpolation, use null data");
+    PRINT_ERROR("No data for EigenSpline interpolation, use null data");
     knotMat = Eigen::ArrayXXd::Zero(3, 2);
   }
 
@@ -118,7 +122,7 @@ void Spline::RecomputeModel(const std::vector<PoseStamped> &vecPose, unsigned in
   }
   if (vecPose.size() == 1)
   {
-    PRINT_WARNING("Only one data for spline, compute constant translation");
+    PRINT_WARNING("Only one data for EigenSpline, compute constant translation");
     // Duplicate value to do a constant Spline
     timeVec[1] = timeVec[0] + 1;
     knotMat.block(0, 1, 3, 1) = knotMat.block(0, 0, 3, 1);
@@ -130,12 +134,12 @@ void Spline::RecomputeModel(const std::vector<PoseStamped> &vecPose, unsigned in
   SplineModel = Eigen::SplineFitting<Spline3d>::Interpolate(knotMat, Degree, ScaledValues(timeVec));
 }
 
-double Spline::ScaledValue(double t) const {
+double EigenSpline::ScaledValue(double t) const {
   return (t - MinTime) / (MaxTime - MinTime);
 }
 
 // Scaled time values and transpose the time vector
-Eigen::RowVectorXd Spline::ScaledValues(Eigen::VectorXd const &t_vec) const
+Eigen::RowVectorXd EigenSpline::ScaledValues(Eigen::VectorXd const &t_vec) const
 {
   return t_vec.unaryExpr([this](double t) { return ScaledValue(t); }).transpose();
 }
@@ -301,19 +305,22 @@ void Trajectory::SelectNbData(Model interpolationModel, const std::vector<PoseSt
 // Create the models of interpolation
 void Trajectory::CreateModels(Model interpolationModel)
 {
-  // Choose translation model
-  if (interpolationModel == Model::LINEAR)
-    this->TranslationPtr = std::make_unique<Linear>(this->VecKnot);
-  if (interpolationModel == Model::QUADRATIC_SPLINE)
-    this->TranslationPtr = std::make_unique<Spline>(this->VecKnot, 2);
-  if (interpolationModel == Model::CUBIC_SPLINE)
-    this->TranslationPtr = std::make_unique<Spline>(this->VecKnot, 3);
-
-  // Choose rotation model
-  if (this->NbData == 2)
-    this->RotationPtr = std::make_unique<Slerp>(this->VecKnot);
-  else
-    this->RotationPtr = std::make_unique<NSlerp>(this->VecKnot);
+    // Choose translation model
+    if (interpolationModel == Model::LINEAR)
+      this->TranslationPtr = std::make_unique<Linear>(this->VecKnot);
+    if (interpolationModel == Model::QUADRATIC_SPLINE)
+      this->TranslationPtr = std::make_unique<EigenSpline>(this->VecKnot, 2);
+    if (interpolationModel == Model::CUBIC_SPLINE)
+      this->TranslationPtr = std::make_unique<EigenSpline>(this->VecKnot, 3);
+    // Choose rotation model
+    if (this->NbData == 2)
+      this->RotationPtr = std::make_unique<Slerp>(this->VecKnot);
+    else if (!(USE_BASALT == 1 && interpolationModel == Model::QUADRATIC_SPLINE))
+      this->RotationPtr = std::make_unique<NSlerp>(this->VecKnot);
+    #if USE_BASALT == 1
+      if (interpolationModel == Model::QUADRATIC_SPLINE)
+        this->RotationPtr = std::make_unique<BasaltSO3Quad>(this->VecKnot);
+    #endif
 }
 
 void Trajectory::SetModel(const std::vector<PoseStamped>& vecPose, Model interpolationModel)

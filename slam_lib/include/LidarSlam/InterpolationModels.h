@@ -27,6 +27,7 @@ namespace LidarSlam
 {
 namespace Interpolation
 {
+
 // List models of interpolation for transformation matrices
 enum Model
 {
@@ -70,17 +71,18 @@ class Linear : public IModel
 
 // ---------------------------------------------------------------------------
 /**
- * @brief Spline
+ * @brief EigenSpline
  * Interpolate translations with a global polynomial spline of a certain degree (2, 3...)
+ * using Eigen
  */
-class Spline : public IModel
+class EigenSpline : public IModel
 {
-  // Spline model for spacial data
+  // EigenSpline model for spacial data
   typedef Eigen::Spline<double, 3> Spline3d;
 
   public:
-    Spline() = delete;
-    Spline(const std::vector<PoseStamped> &vecPose, unsigned int degree);
+    EigenSpline() = delete;
+    EigenSpline(const std::vector<PoseStamped> &vecPose, unsigned int degree);
     Eigen::Isometry3d operator()(double t) const override;
     void RecomputeModel(const std::vector<PoseStamped> &vecPose) override;
     void RecomputeModel(const std::vector<PoseStamped> &vecPose, unsigned int degree);

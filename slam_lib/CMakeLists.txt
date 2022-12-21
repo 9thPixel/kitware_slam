@@ -5,11 +5,14 @@ if (g2o_FOUND)
   add_definitions(-DUSE_G2O=1)
 endif()
 
-# If basalt is available, compile Spline stuff
+# If basalt is available, compile Basalt spline
 if (basalt-headers_FOUND)
-  set(SLAM_basalt_sources)
+  set(SLAM_basalt_sources src/BasaltSpline.cxx)
   set(basalt_target basalt-headers)
   add_definitions(-DUSE_BASALT=1)
+  message("Lidar SLAM : Basalt was found, compile Basalt Spline")
+else()
+  add_definitions((-DUSE_BASALT=0))
 endif()
 
 # Generate export symbols on Windows to use this lib
@@ -27,6 +30,7 @@ add_library(LidarSlam
   src/VoxelGrid.cxx
   src/InterpolationModels.cxx
   ${SLAM_g2o_sources}
+  ${SLAM_basalt_sources}
 )
 
 target_link_libraries(LidarSlam
