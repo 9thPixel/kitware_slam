@@ -304,14 +304,17 @@ void Slam::AddFrames(const std::vector<PointCloud::Ptr>& frames)
   PRINT_VERBOSE(2, "#########################################################\n");
 
   // Check if Motion interpolation model changed
+  const static std::string modelStr[3] = {"Linear", "Quadratic", "Cubic"};
   if (this->InterpoModel != this->PreviousInterpoModel)
   {
-    const static std::string modelStr[3] = {"Linear", "Quadratic", "Cubic"};
     // Change interpolation model and reset data
     MotionInterpo.InitModel(this->InterpoModel);
-    this->PreviousInterpoModel = this->InterpoModel;
     PRINT_VERBOSE(3, "Interpolation model changed to " << modelStr[this->InterpoModel]);
+    this->PreviousInterpoModel = this->InterpoModel;
   }
+  else  // Print interpolation model
+    PRINT_VERBOSE(3, modelStr[this->InterpoModel] << " model is used for interpolation");
+
 
   // Compute the edge and planar keypoints
   IF_VERBOSE(3, Utils::Timer::Init("Keypoints extraction"));

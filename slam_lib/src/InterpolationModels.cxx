@@ -294,11 +294,11 @@ void Trajectory::SelectNbData(Model interpolationModel, const std::vector<PoseSt
   this->NbData = 0;
   if (interpolationModel == Model::LINEAR)
     this->NbData = 2;
-  else if (this->OnlyNecessary && interpolationModel >= Model::QUADRATIC_SPLINE)
+  if (this->OnlyNecessary && interpolationModel >= Model::QUADRATIC_SPLINE)
     this->NbData = 3;
-  else if (this->OnlyNecessary && interpolationModel >= Model::CUBIC_SPLINE)
+  if (this->OnlyNecessary && interpolationModel >= Model::CUBIC_SPLINE)
     this->NbData = 4;
-  else
+  if (this->NbData == 0)
     this->NbData = std::max(this->DefaultNbData, vecPose.size());
 }
 
