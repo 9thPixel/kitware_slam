@@ -315,12 +315,8 @@ void Trajectory::CreateModels(Model interpolationModel)
     // Choose rotation model
     if (this->NbData == 2)
       this->RotationPtr = std::make_unique<Slerp>(this->VecKnot);
-    else if (!(USE_BASALT == 1 && interpolationModel == Model::QUADRATIC_SPLINE))
+    else
       this->RotationPtr = std::make_unique<NSlerp>(this->VecKnot);
-    #if USE_BASALT == 1
-      if (interpolationModel == Model::QUADRATIC_SPLINE)
-        this->RotationPtr = std::make_unique<BasaltSO3Quad>(this->VecKnot);
-    #endif
 }
 
 void Trajectory::SetModel(const std::vector<PoseStamped>& vecPose, Model interpolationModel)
