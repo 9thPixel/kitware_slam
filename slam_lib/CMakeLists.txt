@@ -46,6 +46,13 @@ target_link_libraries(LidarSlam
 
 )
 
+# TODO Test library, delete it later
+add_executable(test_interpo_algo
+  test/rotation_interpo.cxx)
+
+target_link_libraries(test_interpo_algo
+  LidarSlam)
+
 target_include_directories(LidarSlam PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 install(TARGETS LidarSlam
