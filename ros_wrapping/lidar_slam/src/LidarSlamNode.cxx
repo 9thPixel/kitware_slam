@@ -377,7 +377,7 @@ void LidarSlamNode::CallbackParam(lidar_slam::LidarSlamConfig &config, uint32_t 
 {
   ROS_INFO("Parameters changed, level : %d", level);
   this->Config = config;
-  this->SetSlamConfig();
+  this->SetSlamConfig(level);
 }
 
 //------------------------------------------------------------------------------
@@ -943,9 +943,230 @@ void LidarSlamNode::InitParameterCallBack()
 }
 
 //------------------------------------------------------------------------------
-void LidarSlamNode::SetSlamConfig()
+void LidarSlamNode::SetSlamConfig(int level)
 {
-  #define SetSlamConfig(rosParam, slamParam) {this->LidarSlam.Set##slamParam(this->Config.rosParam);}
+  #define SetConfig(rosParam, slamParam) {this->LidarSlam.Set##slamParam(this->Config.rosParam); \
+                                              std::cout << #slamParam <<  " : " << this->LidarSlam.Get##slamParam() << std::endl;}
+  #define SetConfigWithCast(rosParam, slamParam, type) {type val = static_cast<type>(this->Config.rosParam);\
+                                                            this->LidarSlam.Set##slamParam(val);\
+                                                            std::cout << #slamParam <<  " : " << this->LidarSlam.Get##slamParam() << std::endl;}
+
+  if (level < 0 || level == 0)
+  {
+    SetConfig(TwoD_mode, TwoDMode);
+    SetConfig(verbosity, Verbosity);
+    SetConfig(n_threads, NbThreads);
+
+    // SetSlamParam(bool,   "slam/logging/only_keyframes", LogOnlyKeyframes)
+    auto egoMotion = static_cast<LidarSlam::EgoMotionMode>(this->Config.ego_motion);
+    this->LidarSlam.SetEgoMotion(egoMotion);
+    std::cout << "EgoMotion mode : " << static_cast<int>(this->LidarSlam.GetEgoMotion()) << std::endl;
+
+    auto undistortionMode = static_cast<LidarSlam::UndistortionMode>(this->Config.undistortion);
+    this->LidarSlam.SetUndistortion(undistortionMode);
+    std::cout << "Undistortion mode : " << static_cast<int>(this->LidarSlam.GetUndistortion()) << std::endl;
+  }
+  if (level < 0 || level == 1)
+  {
+    SetConfig(timeout, LoggingTimeout);
+    // auto storage = static_cast<LidarSlam::PointCloudStorageType>(this->Config.storage_type);
+    // this->LidarSlam.Set
+  }
+
+  // int pointCloudStorage;
+  // if (this->PrivNh.getParam("slam/logging/storage_type", pointCloudStorage))
+  // {
+  //   LidarSlam::PointCloudStorageType storage = static_cast<LidarSlam::PointCloudStorageType>(pointCloudStorage);
+  //   if (storage != LidarSlam::PointCloudStorageType::PCL_CLOUD &&
+  //       storage != LidarSlam::PointCloudStorageType::OCTREE_COMPRESSED &&
+  //       storage != LidarSlam::PointCloudStorageType::PCD_ASCII &&
+  //       storage != LidarSlam::PointCloudStorageType::PCD_BINARY &&
+  //       storage != LidarSlam::PointCloudStorageType::PCD_BINARY_COMPRESSED)
+  //   {
+  //     ROS_ERROR_STREAM("Incorrect pointcloud logging type value (" << storage << "). Setting it to 'PCL'.");
+  //     storage = LidarSlam::PointCloudStorageType::PCL_CLOUD;
+  //   }
+  //   LidarSlam.SetLoggingStorage(storage);
+  // }
+
+  // // Frame Ids
+  // this->PrivNh.param("odometry_frame", this->OdometryFrameId, this->OdometryFrameId);
+  // this->LidarSlam.SetWorldFrameId(this->OdometryFrameId);
+  // this->PrivNh.param("tracking_frame", this->TrackingFrameId, this->TrackingFrameId);
+  // this->LidarSlam.SetBaseFrameId(this->TrackingFrameId);
+
+  // // Keypoint extractors
+  // auto InitKeypointsExtractor = [this](auto& ke, const std::string& prefix)
+  // {
+  //   #define SetKeypointsExtractorParam(type, rosParam, keParam) {type val; if (this->PrivNh.getParam(rosParam, val)) ke->Set##keParam(val);}
+  //   SetKeypointsExtractorParam(int,   "slam/n_threads", NbThreads)
+  //   SetKeypointsExtractorParam(int,   prefix + "neighbors_side_nb", MinNeighNb)
+  //   SetKeypointsExtractorParam(float, prefix + "neighbors_radius", MinNeighRadius)
+  //   SetKeypointsExtractorParam(float, prefix + "min_distance_to_sensor", MinDistanceToSensor)
+  //   SetKeypointsExtractorParam(float, prefix + "min_beam_surface_angle", MinBeamSurfaceAngle)
+  //   SetKeypointsExtractorParam(float, prefix + "min_azimuth", AzimuthMin)
+  //   SetKeypointsExtractorParam(float, prefix + "max_azimuth", AzimuthMax)
+  //   SetKeypointsExtractorParam(float, prefix + "plane_sin_angle_threshold", PlaneSinAngleThreshold)
+  //   SetKeypointsExtractorParam(float, prefix + "edge_sin_angle_threshold", EdgeSinAngleThreshold)
+  //   SetKeypointsExtractorParam(float, prefix + "edge_depth_gap_threshold", EdgeDepthGapThreshold)
+  //   SetKeypointsExtractorParam(float, prefix + "edge_nb_gap_points", EdgeNbGapPoints)
+  //   SetKeypointsExtractorParam(float, prefix + "edge_intensity_gap_threshold", EdgeIntensityGapThreshold)
+  //   SetKeypointsExtractorParam(int,   prefix + "max_points", MaxPoints)
+  //   SetKeypointsExtractorParam(float, prefix + "voxel_grid_resolution", VoxelResolution)
+  //   SetKeypointsExtractorParam(float, prefix + "input_sampling_ratio", InputSamplingRatio)
+  //   #define EnableKeypoint(kType) \
+  //   { \
+  //     bool enabled = false; \
+  //     std::string name = LidarSlam::KeypointTypeNames.at(kType); \
+  //     if (this->PrivNh.getParam(prefix + "enable/"+ name, enabled)) \
+  //       this->LidarSlam.EnableKeypointType(kType, enabled); \
+  //     if (enabled) \
+  //       ROS_INFO_STREAM("Keypoint of type " + name + " enabled"); \
+  //     else \
+  //       ROS_INFO_STREAM("Keypoint of type " + name + " disabled"); \
+  //   }
+  //   EnableKeypoint(LidarSlam::Keypoint::EDGE);
+  //   EnableKeypoint(LidarSlam::Keypoint::INTENSITY_EDGE);
+  //   EnableKeypoint(LidarSlam::Keypoint::PLANE);
+  //   EnableKeypoint(LidarSlam::Keypoint::BLOB);
+  // };
+
+  // // Multi-LiDAR devices
+  // std::vector<int> deviceIds;
+  // if (this->PrivNh.getParam("slam/ke/device_ids", deviceIds))
+  // {
+  //   ROS_INFO_STREAM("Multi-LiDAR devices setup");
+  //   for (auto deviceId: deviceIds)
+  //   {
+  //     // Init Keypoint extractor with default params
+  //     auto ke = std::make_shared<LidarSlam::SpinningSensorKeypointExtractor>();
+
+  //     // Change default parameters using ROS parameter server
+  //     std::string prefix = "slam/ke/device_" + std::to_string(deviceId) + "/";
+  //     InitKeypointsExtractor(ke, prefix);
+
+  //     // Add extractor to SLAM
+  //     this->LidarSlam.SetKeyPointsExtractor(ke, deviceId);
+  //     ROS_INFO_STREAM("Adding keypoint extractor for LiDAR device " << deviceId);
+  //   }
+  // }
+  // // Single LiDAR device
+  // else
+  // {
+  //   ROS_INFO_STREAM("Single LiDAR device setup");
+  //   auto ke = std::make_shared<LidarSlam::SpinningSensorKeypointExtractor>();
+  //   InitKeypointsExtractor(ke, "slam/ke/");
+  //   this->LidarSlam.SetKeyPointsExtractor(ke);
+  // }
+
+  // // Ego motion
+  // SetSlamParam(int,    "slam/ego_motion_registration/ICP_max_iter", EgoMotionICPMaxIter)
+  // SetSlamParam(int,    "slam/ego_motion_registration/LM_max_iter", EgoMotionLMMaxIter)
+  // SetSlamParam(double, "slam/ego_motion_registration/max_neighbors_distance", EgoMotionMaxNeighborsDistance)
+  // SetSlamParam(int,    "slam/ego_motion_registration/edge_nb_neighbors", EgoMotionEdgeNbNeighbors)
+  // SetSlamParam(int,    "slam/ego_motion_registration/edge_min_nb_neighbors", EgoMotionEdgeMinNbNeighbors)
+  // SetSlamParam(double, "slam/ego_motion_registration/edge_max_model_error", EgoMotionEdgeMaxModelError)
+  // SetSlamParam(int,    "slam/ego_motion_registration/plane_nb_neighbors", EgoMotionPlaneNbNeighbors)
+  // SetSlamParam(double, "slam/ego_motion_registration/planarity_threshold", EgoMotionPlanarityThreshold)
+  // SetSlamParam(double, "slam/ego_motion_registration/plane_max_model_error", EgoMotionPlaneMaxModelError)
+  // SetSlamParam(double, "slam/ego_motion_registration/init_saturation_distance", EgoMotionInitSaturationDistance)
+  // SetSlamParam(double, "slam/ego_motion_registration/final_saturation_distance", EgoMotionFinalSaturationDistance)
+
+  // // Localization
+  // SetSlamParam(int,    "slam/localization/ICP_max_iter", LocalizationICPMaxIter)
+  // SetSlamParam(int,    "slam/localization/LM_max_iter", LocalizationLMMaxIter)
+  // SetSlamParam(double, "slam/localization/max_neighbors_distance", LocalizationMaxNeighborsDistance)
+  // SetSlamParam(int,    "slam/localization/edge_nb_neighbors", LocalizationEdgeNbNeighbors)
+  // SetSlamParam(int,    "slam/localization/edge_min_nb_neighbors", LocalizationEdgeMinNbNeighbors)
+  // SetSlamParam(double, "slam/localization/edge_max_model_error", LocalizationEdgeMaxModelError)
+  // SetSlamParam(int,    "slam/localization/plane_nb_neighbors", LocalizationPlaneNbNeighbors)
+  // SetSlamParam(double, "slam/localization/planarity_threshold", LocalizationPlanarityThreshold)
+  // SetSlamParam(double, "slam/localization/plane_max_model_error", LocalizationPlaneMaxModelError)
+  // SetSlamParam(int,    "slam/localization/blob_nb_neighbors", LocalizationBlobNbNeighbors)
+  // SetSlamParam(double, "slam/localization/init_saturation_distance", LocalizationInitSaturationDistance)
+  // SetSlamParam(double, "slam/localization/final_saturation_distance", LocalizationFinalSaturationDistance)
+
+  // // External sensors
+  // SetSlamParam(float,  "external_sensors/max_measures", SensorMaxMeasures)
+  // SetSlamParam(float,  "external_sensors/time_threshold", SensorTimeThreshold)
+  // SetSlamParam(float,  "external_sensors/landmark_detector/weight", LandmarkWeight)
+  // SetSlamParam(float,  "external_sensors/landmark_detector/saturation_distance", LandmarkSaturationDistance)
+  // SetSlamParam(bool,   "external_sensors/landmark_detector/position_only", LandmarkPositionOnly)
+  // this->PublishTags    = this->PrivNh.param("external_sensors/landmark_detector/publish_tags", false);
+  // this->LidarTimePosix = this->PrivNh.param("external_sensors/landmark_detector/lidar_is_posix", true);
+
+  // // Graph parameters
+  // SetSlamParam(std::string, "graph/g2o_file_name", G2oFileName)
+  // SetSlamParam(bool,        "graph/fix_first", FixFirstVertex)
+  // SetSlamParam(bool,        "graph/fix_last", FixLastVertex)
+  // SetSlamParam(float,       "graph/covariance_scale", CovarianceScale)
+  // SetSlamParam(int,         "graph/iterations_nb", NbGraphIterations)
+
+  // // Confidence estimators
+  // // Overlap
+  // SetSlamParam(float,  "slam/confidence/overlap/sampling_ratio", OverlapSamplingRatio)
+  // // Motion limitations (hard constraints to detect failure)
+  // std::vector<float> acc;
+  // if (this->PrivNh.getParam("slam/confidence/motion_limits/acceleration", acc) && acc.size() == 2)
+  //   this->LidarSlam.SetAccelerationLimits(Eigen::Map<const Eigen::Array2f>(acc.data()));
+  // std::vector<float> vel;
+  // if (this->PrivNh.getParam("slam/confidence/motion_limits/velocity", vel) && vel.size() == 2)
+  //   this->LidarSlam.SetVelocityLimits(Eigen::Map<const Eigen::Array2f>(vel.data()));
+  // SetSlamParam(float, "slam/confidence/motion_limits/time_window_duration", TimeWindowDuration)
+
+  // // Keyframes
+  // SetSlamParam(double, "slam/keyframes/distance_threshold", KfDistanceThreshold)
+  // SetSlamParam(double, "slam/keyframes/angle_threshold", KfAngleThreshold)
+
+  // // Maps
+  // int mapUpdateMode;
+  // if (this->PrivNh.getParam("slam/voxel_grid/update_maps", mapUpdateMode))
+  // {
+  //   LidarSlam::MappingMode mapUpdate = static_cast<LidarSlam::MappingMode>(mapUpdateMode);
+  //   if (mapUpdate != LidarSlam::MappingMode::NONE &&
+  //       mapUpdate != LidarSlam::MappingMode::ADD_KPTS_TO_FIXED_MAP &&
+  //       mapUpdate != LidarSlam::MappingMode::UPDATE)
+  //   {
+  //     ROS_ERROR_STREAM("Invalid map update mode (" << mapUpdateMode << "). Setting it to 'UPDATE'.");
+  //     mapUpdate = LidarSlam::MappingMode::UPDATE;
+  //   }
+  //   this->LidarSlam.SetMapUpdate(mapUpdate);
+  // }
+  // double size;
+  // if (this->PrivNh.getParam("slam/voxel_grid/leaf_size/edges", size) && this->LidarSlam.KeypointTypeEnabled(LidarSlam::EDGE))
+  //   this->LidarSlam.SetVoxelGridLeafSize(LidarSlam::EDGE, size);
+  // if (this->PrivNh.getParam("slam/voxel_grid/leaf_size/intensity_edges", size) && this->LidarSlam.KeypointTypeEnabled(LidarSlam::INTENSITY_EDGE))
+  //   this->LidarSlam.SetVoxelGridLeafSize(LidarSlam::INTENSITY_EDGE, size);
+  // if (this->PrivNh.getParam("slam/voxel_grid/leaf_size/planes", size) && this->LidarSlam.KeypointTypeEnabled(LidarSlam::PLANE))
+  //   this->LidarSlam.SetVoxelGridLeafSize(LidarSlam::PLANE, size);
+  // if (this->PrivNh.getParam("slam/voxel_grid/leaf_size/blobs", size) && this->LidarSlam.KeypointTypeEnabled(LidarSlam::BLOB))
+  //   this->LidarSlam.SetVoxelGridLeafSize(LidarSlam::BLOB, size);
+  // SetSlamParam(double, "slam/voxel_grid/resolution", VoxelGridResolution)
+  // SetSlamParam(int,    "slam/voxel_grid/size", VoxelGridSize)
+  // SetSlamParam(double, "slam/voxel_grid/decaying_threshold", VoxelGridDecayingThreshold)
+  // SetSlamParam(int,    "slam/voxel_grid/min_frames_per_voxel", VoxelGridMinFramesPerVoxel)
+  // for (auto k : LidarSlam::KeypointTypes)
+  // {
+  //   if (!this->LidarSlam.KeypointTypeEnabled(k))
+  //     continue;
+  //   int samplingMode;
+  //   if (this->PrivNh.getParam("slam/voxel_grid/sampling_mode/" + LidarSlam::KeypointTypeNames.at(k), samplingMode))
+  //   {
+  //     LidarSlam::SamplingMode sampling = static_cast<LidarSlam::SamplingMode>(samplingMode);
+  //     if (sampling != LidarSlam::SamplingMode::FIRST &&
+  //         sampling != LidarSlam::SamplingMode::LAST &&
+  //         sampling != LidarSlam::SamplingMode::MAX_INTENSITY &&
+  //         sampling != LidarSlam::SamplingMode::CENTER_POINT &&
+  //         sampling != LidarSlam::SamplingMode::CENTROID)
+  //     {
+  //       ROS_ERROR_STREAM("Invalid sampling mode (" << samplingMode << ") for "
+  //                                                  << LidarSlam::Utils::Plural(LidarSlam::KeypointTypeNames.at(k))
+  //                                                  << ". Setting it to 'MAX_INTENSITY'.");
+  //       sampling = LidarSlam::SamplingMode::MAX_INTENSITY;
+  //     }
+  //     this->LidarSlam.SetVoxelGridSamplingMode(k, sampling);
+  //   }
+  // }
 }
 
 //------------------------------------------------------------------------------
@@ -953,9 +1174,9 @@ void LidarSlamNode::SetSlamParameters()
 {
   #define SetSlamParam(type, rosParam, slamParam) { type val; if (this->PrivNh.getParam(rosParam, val)) this->LidarSlam.Set##slamParam(val); }
   // General
-  SetSlamParam(bool,   "slam/2d_mode", TwoDMode)
-  SetSlamParam(int,    "slam/verbosity", Verbosity)
-  SetSlamParam(int,    "slam/n_threads", NbThreads)
+  // SetSlamParam(bool,   "slam/2d_mode", TwoDMode)
+  // SetSlamParam(int,    "slam/verbosity", Verbosity)
+  // SetSlamParam(int,    "slam/n_threads", NbThreads)
   SetSlamParam(double, "slam/logging/timeout", LoggingTimeout)
   SetSlamParam(bool,   "slam/logging/only_keyframes", LogOnlyKeyframes)
   int egoMotionMode;

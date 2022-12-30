@@ -161,7 +161,7 @@ public:
   /*!
    * @brief Get and fill Slam parameters from ROS parameters server.
    */
-  void SetSlamConfig();
+  void SetSlamConfig(int level);
 
 protected:
 
