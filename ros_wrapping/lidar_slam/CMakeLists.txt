@@ -28,6 +28,8 @@ find_package(catkin REQUIRED COMPONENTS
   nav_msgs
   message_generation
   apriltag_ros
+  #add dynamic reconfigure api
+  dynamic_reconfigure
 )
 
 # Find catkin macros and libraries
@@ -54,6 +56,10 @@ add_service_files(
 generate_messages(
   DEPENDENCIES
   std_msgs
+)
+
+generate_dynamic_reconfigure_options(
+  cfg/LidarSlam.cfg
 )
 
 ###################################
@@ -114,6 +120,8 @@ target_include_directories(lidar_slam_node PUBLIC
   ${catkin_INCLUDE_DIRS}
   ${optional_INCLUDE_DIRS}
 )
+
+add_dependencies(lidar_slam_node ${PROJECT_NAME}_gencfg)
 
 # Add aggregation node
 add_executable(aggregation_node

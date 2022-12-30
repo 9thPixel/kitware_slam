@@ -33,6 +33,8 @@
 #include <apriltag_ros/AprilTagDetectionArray.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/CameraInfo.h>
+#include <dynamic_reconfigure/server.h>
+#include <lidar_slam/LidarSlamConfig.h>
 
 // SLAM
 #include <LidarSlam/Slam.h>
@@ -50,7 +52,8 @@ public:
    * @param[in] nh      Public ROS node handle, used to init publisher/subscribers.
    * @param[in] priv_nh Private ROS node handle, used to access parameters.
    */
-  LidarSlamNode(ros::NodeHandle& nh, ros::NodeHandle& priv_nh);
+  LidarSlamNode(ros::NodeHandle& nh, ros::NodeHandle& priv_nh,
+    dynamic_reconfigure::Server<lidar_slam::LidarSlamConfig>& param_server);
 
   //----------------------------------------------------------------------------
   /*!
@@ -98,6 +101,12 @@ public:
 
   //----------------------------------------------------------------------------
   /*!
+   *  @brief Dynamic_reconfigure callback for changing parameters
+   */
+  void CallbackParam(lidar_slam::LidarSlamConfig &config, uint32_t level);
+
+  //----------------------------------------------------------------------------
+  /*!
    * @brief     Optional GPS odom callback, accumulating poses.
    * @param[in] msg Converted GPS pose with its associated covariance.
    */
@@ -141,6 +150,18 @@ public:
    * @param[in] msg The command message.
    */
   void SlamCommandCallback(const lidar_slam::SlamCommand& msg);
+
+  //----------------------------------------------------------------------------
+  /**!
+   * @brief Init CallBack for dynamic parameters
+   */
+  void InitParameterCallBack();
+
+  //----------------------------------------------------------------------------
+  /*!
+   * @brief Get and fill Slam parameters from ROS parameters server.
+   */
+  void SetSlamConfig();
 
 protected:
 
@@ -209,6 +230,11 @@ protected:
 
   // ROS node handles, subscribers and publishers
   ros::NodeHandle &Nh, &PrivNh;
+  // ROS server handling SLAM parameters
+  dynamic_reconfigure::Server<lidar_slam::LidarSlamConfig> &ParamServer;
+  // SLAM configuration
+  lidar_slam::LidarSlamConfig Config;
+
   std::vector<ros::Subscriber> CloudSubs;
   ros::Subscriber SlamCommandSub, SetPoseSub;
   std::unordered_map<int, ros::Publisher> Publishers;

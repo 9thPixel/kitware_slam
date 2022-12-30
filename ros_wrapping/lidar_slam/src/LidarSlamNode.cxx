@@ -66,15 +66,20 @@ enum Output
 //==============================================================================
 
 //------------------------------------------------------------------------------
-LidarSlamNode::LidarSlamNode(ros::NodeHandle& nh, ros::NodeHandle& priv_nh)
+LidarSlamNode::LidarSlamNode(ros::NodeHandle& nh, ros::NodeHandle& priv_nh,
+                             dynamic_reconfigure::Server<lidar_slam::LidarSlamConfig> &param_server)
   : Nh(nh)
   , PrivNh(priv_nh)
   , TfListener(TfBuffer)
+  , ParamServer(param_server)
 {
   // ***************************************************************************
-  // Init SLAM state
+
+  // Init Callback for parameter server
+  this->InitParameterCallBack();
   // Get SLAM params
   this->SetSlamParameters();
+  // Init SLAM state
   this->SetSlamInitialState();
 
   // Use GPS data for GPS/SLAM calibration or Pose Graph Optimization.
@@ -365,6 +370,14 @@ void LidarSlamNode::GpsCallback(const nav_msgs::Odometry& gpsMsg)
   }
   else
     ROS_WARN_STREAM("The transform between the GPS and the tracking frame was not found -> GPS info ignored");
+}
+
+//------------------------------------------------------------------------------
+void LidarSlamNode::CallbackParam(lidar_slam::LidarSlamConfig &config, uint32_t level)
+{
+  ROS_INFO("Parameters changed, level : %d", level);
+  this->Config = config;
+  this->SetSlamConfig();
 }
 
 //------------------------------------------------------------------------------
@@ -919,6 +932,20 @@ void LidarSlamNode::PublishOutput()
     confidenceMsg.comply_motion_limits = this->LidarSlam.GetComplyMotionLimits();
     this->Publishers[CONFIDENCE].publish(confidenceMsg);
   }
+}
+
+//------------------------------------------------------------------------------
+void LidarSlamNode::InitParameterCallBack()
+{
+  dynamic_reconfigure::Server<lidar_slam::LidarSlamConfig>::CallbackType callbackFunc;
+  callbackFunc = boost::bind(&LidarSlamNode::CallbackParam, this, _1, _2);
+  ParamServer.setCallback(callbackFunc);
+}
+
+//------------------------------------------------------------------------------
+void LidarSlamNode::SetSlamConfig()
+{
+  #define SetSlamConfig(rosParam, slamParam) {this->LidarSlam.Set##slamParam(this->Config.rosParam);}
 }
 
 //------------------------------------------------------------------------------
