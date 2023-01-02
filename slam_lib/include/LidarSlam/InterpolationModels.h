@@ -137,8 +137,6 @@ class NSlerp : public IModel
   private:
     std::vector<double> VecTime;
     std::vector<Eigen::Quaterniond> VecRot;
-    // Binary search of the closest points to time t over VecTime
-    std::pair<size_t, size_t> binarySearch(const double t) const;
 };
 
 // ---------------------------------------------------------------------------
@@ -201,6 +199,9 @@ class NSlerp : public IModel
 // ---------------------------------------------------------------------------
 //   Interpolation utilities
 // ---------------------------------------------------------------------------
+
+// Binary search of the closest points to time t over VecTime
+std::pair<size_t, size_t> BinarySearch(const double t, const std::vector<double>& vecTime);
 
 /**
  * @brief Compute a one-time interpolation for transformation at time t

@@ -208,7 +208,7 @@ Eigen::Isometry3d NSlerp::operator()(double t) const
 
   // Find the 2 closest rotation to the time t
   if (this->VecTime.size() > 2)
-    pairIndex = binarySearch(t);
+    pairIndex = BinarySearch(t, this->VecTime);
 
   Eigen::Quaterniond rot;
   // Special case, the time is in our dataset
@@ -247,30 +247,6 @@ void NSlerp::RecomputeModel(const std::vector<PoseStamped> &vecPose)
     this->VecTime.push_back(vecPose[0].Time + 1.);
     this->VecRot.push_back(Eigen::Quaterniond(vecPose[0].Pose.linear()));
   }
-}
-
-// Search the closest inferior value and the superior value of t
-// Complexity of log2(N)
-std::pair<size_t, size_t> NSlerp::binarySearch(const double t) const
-{
-  size_t low = 0;
-  size_t high = this->VecTime.size() - 1;
-  if (t < this->VecTime[low])
-    return std::pair<size_t, size_t>(low, low + 1);
-  else if (t > this->VecTime[high])
-    return std::pair<size_t, size_t>(high - 1, high);
-  while (high - low > 1)
-  {
-    size_t middle = (high + low) / 2;
-    // Compare if it is equal with respect to a precision
-    if (std::abs(t - this->VecTime[middle]) < 1e-6)
-      return (std::pair<size_t, size_t>(middle, middle));
-    else if (t < this->VecTime[middle])
-      high = middle;
-    else
-      low = middle;
-  }
-  return (std::pair<size_t, size_t>(low, high));
 }
 
 // ---------------------------------------------------------------------------
@@ -393,6 +369,30 @@ void  Trajectory::Reset(void)
 // ---------------------------------------------------------------------------
 //   Interpolation utilities
 // ---------------------------------------------------------------------------
+
+// Search the closest inferior value and the superior value of t
+// Complexity of log2(N)
+std::pair<size_t, size_t> BinarySearch(const double t, const std::vector<double> &vecTime)
+{
+  size_t low = 0;
+  size_t high = vecTime.size() - 1;
+  if (t < vecTime[low])
+    return std::pair<size_t, size_t>(low, low + 1);
+  else if (t > vecTime[high])
+    return std::pair<size_t, size_t>(high - 1, high);
+  while (high - low > 1)
+  {
+    size_t middle = (high + low) / 2;
+    // Compare if it is equal with respect to a precision
+    if (std::abs(t - vecTime[middle]) < 1e-6)
+      return (std::pair<size_t, size_t>(middle, middle));
+    else if (t < vecTime[middle])
+      high = middle;
+    else
+      low = middle;
+  }
+  return (std::pair<size_t, size_t>(low, high));
+}
 
 Eigen::Isometry3d ComputeTransfo(const std::vector<PoseStamped>& vecPose, double time,
                                        Model model, bool onlyNecessary)
