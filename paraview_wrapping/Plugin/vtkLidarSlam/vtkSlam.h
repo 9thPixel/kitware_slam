@@ -226,6 +226,7 @@ public:
   // ---------------------------------------------------------------------------
   //   Loop closure parameters
   // ---------------------------------------------------------------------------
+  void DetectLoop();
 
   virtual int GetLoopDetector();
   virtual void SetLoopDetector(int detector);

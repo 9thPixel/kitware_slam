@@ -1777,6 +1777,15 @@
       </PropertyGroup>
 
       <!-- ============================ Loop Closure ============================ -->
+      <Property name="Detect Loop"
+                command="DetectLoop">
+        <Documentation>
+          Detect automatically loop closure. For testing scan context.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator" mode="visibility" property="Loop closure detector" value="2" />
+        </Hints>
+      </Property>
 
       <IntVectorProperty name="Loop closure detector"
                          command="SetLoopDetector"
@@ -1949,6 +1958,7 @@
       </IntVectorProperty>
 
       <PropertyGroup label="Loop closure parameters">
+        <Property name="Detect Loop" />
         <Property name="Loop closure detector" />
         <Property name="Query frame index" />
         <Property name="Query map start range" />

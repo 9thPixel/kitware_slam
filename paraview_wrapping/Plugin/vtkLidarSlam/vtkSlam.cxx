@@ -181,6 +181,14 @@ void vtkSlam::OptimizeGraph()
   this->ParametersModificationTime.Modified();
 }
 
+void vtkSlam::DetectLoop()
+{
+  this->SlamAlgo->DetectLoopClosure();
+  std::cout << " vtkslam detect loop sortie\n";
+  this->ParametersModificationTime.Modified();
+  std::cout << " vtkslam detect loop sortie 2\n";
+}
+
 //-----------------------------------------------------------------------------
 void vtkSlam::EnablePGOConstraintLoopClosure(bool enabled)
 {

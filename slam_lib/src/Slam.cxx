@@ -1643,6 +1643,65 @@ std::vector<LidarState> Slam::GetLastStates(double freq)
 //   Loop Closure usage
 //==============================================================================
 
+bool Slam::DetectLoopClosure()
+{
+  auto itQueryState = this->LogStates.begin();
+  auto itRevisitedState = itQueryState;
+  bool detectionValid = this->DetectLoopClosureIndices(itQueryState, itRevisitedState);
+  std::cout<<" debug in DetectLoopClosure\n";
+  std::cout<<" logstate size = "<<this->LogStates.size()<<" begin = "<<this->LogStates.begin()->Index<<" back = "<<this->LogStates.back().Index<<"\n";
+  // Debug test: save point cloud (to be removed)
+  std::ofstream fout_query_frame("/home/tfu/Documents/3DTarget/test_scancontext/query_frame_" + std::to_string(itQueryState->Index) + ".csv");
+  std::ofstream fout_revisited_frame("/home/tfu/Documents/3DTarget/test_scancontext/revisit_frame_" + std::to_string(itRevisitedState->Index) + ".csv");
+  for (auto k : this->UsableKeypoints)
+  {
+    PointCloud pointCloud_query;
+    pcl::transformPointCloud(*itQueryState->Keypoints[k]->GetCloud(), pointCloud_query, itQueryState->Isometry.matrix().cast<float>());
+    for (const auto pt : pointCloud_query)
+      fout_query_frame << pt.x << "," << pt.y << "," << pt.z << "\n";
+
+    PointCloud pointCloud_revisited;
+    pcl::transformPointCloud(*itRevisitedState->Keypoints[k]->GetCloud(), pointCloud_revisited, itRevisitedState->Isometry.matrix().cast<float>());
+    for (const auto pt : pointCloud_revisited)
+      fout_revisited_frame << pt.x << "," << pt.y << "," << pt.z << "\n";
+  }
+  fout_query_frame.close();
+  fout_revisited_frame.close();
+
+  return detectionValid;
+  // // Save keypoints for scan context detector
+  // PointCloud::Ptr undistortedKeypoints(new PointCloud);
+  // pcl::PointCloud<PointType>::Ptr thisRawCloudKeyFrame(new pcl::PointCloud<PointType>);
+  // for (auto& state : this->LogStates)
+  // {
+  //   std::cout<<" frame id "<<state.Index<<"\n";
+
+  //   undistortedKeypoints.reset(new PointCloud);
+  //   for (auto k : this->UsableKeypoints)
+  //   {
+  //     std::cout<<" k = "<<k<<"\n";
+  //     PointCloud::Ptr keypoints = state.Keypoints[k]->GetCloud();
+  //     std::cout<<" keypoint size = "<<keypoints->size()<<"\n";
+  //     *undistortedKeypoints += *keypoints;
+  //   }
+  //   std::cout<<"created undistortedKeypoints size = "<<undistortedKeypoints->size()<<"\n";
+  //   thisRawCloudKeyFrame.reset(new pcl::PointCloud<PointType>);
+  //   pcl::copyPointCloud(*undistortedKeypoints, *thisRawCloudKeyFrame);
+  //   std::cout<<" pcl copy pointcloud\n";
+  //   scManager.makeAndSaveScancontextAndKeys(*thisRawCloudKeyFrame);
+  //   std::cout<<" scmanager make and save scan context and keys\n";
+  // }
+  // std::cout<<" debug boucle for finished\n";
+  // int detectedRevisitFrameIdx = -1;
+  // auto detectResult = scManager.detectLoopClosureID();
+  // std::cout<<" debug sc manager detection finished\n";
+  // detectedRevisitFrameIdx = detectResult.first;
+
+  // return true;
+
+
+}
+
 //-----------------------------------------------------------------------------
 bool Slam::DetectLoopClosureIndices(std::list<LidarState>::iterator& itQueryState, std::list<LidarState>::iterator& itRevisitedState)
 {
@@ -1729,7 +1788,7 @@ bool Slam::DetectLoopClosureIndices(std::list<LidarState>::iterator& itQueryStat
       break;
     }
   }
-
+  std::cout<<" sortie switch in DetectLoopClosureIndices\n";
   return detectionValid;
 }
 
