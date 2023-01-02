@@ -84,6 +84,8 @@
 #include "LidarSlam/ExternalSensorManagers.h"
 #include "LidarSlam/State.h"
 
+#include "ScanContext/ScanContext.h"
+
 #include <Eigen/Geometry>
 
 #include <list>

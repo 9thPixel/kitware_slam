@@ -37,6 +37,7 @@ add_library(LidarSlam
   src/Utilities.cxx
   src/VoxelGrid.cxx
   src/InterpolationModels.cxx
+  src/ScanContext.cxx
   ${SLAM_g2o_sources}
 )
 

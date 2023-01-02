@@ -80,6 +80,9 @@
 #include "LidarSlam/ConfidenceEstimators.h"
 #include "LidarSlam/InterpolationModels.h"
 
+// SCANCONTEXT
+#include "ScanContext/utility.h"
+
 // CERES
 #include <ceres/solver.h>
 // PCL
