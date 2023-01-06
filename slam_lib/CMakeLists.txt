@@ -40,6 +40,10 @@ endif()
 
 target_include_directories(LidarSlam PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Tags LidarSlam headers as PUBLIC_HEADER to be installed
+file(GLOB lidar_slam_headers "${CMAKE_CURRENT_SOURCE_DIR}/include/LidarSlam/*")
+set_target_properties(LidarSlam PROPERTIES PUBLIC_HEADER "${lidar_slam_headers}")
+
 # Prefer rpath over runpath to bypass LD_LIBRARY_PATH at runtime (which can be set by ROS notably)
 # See https://stackoverflow.com/questions/47117443/dynamic-linking-with-rpath-not-working-under-ubuntu-17-10/47243544#47243544
 # and https://stackoverflow.com/questions/52018092/how-to-set-rpath-and-runpath-with-gcc-ld

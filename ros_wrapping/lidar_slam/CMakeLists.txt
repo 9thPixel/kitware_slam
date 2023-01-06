@@ -30,6 +30,8 @@ find_package(catkin REQUIRED COMPONENTS
   apriltag_ros
 )
 
+find_library(LidarSlam LidarSlam HINTS ${SUPERBUILD_INSTALL_DIR}/lib/)
+
 ################################################
 ## Declare ROS messages, services and actions ##
 ################################################
@@ -64,6 +66,7 @@ generate_messages(
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
+  INCLUDE_DIRS ${SUPERBUILD_INSTALL_DIR}/include/
   LIBRARIES LidarSlam
   CATKIN_DEPENDS roscpp tf2_ros pcl_ros pcl_conversions std_msgs geometry_msgs sensor_msgs nav_msgs message_runtime apriltag_ros
 )
@@ -72,11 +75,9 @@ catkin_package(
 ## Build ##
 ###########
 
-# Build LidarSlam lib which lies in parent directory
-add_subdirectory(../.. ${CMAKE_BINARY_DIR}/slam)
-
 # Specify additional locations of header files
 include_directories(${catkin_INCLUDE_DIRS})
+include_directories(${SUPERBUILD_INSTALL_DIR}/include/)
 
 # Add LiDAR SLAM ROS node
 add_executable(lidar_slam_node
