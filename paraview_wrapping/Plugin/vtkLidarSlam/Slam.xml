@@ -1912,6 +1912,32 @@
         </Hints>
       </DoubleVectorProperty>
 
+      <DoubleVectorProperty name="Detection cycle"
+                            command="SetSCDetectionCycle"
+                            number_of_elements="1"
+                            default_values="5."
+                            panel_visibility="advanced">
+        <Documentation>
+          Cycle time in second for automatic detection of loop closure by scan context
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator" mode="visibility" property="Loop closure detector" value="3" />
+        </Hints>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="Detection rest time"
+                            command="SetSCRestTime"
+                            number_of_elements="1"
+                            default_values="10."
+                            panel_visibility="advanced">
+        <Documentation>
+          Rest time for detection after the last pose graph optimization
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator" mode="visibility" property="Loop closure detector" value="3" />
+        </Hints>
+      </DoubleVectorProperty>
+
       <IntVectorProperty name="Advanced settings"
                          number_of_elements="1"
                          default_values="0"
@@ -1933,6 +1959,8 @@
         <Property name="Loop gap length" />
         <Property name="Loop sample step" />
         <Property name="Loop evaluation threshold" />
+        <Property name="Detection cycle" />
+        <Property name="Detection rest time" />
         <Property name="Advanced settings" />
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator" mode="visibility" property="Use loop closure constraint" value="1" />

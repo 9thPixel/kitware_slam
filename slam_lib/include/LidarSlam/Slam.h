@@ -712,6 +712,13 @@ public:
   GetStructParamsMacro(Loop, EvaluationThreshold, double)
   SetStructParamsMacro(Loop, EvaluationThreshold, double)
 
+  // Scan context detection parameters
+  GetMacro(SCDetectionCycle, double)
+  SetMacro(SCDetectionCycle, double)
+
+  GetMacro(SCRestTime, double)
+  SetMacro(SCRestTime, double)
+
   // Get/Set Loop Closure registration parameters
   GetStructParamsMacro(Loop, EnableOffset, bool)
   SetStructParamsMacro(Loop, EnableOffset, bool)
@@ -950,6 +957,12 @@ private:
 
   // Detect automatically loop closure with scan context method
   std::shared_ptr<SCManager> ScanContextManager;
+  double LastSCDetectionTime = 0.;
+  double LastPGOTime = 0.;
+  // Cycle time for automatic detection of loop closure by scan context
+  double SCDetectionCycle = 5;
+  // Rest time for detection after the last pose graph optimization
+  double SCRestTime = 10;
 
   // ---------------------------------------------------------------------------
   //   Optimization data

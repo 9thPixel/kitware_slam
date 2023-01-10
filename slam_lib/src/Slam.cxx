@@ -449,6 +449,10 @@ void Slam::AddFrames(const std::vector<PointCloud::Ptr>& frames)
     {
       IF_VERBOSE(3, Utils::Timer::Init("Scan context update"));
       this->UpdateScanContextDescriptor(this->LogStates.back());
+
+      if (this->LogStates.back().Time - this->LastSCDetectionTime >= this->SCDetectionCycle &&
+          this->LogStates.back().Time - this->LastPGOTime >= SCRestTime)
+        this->OptimizeGraph();
       IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Scan context update"));
     }
 
@@ -777,6 +781,8 @@ bool Slam::OptimizeGraph()
 
   // The last pose has to be updated with new optimized pose
   this->SetWorldTransformFromGuess(this->LogStates.back().Isometry);
+
+  this->LastPGOTime = this->LastSCDetectionTime;
 
   IF_VERBOSE(1, Utils::Timer::StopAndDisplay("Pose graph optimization"));
 
@@ -1692,6 +1698,36 @@ bool Slam::DetectLoopClosureIndices(std::list<LidarState>::iterator& itQueryStat
       }
       break;
     }
+    case LoopClosureDetector::SCAN_CONTEXT:
+    {
+      // Automatic detection of loop closure by scan context
+      // It detects automatically a revisited frame idx for the current frame
+      int detectedSCRevisitedFrameIdx = -1;
+      auto detectResult = this->ScanContextManager->detectLoopClosureID();
+
+    itQueryState = std::prev(this->LogStates.end());
+    if (this->LogOnlyKeyframes && !itQueryState->IsKeyFrame)
+      --itQueryState;
+    this->LastSCDetectionTime = itQueryState->Time;
+
+      detectedSCRevisitedFrameIdx = detectResult.first;
+      if (detectedSCRevisitedFrameIdx == -1)
+      {
+        PRINT_WARNING("Loop closure is not detected by scan context.")
+        return false;
+      }
+
+      itRevisitedState = this->LogStates.begin();
+      std::advance(itRevisitedState, detectedSCRevisitedFrameIdx);
+      this->LoopParams.QueryIdx     = itQueryState->Index;
+      this->LoopParams.RevisitedIdx = itRevisitedState->Index;
+
+      PRINT_VERBOSE(3, "Loop closure is detected by scan context detector. The relevant frame indices are:\n"
+                    << " Query frame #" << this->LoopParams.QueryIdx << " Revisited frame #" << this->LoopParams.RevisitedIdx);
+      // To do : add check function
+      detectionValid = true;
+      break;
+    }
   }
 
   return detectionValid;
@@ -1985,7 +2021,10 @@ void Slam::UpdateScanContextDescriptor(const LidarState& state)
 {
   // Init scan context detector
   if (!this->ScanContextManager)
+  {
     this->ScanContextManager = std::make_shared<SCManager>();
+    this->LastSCDetectionTime = this->LogStates.front().Time;
+  }
 
   if (this->LogOnlyKeyframes && !state.IsKeyFrame)
     return;

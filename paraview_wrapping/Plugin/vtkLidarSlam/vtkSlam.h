@@ -258,6 +258,13 @@ public:
   vtkCustomGetMacro(LoopEvaluationThreshold, double)
   vtkCustomSetMacro(LoopEvaluationThreshold, double)
 
+  // Scan context detection parameters
+  vtkCustomGetMacro(SCDetectionCycle, double)
+  vtkCustomSetMacro(SCDetectionCycle, double)
+
+  vtkCustomGetMacro(SCRestTime, double)
+  vtkCustomSetMacro(SCRestTime, double)
+
   // Get/Set Loop closure registration parameters
   vtkCustomGetMacro(LoopEnableOffset, bool)
   vtkCustomSetMacro(LoopEnableOffset, bool)
