@@ -267,6 +267,7 @@ slam:
                                  # 0 disables motion limits check.
                                  # WARNING : the logging time out must be set greater than this value.
 
+  #* UNTIL HERE CONFIG DOWN
   # Keypoints maps, saved as downsampled voxel grids
   voxel_grid:
     # How to update the maps:

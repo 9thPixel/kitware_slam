@@ -951,9 +951,10 @@ void LidarSlamNode::SetSlamConfig(int level)
                                                             this->LidarSlam.Set##slamParam(val);\
                                                             std::cout << #slamParam <<  " : " << this->LidarSlam.Get##slamParam() << std::endl;}
 
+  // Global parameters
   if (level < 0 || level == 0)
   {
-    SetConfig(TwoD_mode, TwoDMode);
+    SetConfig(twoD_mode, TwoDMode);
     SetConfig(verbosity, Verbosity);
     SetConfig(n_threads, NbThreads);
 
@@ -966,28 +967,65 @@ void LidarSlamNode::SetSlamConfig(int level)
     this->LidarSlam.SetUndistortion(undistortionMode);
     std::cout << "Undistortion mode : " << static_cast<int>(this->LidarSlam.GetUndistortion()) << std::endl;
   }
+  // Logging parameters
   if (level < 0 || level == 1)
   {
-    SetConfig(timeout, LoggingTimeout);
-    // auto storage = static_cast<LidarSlam::PointCloudStorageType>(this->Config.storage_type);
-    // this->LidarSlam.Set
+    SetConfig(log__timeout, LoggingTimeout);
+    SetConfigWithCast(log__storage_type, LoggingStorage, LidarSlam::PointCloudStorageType);
+    SetConfig(log__only_keyframes, LogOnlyKeyframes);
+  }
+  // Ego-Motion registration parameters
+  if (level < 0 || level == 2)
+  {
+    SetConfig(em__max_neighbors_distance, EgoMotionMaxNeighborsDistance);
+    SetConfig(em__edge_nb_neighbors, EgoMotionEdgeNbNeighbors);
+    SetConfig(em__edge_min_nb_neighbors, EgoMotionEdgeMinNbNeighbors);
+    SetConfig(em__edge_max_model_error, EgoMotionEdgeMaxModelError);
+    SetConfig(em__plane_nb_neighbors, EgoMotionPlaneNbNeighbors);
+    SetConfig(em__planarity_threshold, EgoMotionPlanarityThreshold);
+    SetConfig(em__plane_max_model_error, EgoMotionPlaneMaxModelError);
+    SetConfig(em__ICP_max_iter, EgoMotionICPMaxIter);
+    SetConfig(em__LM_max_iter, EgoMotionLMMaxIter);
+    SetConfig(em__init_saturation_distance, EgoMotionInitSaturationDistance);
+    SetConfig(em__final_saturation_distance, EgoMotionFinalSaturationDistance);
   }
 
-  // int pointCloudStorage;
-  // if (this->PrivNh.getParam("slam/logging/storage_type", pointCloudStorage))
-  // {
-  //   LidarSlam::PointCloudStorageType storage = static_cast<LidarSlam::PointCloudStorageType>(pointCloudStorage);
-  //   if (storage != LidarSlam::PointCloudStorageType::PCL_CLOUD &&
-  //       storage != LidarSlam::PointCloudStorageType::OCTREE_COMPRESSED &&
-  //       storage != LidarSlam::PointCloudStorageType::PCD_ASCII &&
-  //       storage != LidarSlam::PointCloudStorageType::PCD_BINARY &&
-  //       storage != LidarSlam::PointCloudStorageType::PCD_BINARY_COMPRESSED)
-  //   {
-  //     ROS_ERROR_STREAM("Incorrect pointcloud logging type value (" << storage << "). Setting it to 'PCL'.");
-  //     storage = LidarSlam::PointCloudStorageType::PCL_CLOUD;
-  //   }
-  //   LidarSlam.SetLoggingStorage(storage);
-  // }
+  // Localization
+  if (level < 0 || level == 3)
+  {
+    SetConfig(loc__max_neighbors_distance, LocalizationMaxNeighborsDistance);
+    SetConfig(loc__edge_nb_neighbors, LocalizationEdgeNbNeighbors);
+    SetConfig(loc__edge_min_nb_neighbors, LocalizationEdgeMinNbNeighbors);
+    SetConfig(loc__edge_max_model_error, LocalizationEdgeMaxModelError);
+    SetConfig(loc__plane_nb_neighbors, LocalizationPlaneNbNeighbors);
+    SetConfig(loc__planarity_threshold, LocalizationPlanarityThreshold);
+    SetConfig(loc__plane_max_model_error, LocalizationPlaneMaxModelError);
+    SetConfig(loc__blob_nb_neighbors, LocalizationBlobNbNeighbors);
+    SetConfig(loc__ICP_max_iter, LocalizationICPMaxIter);
+    SetConfig(loc__LM_max_iter, LocalizationLMMaxIter);
+    SetConfig(loc__init_saturation_distance, LocalizationInitSaturationDistance);
+    SetConfig(loc__final_saturation_distance, LocalizationFinalSaturationDistance);
+  }
+
+  //Keyframes
+  if (level < 0 || level == 4)
+  {
+    SetConfig(keyf__distance_threshold, KfDistanceThreshold);
+    SetConfig(keyf__angle_threshold, KfAngleThreshold);
+  }
+
+  // Confidence estimators
+  if (level < 0 || level == 5)
+  {
+    SetConfig(overl__sampling_ratio, OverlapSamplingRatio);
+    std::vector<float> acceleration_array = {(float)this->Config.ml__acceleration_min, (float)this->Config.ml__acceleration_max}; 
+    this->LidarSlam.SetAccelerationLimits(Eigen::Map<const Eigen::Array2f>(acceleration_array.data()));
+    std::vector<float> velocity_array     = {(float)this->Config.ml__velocity_min, (float)this->Config.ml__velocity_max}; 
+    this->LidarSlam.SetVelocityLimits(Eigen::Map<const Eigen::Array2f>(velocity_array.data()));
+    std::cout << "acceleration_array : " << this->LidarSlam.GetAccelerationLimits().transpose() << std::endl;
+    std::cout << "velocity_array : " << this->LidarSlam.GetVelocityLimits().transpose() << std::endl;
+    SetConfig(ml__time_window_duration, TimeWindowDuration);
+  }
 
   // // Frame Ids
   // this->PrivNh.param("odometry_frame", this->OdometryFrameId, this->OdometryFrameId);
@@ -1177,8 +1215,8 @@ void LidarSlamNode::SetSlamParameters()
   // SetSlamParam(bool,   "slam/2d_mode", TwoDMode)
   // SetSlamParam(int,    "slam/verbosity", Verbosity)
   // SetSlamParam(int,    "slam/n_threads", NbThreads)
-  SetSlamParam(double, "slam/logging/timeout", LoggingTimeout)
-  SetSlamParam(bool,   "slam/logging/only_keyframes", LogOnlyKeyframes)
+  // SetSlamParam(double, "slam/logging/timeout", LoggingTimeout)
+  // SetSlamParam(bool,   "slam/logging/only_keyframes", LogOnlyKeyframes)
   int egoMotionMode;
   if (this->PrivNh.getParam("slam/ego_motion", egoMotionMode))
   {
