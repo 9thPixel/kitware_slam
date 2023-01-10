@@ -167,9 +167,10 @@ namespace LoopClosure
 {
 struct Parameters
 {
-  // Boolean to decide if the closure information can be provided externally by various sources (user or camera or landmark...)
-  // If true, users need to indicate the query frame index and the revisited frame index for loop closure.
-  bool ExtDetect = false;
+  // Which method to use to detect loop closure
+  // Manual detector: users need to indicate the query frame index and the revisited frame index for loop closure.
+  // Other methods will be added in the future
+  LoopClosureDetector Detector = LoopClosureDetector::NONE;
 
   // Frame indices to indicate where the loop closure is formed.
   unsigned int QueryIdx = 0;
@@ -659,8 +660,8 @@ public:
   // ---------------------------------------------------------------------------
   //   Loop Closure parameters
   // ---------------------------------------------------------------------------
-  GetStructParamsMacro(Loop, ExtDetect, bool)
-  SetStructParamsMacro(Loop, ExtDetect, bool)
+  GetStructParamsMacro(Loop, Detector, LoopClosureDetector)
+  SetStructParamsMacro(Loop, Detector, LoopClosureDetector)
 
   GetStructParamsMacro(Loop, QueryIdx, unsigned int)
   SetStructParamsMacro(Loop, QueryIdx, unsigned int)
