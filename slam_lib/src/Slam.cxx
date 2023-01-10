@@ -246,6 +246,11 @@ void Slam::Reset(bool resetLog)
   // they would need to be reloaded too.
   this->ResetSensors(true);
 
+  // Reset scan context manager
+  if (this->UsePGOConstraints[LOOP_CLOSURE] &&
+      this->LoopParams.Detector == LoopClosureDetector::SCAN_CONTEXT)
+    this->ScanContextManager.reset(new SCManager);
+
   // Reset log history
   if (resetLog)
   {
@@ -437,6 +442,15 @@ void Slam::AddFrames(const std::vector<PointCloud::Ptr>& frames)
     IF_VERBOSE(3, Utils::Timer::Init("Logging"));
     this->LogCurrentFrameState();
     IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Logging"));
+
+    // Update scan context
+    if (this->UsePGOConstraints[LOOP_CLOSURE] &&
+        this->LoopParams.Detector == LoopClosureDetector::SCAN_CONTEXT)
+    {
+      IF_VERBOSE(3, Utils::Timer::Init("Scan context update"));
+      this->UpdateScanContextDescriptor(this->LogStates.back());
+      IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Scan context update"));
+    }
 
     if (this->ImuUpdate && this->ImuHasData())
     {
@@ -1964,6 +1978,32 @@ bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState
     RESET_COUT_FIXED_PRECISION;
   }
   return loopClosureUncertainty.Valid;
+}
+
+//-----------------------------------------------------------------------------
+void Slam::UpdateScanContextDescriptor(const LidarState& state)
+{
+  // Init scan context detector
+  if (!this->ScanContextManager)
+    this->ScanContextManager = std::make_shared<SCManager>();
+
+  if (this->LogOnlyKeyframes && !state.IsKeyFrame)
+    return;
+
+  // Save keypoints for scan context detector
+  PointCloud::Ptr undistortedKeypoints(new PointCloud);
+  for (auto k : this->UsableKeypoints)
+  {
+    PointCloud::Ptr keypoints = state.Keypoints.at(k)->GetCloud();
+    *undistortedKeypoints += *keypoints;
+  }
+  // Change point type by copy for scan context
+  pcl::PointCloud<PointType>::Ptr rawCloudKeyFrame(new pcl::PointCloud<PointType>);
+  pcl::copyPointCloud(*undistortedKeypoints, *rawCloudKeyFrame);
+
+  // Make scan context descriptor for the pointcloud of each frame
+  this->ScanContextManager->makeAndSaveScancontextAndKeys(*rawCloudKeyFrame);
+
 }
 
 //==============================================================================

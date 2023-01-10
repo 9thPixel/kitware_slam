@@ -948,6 +948,9 @@ private:
   // loop closure parameters
   LoopClosure::Parameters LoopParams;
 
+  // Detect automatically loop closure with scan context method
+  std::shared_ptr<SCManager> ScanContextManager;
+
   // ---------------------------------------------------------------------------
   //   Optimization data
   // ---------------------------------------------------------------------------
@@ -1117,7 +1120,7 @@ private:
   int NbGraphIterations = 100;
 
   // Booleans to decide whether to use a pose graph constraint for the optimization
-  std::map<PGOConstraint, bool> UsePGOConstraints = {{LOOP_CLOSURE, true}, {LANDMARK, true}, {PGO_GPS, true}};
+  std::map<PGOConstraint, bool> UsePGOConstraints = {{LOOP_CLOSURE, false}, {LANDMARK, true}, {PGO_GPS, true}};
 
   // ---------------------------------------------------------------------------
   //   Confidence estimation
@@ -1214,6 +1217,9 @@ private:
 
   // Return true if a loop closure has been found and update itRevisitedState iterator, if not return false.
   bool DetectLoopWithTeaser(std::list<LidarState>::iterator& itQueryState, std::list<LidarState>::iterator& itRevisitedState);
+
+  // Update scan context descriptor for a new frame
+  void UpdateScanContextDescriptor(const LidarState& state);
 
   // Compute the transform between a query frame and the revisited frame
   // by registering query frame keypoints onto keypoints of the submap around the revisited frame.
