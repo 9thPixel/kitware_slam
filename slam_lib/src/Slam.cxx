@@ -1675,6 +1675,140 @@ bool Slam::DetectLoopClosureIndices(std::list<LidarState>::iterator& itQueryStat
 }
 
 //-----------------------------------------------------------------------------
+bool Slam::DetectLoopWithTeaser(std::list<LidarState>::iterator& itQueryState, std::list<LidarState>::iterator& itRevisitedState)
+{
+  #ifdef USE_TEASERPP
+  // Create query submap and get keypoints in BASE coordinates
+  Maps querySubMaps;
+  this->InitSubMaps(querySubMaps);
+  this->BuildMaps(querySubMaps,
+                  this->GetSubMapBoundIdx(itQueryState, this->LoopParams.QueryMapStartRange),
+                  this->GetSubMapBoundIdx(itQueryState, this->LoopParams.QueryMapEndRange),
+                  itQueryState->Index);
+  // Convert submap keypoints into teaser used format
+  teaser::PointCloud teaserQueryPoints;
+  for (auto k : this->UsableKeypoints)
+  {
+    PointCloud::Ptr keypoints = querySubMaps[k]->Get();
+    for (const auto& pt: *keypoints)
+      teaserQueryPoints.push_back({pt.x, pt.y, pt.z}); // Note: push_back is defined in teaserpp lib for its pointcloud
+  }
+  // Compute FPFH for query keypoints
+  // The input arguments are: input cloud, radius for estimating normals and
+  // radius for calculating FPFH (needs to be at least normalSearchRadius)
+  teaser::FPFHEstimation fpfh;
+  auto queryDescriptors = fpfh.computeFPFHFeatures(teaserQueryPoints,
+                                                   2 * this->GetVoxelGridLeafSize(PLANE),
+                                                   3 * this->GetVoxelGridLeafSize(PLANE));
+
+  // Compute the frame index relative to the newest frame onto which a loop closure is searched
+  // A frame gap is set to avoid finding a loop closure between the query frame and its direct surrounding.
+  int lastFrameIdx = this->GetSubMapBoundIdx(itQueryState, -this->LoopParams.GapLength);
+
+  // Search the revisited frame by teaser registration
+  auto itSt = this->LogStates.begin();
+  // Temporary value to evaluate the overlap for each candidate
+  float overlap = 0.;
+  // Temporary value to store the transform of the best teaser registration
+  Eigen::Isometry3d queryPose = Eigen::Isometry3d::Identity();
+  while (itSt->Index < static_cast<unsigned int>(lastFrameIdx) && itSt != this->LogStates.end())
+  {
+    // Create candidate submap and build kdtree
+    Maps candidateSubMaps;
+    this->InitSubMaps(candidateSubMaps);
+    this->BuildMaps(candidateSubMaps,
+                    this->GetSubMapBoundIdx(itSt, this->LoopParams.RevisitedMapStartRange),
+                    this->GetSubMapBoundIdx(itSt, this->LoopParams.RevisitedMapEndRange));
+    // Convert submap keypoints into teaser used format
+    teaser::PointCloud teaserCandidatePoints;
+    for (auto k : this->UsableKeypoints)
+    {
+      PointCloud::Ptr keypoints = candidateSubMaps[k]->Get();
+      for (const auto& pt: *keypoints)
+        teaserCandidatePoints.push_back({pt.x, pt.y, pt.z}); // Note: push_back is defined in teaserpp lib for its pointcloud
+    }
+    // Compute FPFH features for candidate keypoints
+    // The input arguments are: input cloud, radius for estimating normals and
+    // radius for calculating FPFH (needs to be at least normalSearchRadius)
+    auto candidateDescriptors = fpfh.computeFPFHFeatures(teaserCandidatePoints,
+                                                         2 * this->GetVoxelGridLeafSize(PLANE),
+                                                         3 * this->GetVoxelGridLeafSize(PLANE));
+    // Compute correspondences between query keypoints and candidate keypoints using their fpfh features
+    teaser::Matcher matcher;
+    auto correspondences = matcher.calculateCorrespondences(teaserQueryPoints, teaserCandidatePoints,
+                                                            *queryDescriptors, *candidateDescriptors);
+
+    // Run TEASER++ registration
+    // Prepare solver parameters
+    teaser::RobustRegistrationSolver::Params params;
+    params.noise_bound = 0.05;              // Noise bound
+    params.cbar2 = 1;                       // maximal allowed residual^2 to noise bound^2 ratio
+    params.estimate_scaling = false;        // no scaling in the pointcloud
+    params.rotation_max_iterations = 100;   // Maximum iterations allowed for the GNC rotation estimators.
+    params.rotation_gnc_factor = 1.4;       // The algorithm multiples the control parameter by the factor every iteration.
+    params.rotation_estimation_algorithm =
+        teaser::RobustRegistrationSolver::ROTATION_ESTIMATION_ALGORITHM::GNC_TLS; // registration solver
+    params.rotation_cost_threshold = 0.005; // The cost threshold compares with the difference between costs of consecutive iterations.
+
+    // Solve with TEASER++
+    teaser::RobustRegistrationSolver solver(params);
+    solver.solve(teaserQueryPoints, teaserCandidatePoints, correspondences);
+    auto solution = solver.getSolution();
+    Eigen::Isometry3d T = Eigen::Isometry3d::Identity();
+    T.translation() = solution.translation;
+    T.linear() = solution.rotation;
+
+    // Registration evaluation
+    // Merge all keypoints in one pointcloud
+    PointCloud::Ptr queryWorldPoints(new PointCloud);
+    for (auto k : this->UsableKeypoints)
+    {
+      // Aggregate all input points into WORLD coordinates
+      PointCloud::Ptr worldKeypoints(new PointCloud);
+      pcl::transformPointCloud(*(querySubMaps.at(k)->Get()), *worldKeypoints, T.matrix().cast<float>());
+      *queryWorldPoints += *worldKeypoints;
+
+      // Build kdtree for candidate sub maps
+      candidateSubMaps[k]->BuildSubMapKdTree();
+    }
+
+    // Compute LCP like estimator
+    // (see http://geometry.cs.ucl.ac.uk/projects/2014/super4PCS/ for more info)
+    float overlapEstimation = Confidence::LCPEstimator(queryWorldPoints, candidateSubMaps, 0.3, this->NbThreads, false);
+    if (overlapEstimation > overlap)
+    {
+      overlap = overlapEstimation;
+      itRevisitedState = itSt;
+      queryPose = T;
+    }
+
+    // Update iterators
+    Utils::SafeAdvance(itSt, this->LoopParams.SampleStep, this->LogStates.end());
+  }
+
+  if (overlap >= this->LoopParams.EvaluationThreshold)
+  {
+    this->LoopParams.DetectionTransform = queryPose;
+    PRINT_VERBOSE(3, "Loop closure is detected for frame #" << itQueryState->Index << " by teaserpp with " << 100*overlap << "% overlap.\n"
+                     "The revisited frame is #" << itRevisitedState->Index);
+    return true;
+  }
+  else
+  {
+    this->LoopParams.DetectionTransform = Eigen::Isometry3d::Identity();
+    PRINT_ERROR("Loop closure is NOT detected for frame #" << itQueryState->Index << " by teaserpp.\n"
+                     "The detected frame (#" << itRevisitedState->Index << ") has a low overlap ("<< 100*overlap << "%) ");
+    return false;
+  }
+  #else
+  PRINT_ERROR("Automatic loop closure detection requires TEASER++, but it was not found.");
+  return false;
+  #endif
+  static_cast<void>(itQueryState);
+  static_cast<void>(itRevisitedState);
+}
+
+//-----------------------------------------------------------------------------
 bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState,
                                    std::list<LidarState>::iterator& itRevisitedState,
                                    Eigen::Isometry3d& loopClosureTransform,

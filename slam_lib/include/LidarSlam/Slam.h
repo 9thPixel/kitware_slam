@@ -167,10 +167,29 @@ namespace LoopClosure
 {
 struct Parameters
 {
+  // Parameters for the loop closure detection
+
   // Which method to use to detect loop closure
   // Manual detector: users need to indicate the query frame index and the revisited frame index for loop closure.
   // Other methods will be added in the future
   LoopClosureDetector Detector = LoopClosureDetector::NONE;
+
+  // When a query frame searches its revisited frame,
+  // there is very little possibility that the loop is in the last travel distance.
+  // The GapLength is the travel distance before the query frame where is considered no loop formed
+  double GapLength = 5.; // 5m
+
+  // For automatic detection, the candidate frames are sampled with a step of LoopSampleStep
+  unsigned int SampleStep = 30;
+
+  // The threshold to decide whether a candidate frame is the revisited frame of loop closure or not
+  double EvaluationThreshold = 0.6;
+
+  // Transform between the query frame and the revisited frame that has been found by the automatic loop detector
+  // This pose can be used as a pose prior in LoopClosureRegistration step
+  Eigen::Isometry3d DetectionTransform = Eigen::Isometry3d::Identity();
+
+  // Parameters for the loop closure registration
 
   // Frame indices to indicate where the loop closure is formed.
   unsigned int QueryIdx = 0;
@@ -681,6 +700,16 @@ public:
   GetStructParamsMacro(Loop, RevisitedMapEndRange, double)
   SetStructParamsMacro(Loop, RevisitedMapEndRange, double)
 
+  // Parameters for automatic detection
+  GetStructParamsMacro(Loop, GapLength, double)
+  SetStructParamsMacro(Loop, GapLength, double)
+
+  GetStructParamsMacro(Loop, SampleStep, unsigned int)
+  SetStructParamsMacro(Loop, SampleStep, unsigned int)
+
+  GetStructParamsMacro(Loop, EvaluationThreshold, double)
+  SetStructParamsMacro(Loop, EvaluationThreshold, double)
+
   // Get/Set Loop Closure registration parameters
   GetStructParamsMacro(Loop, EnableOffset, bool)
   SetStructParamsMacro(Loop, EnableOffset, bool)
@@ -1180,6 +1209,9 @@ private:
   // If external detection is enabled, check whether the inputs of loop closure frame indices are stored in the LogStates
   // if not, detect automatically a revisited frame idx for the current frame (TBA)
   bool DetectLoopClosureIndices(std::list<LidarState>::iterator& itQueryState, std::list<LidarState>::iterator& itRevisitedState);
+
+  // Return true if a loop closure has been found and update itRevisitedState iterator, if not return false.
+  bool DetectLoopWithTeaser(std::list<LidarState>::iterator& itQueryState, std::list<LidarState>::iterator& itRevisitedState);
 
   // Compute the transform between a query frame and the revisited frame
   // by registering query frame keypoints onto keypoints of the submap around the revisited frame.
