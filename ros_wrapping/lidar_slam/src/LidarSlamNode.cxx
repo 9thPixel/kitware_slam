@@ -21,6 +21,7 @@
 
 #include <LidarSlam/Utilities.h>
 
+#include <dynamic_reconfigure/config_tools.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <nav_msgs/Path.h>
@@ -949,7 +950,7 @@ void LidarSlamNode::SetSlamConfig(int level)
                                               std::cout << #slamParam <<  " : " << this->LidarSlam.Get##slamParam() << std::endl;}
   #define SetConfigWithCast(rosParam, slamParam, type) {type val = static_cast<type>(this->Config.rosParam);\
                                                             this->LidarSlam.Set##slamParam(val);\
-                                                            std::cout << #slamParam <<  " : " << this->LidarSlam.Get##slamParam() << std::endl;}
+                                                            std::cout << #slamParam <<  " : " << this->Config.rosParam << std::endl;}
 
   // Global parameters
   if (level < 0 || level == 0)
@@ -958,10 +959,10 @@ void LidarSlamNode::SetSlamConfig(int level)
     SetConfig(verbosity, Verbosity);
     SetConfig(n_threads, NbThreads);
 
-    // SetSlamParam(bool,   "slam/logging/only_keyframes", LogOnlyKeyframes)
-    auto egoMotion = static_cast<LidarSlam::EgoMotionMode>(this->Config.ego_motion);
-    this->LidarSlam.SetEgoMotion(egoMotion);
-    std::cout << "EgoMotion mode : " << static_cast<int>(this->LidarSlam.GetEgoMotion()) << std::endl;
+    // auto egoMotion = static_cast<LidarSlam::EgoMotionMode>(this->Config.ego_motion);
+    // this->LidarSlam.SetEgoMotion(egoMotion);
+    SetConfigWithCast(ego_motion, EgoMotion, LidarSlam::EgoMotionMode)
+    // std::cout << "EgoMotion mode : " << static_cast<int>(this->LidarSlam.GetEgoMotion()) << std::endl;
 
     auto undistortionMode = static_cast<LidarSlam::UndistortionMode>(this->Config.undistortion);
     this->LidarSlam.SetUndistortion(undistortionMode);
@@ -1027,12 +1028,68 @@ void LidarSlamNode::SetSlamConfig(int level)
     SetConfig(ml__time_window_duration, TimeWindowDuration);
   }
 
+  // Maps
+  if (level < 0 || level == 6)
+  {
+    SetConfigWithCast(vg__update_maps, MapUpdate, LidarSlam::MappingMode);
+    if (this->LidarSlam.KeypointTypeEnabled(LidarSlam::EDGE))
+    {
+      this->LidarSlam.SetVoxelGridLeafSize(LidarSlam::EDGE, this->Config.ls__edges);
+      std::cout << "SetVoxelGridLeafSize edge : " << this->Config.ls__edges << std::endl;  
+    }
+    if (this->LidarSlam.KeypointTypeEnabled(LidarSlam::INTENSITY_EDGE))
+    {
+      this->LidarSlam.SetVoxelGridLeafSize(LidarSlam::INTENSITY_EDGE, this->Config.ls__intensity_edges);
+      std::cout << "SetVoxelGridLeafSize intensity edge : " << this->Config.ls__intensity_edges << std::endl;  
+    }
+    if (this->LidarSlam.KeypointTypeEnabled(LidarSlam::PLANE))
+    {
+      this->LidarSlam.SetVoxelGridLeafSize(LidarSlam::PLANE, this->Config.ls__planes);
+      std::cout << "SetVoxelGridLeafSize plane : " << this->Config.ls__planes << std::endl;  
+    }
+    if (this->LidarSlam.KeypointTypeEnabled(LidarSlam::BLOB))
+    {
+      this->LidarSlam.SetVoxelGridLeafSize(LidarSlam::BLOB, this->Config.ls__blobs);
+      std::cout << "SetVoxelGridLeafSize blob : " << this->Config.ls__blobs << std::endl;  
+    }
+    //TODO replace with Macro SetConfig at the end
+    //TODO didn't use it because it didn't have a Getter
+    // SetConfig(vg__size, VoxelGridSize);
+    this->LidarSlam.SetVoxelGridSize(this->Config.vg__size);
+    std::cout << "VoxelGridSize : " << this->Config.vg__size << std::endl;
+    //TODO idem
+    // SetConfig(vg__size, VoxelGridResolution);
+    this->LidarSlam.SetVoxelGridResolution(this->Config.vg__resolution);
+    std::cout << "VoxelGridResolution : " << this->Config.vg__resolution << std::endl;
+
+    for (auto k : LidarSlam::KeypointTypes)
+    {
+      if (!this->LidarSlam.KeypointTypeEnabled(k))
+        continue;
+      std::string sm_name = "sm__" + LidarSlam::KeypointTypeNames.at(k);
+      int32_t sampling = 4;
+      if (!GetConfig(this->Config, sm_name, sampling))
+        PRINT_ERROR(sm_name << "is not a SLAM parameter");
+      this->LidarSlam.SetVoxelGridSamplingMode(k, static_cast<LidarSlam::SamplingMode>(sampling));
+      std::cout << sm_name << " : " << sampling << std::endl;
+    }
+
+    SetConfig(vg__decaying_treshold, VoxelGridDecayingThreshold);
+    //TODO replace with Macro SetConfig at the end
+    //TODO didn't use it because it didn't have a Getter
+    // SetConfig(vg__min_frames_per_voxel, VoxelGridMinFramesPerVoxel);
+    this->LidarSlam.SetVoxelGridMinFramesPerVoxel(this->Config.vg__min_frames_per_voxel);
+    std::cout << "VoxelGridMinFramesPerVoxel : " << this->Config.vg__min_frames_per_voxel << std::endl;
+  }
+
   // // Frame Ids
   // this->PrivNh.param("odometry_frame", this->OdometryFrameId, this->OdometryFrameId);
   // this->LidarSlam.SetWorldFrameId(this->OdometryFrameId);
   // this->PrivNh.param("tracking_frame", this->TrackingFrameId, this->TrackingFrameId);
   // this->LidarSlam.SetBaseFrameId(this->TrackingFrameId);
 
+  //TODO for config with keypoints, create macro calling getParameter
+  //TODO from ConfigTools of dynamic_reconfigure
   // // Keypoint extractors
   // auto InitKeypointsExtractor = [this](auto& ke, const std::string& prefix)
   // {

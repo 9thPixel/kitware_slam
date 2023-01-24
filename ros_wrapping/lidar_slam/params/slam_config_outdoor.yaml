@@ -267,7 +267,6 @@ slam:
                                  # 0 disables motion limits check.
                                  # WARNING : the logging time out must be set greater than this value.
 
-  #* UNTIL HERE CONFIG DOWN
   # Keypoints maps, saved as downsampled voxel grids
   voxel_grid:
     # How to update the maps:
@@ -328,6 +327,7 @@ slam:
     neighbors_radius: 0.05             # [m] Minimum radius to define a neighborhood on each side of the studied point.
     plane_sin_angle_threshold: 0.5     # [0-1] Sharpness threshold to select a planar keypoint (selected if sin angle is less than threshold).
     edge_sin_angle_threshold: 0.86     # [0-1] Sharpness threshold to select an edge keypoint (selected if sin angle is more than threshold).
+  #* UNTIL HERE CONFIG DONE
     edge_depth_gap_threshold: 1.       # [m] Threshold upon depth gap in neighborhood to select an edge keypoint.
     edge_nb_gap_points: 10             # [points] Minimum number of successive missing points to consider a space gap.
     edge_intensity_gap_threshold: 50.  # [0-255] Threshold upon intensity gap to select an edge keypoint.
