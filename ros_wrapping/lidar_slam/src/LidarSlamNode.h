@@ -163,6 +163,29 @@ public:
    */
   void SetSlamConfig(int level);
 
+  //------------------------------------------------------------------------------
+  /*!
+   * Get the value of a parameter of type T inside
+   * of a dynamic_config server with a string 
+   */
+  template <class T>
+  bool GetConfig(const lidar_slam::LidarSlamConfig& config, std::string name, T& val)
+  {
+    const auto &paramDescrip = this->Config.__getParamDescriptions__();
+
+    for (auto i = paramDescrip.begin(); i != paramDescrip.end(); ++i)
+    {
+      if ((*i)->name == name)
+      {
+        boost::any directVal;
+        (*i)->getValue(this->Config, directVal);
+        val = boost::any_cast<T>(directVal);
+        return true;
+      }
+    }
+    return false;
+  }
+
 protected:
 
   //----------------------------------------------------------------------------
