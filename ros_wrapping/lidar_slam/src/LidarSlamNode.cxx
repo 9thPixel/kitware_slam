@@ -1082,6 +1082,15 @@ void LidarSlamNode::SetSlamConfig(int level)
     std::cout << "VoxelGridMinFramesPerVoxel : " << this->Config.vg__min_frames_per_voxel << std::endl;
   }
 
+  // Keypoint extractors
+  // if (level < 0 || level == 7)
+  // {
+  //   auto InitKeypointsExtractor = [this](auto& ke, const std::string& prefix)
+  //   {
+  //   // Keypoint extractors
+  //   #define SetKeypointsExtractorParam(type, rosParam, keParam) {type val; if (GetConfig(this->Config, rosParam, val)) ke->Set##keParam(val);}
+  //   //*HERE
+
   // // Frame Ids
   // this->PrivNh.param("odometry_frame", this->OdometryFrameId, this->OdometryFrameId);
   // this->LidarSlam.SetWorldFrameId(this->OdometryFrameId);
@@ -1267,13 +1276,14 @@ void LidarSlamNode::SetSlamConfig(int level)
 //------------------------------------------------------------------------------
 void LidarSlamNode::SetSlamParameters()
 {
+  //? Where am I in config implementation ?
   #define SetSlamParam(type, rosParam, slamParam) { type val; if (this->PrivNh.getParam(rosParam, val)) this->LidarSlam.Set##slamParam(val); }
   // General
-  // SetSlamParam(bool,   "slam/2d_mode", TwoDMode)
-  // SetSlamParam(int,    "slam/verbosity", Verbosity)
-  // SetSlamParam(int,    "slam/n_threads", NbThreads)
-  // SetSlamParam(double, "slam/logging/timeout", LoggingTimeout)
-  // SetSlamParam(bool,   "slam/logging/only_keyframes", LogOnlyKeyframes)
+  SetSlamParam(bool,   "slam/2d_mode", TwoDMode)
+  SetSlamParam(int,    "slam/verbosity", Verbosity)
+  SetSlamParam(int,    "slam/n_threads", NbThreads)
+  SetSlamParam(double, "slam/logging/timeout", LoggingTimeout)
+  SetSlamParam(bool,   "slam/logging/only_keyframes", LogOnlyKeyframes)
   int egoMotionMode;
   if (this->PrivNh.getParam("slam/ego_motion", egoMotionMode))
   {
