@@ -171,7 +171,7 @@ struct Parameters
 
   // Which method to use to detect loop closure
   // Manual detector: users need to indicate the query frame index and the revisited frame index for loop closure.
-  // Other methods will be added in the future
+  // TEASERPP detector: automatic detection of loop closure by teaser registration
   LoopClosureDetector Detector = LoopClosureDetector::NONE;
 
   // When a query frame searches its revisited frame,
