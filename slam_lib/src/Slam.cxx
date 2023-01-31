@@ -1828,9 +1828,11 @@ bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState
 
   // Pose prior for optimization
   Eigen::Isometry3d loopClosureTworld = itQueryState->Isometry;
-  // Enable to add an offset to the pose prior when two poses are too far from each other.
-  if (this->LoopParams.EnableOffset)
+  if (!this->LoopParams.DetectionTransform.matrix().isIdentity())
+    loopClosureTworld = this->LoopParams.DetectionTransform;
+  else if (this->LoopParams.EnableOffset)
   {
+    // Enable to add an offset to the pose prior when two poses are too far from each other.
     PointCloud::Ptr revisitedPlaneKeypoints(new PointCloud);
     pcl::transformPointCloud(*(itRevisitedState->Keypoints[PLANE]->GetCloud()),
                              *revisitedPlaneKeypoints,
