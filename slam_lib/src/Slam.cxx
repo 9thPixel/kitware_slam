@@ -1678,8 +1678,8 @@ bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState
   Maps loopClosureRevisitedSubMaps;
   this->InitSubMaps(loopClosureRevisitedSubMaps);
   this->BuildMaps(loopClosureRevisitedSubMaps,
-                  itRevisitedState->Index + this->LoopParams.RevisitedMapStartRange,
-                  itRevisitedState->Index + this->LoopParams.RevisitedMapEndRange);
+                  this->GetSubMapBoundIdx(itRevisitedState, this->LoopParams.RevisitedMapStartRange),
+                  this->GetSubMapBoundIdx(itRevisitedState, this->LoopParams.RevisitedMapEndRange));
   PRINT_VERBOSE(3, "Sub maps are created around revisited frame #" << itRevisitedState->Index << ".");
 
   // Pose prior for optimization
@@ -1709,8 +1709,8 @@ bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState
     Maps loopClosureQuerySubMaps;
     this->InitSubMaps(loopClosureQuerySubMaps);
     this->BuildMaps(loopClosureQuerySubMaps,
-                    itQueryState->Index + this->LoopParams.QueryMapStartRange,
-                    itQueryState->Index + this->LoopParams.QueryMapEndRange,
+                    this->GetSubMapBoundIdx(itQueryState, this->LoopParams.QueryMapStartRange),
+                    this->GetSubMapBoundIdx(itQueryState, this->LoopParams.QueryMapEndRange),
                     itQueryState->Index);
     PRINT_VERBOSE(3, "Sub maps are created around query frame #" << itQueryState->Index << ".");
     for (auto k : this->UsableKeypoints)
@@ -1883,6 +1883,26 @@ void Slam::BuildMaps(Maps& maps, int windowStartIdx, int windowEndIdx, int idxFr
       maps[k]->Add(keypoints, false);
     }
   }
+}
+
+//-----------------------------------------------------------------------------
+int Slam::GetSubMapBoundIdx(std::list<LidarState>::iterator itState, double windowRange)
+{
+  auto itStop = std::prev(this->LogStates.end());
+  if (windowRange < 0)
+    itStop = this->LogStates.begin();
+  double trajLength = 0;
+  while (trajLength < std::abs(windowRange) && itState != itStop)
+  {
+    // Compute distance between two poses
+    auto itNeighbor = windowRange < 0 ? std::prev(itState) : std::next(itState);
+    trajLength += (itState->Isometry.translation() - itNeighbor->Isometry.translation()).norm();
+    itState = itNeighbor;
+  }
+  if (itState==this->LogStates.end())
+    --itState;
+
+  return itState->Index;
 }
 
 //-----------------------------------------------------------------------------

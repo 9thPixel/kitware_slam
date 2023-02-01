@@ -1204,6 +1204,12 @@ private:
   // or in base coordinates of frame #idxFrame when idxFrame is not negative
   void BuildMaps(Maps& maps, int windowStartIdx = -1, int windowEndIdx = -1, int idxFrame = -1);
 
+  // LogStates does not always stores all of the frames depending on LogOnlyKeyFrames value.
+  // So, when given a window range to build a sub map,
+  // the start and end frame indices need to be computed.
+  // This function ensures that the number of frames used to build a map corresponds to the required window range.
+  int GetSubMapBoundIdx(std::list<LidarState>::iterator itState, double windowRange);
+
   // ICP-LM Optimization process to estimate pose
   // Compute the pose of the sourceKeypoints by registering
   // sourcekeypoints on targetkeypoints
