@@ -164,26 +164,26 @@ public:
   void SetSlamConfig(int level);
 
   //------------------------------------------------------------------------------
+  typedef boost::shared_ptr<const lidar_slam::LidarSlamConfig::AbstractParamDescription> AbstractParamDescriptionConstPtr;
   /*!
    * Get the value of a parameter of type T inside
-   * of a dynamic_config server with a string 
+   * of a dynamic_config server with a string
    */
   template <class T>
   bool GetConfig(const lidar_slam::LidarSlamConfig& config, std::string name, T& val)
   {
-    const auto &paramDescrip = this->Config.__getParamDescriptions__();
+    const auto &paramDescrip = config.__getParamDescriptions__();
 
-    for (auto i = paramDescrip.begin(); i != paramDescrip.end(); ++i)
-    {
-      if ((*i)->name == name)
-      {
-        boost::any directVal;
-        (*i)->getValue(this->Config, directVal);
-        val = boost::any_cast<T>(directVal);
-        return true;
-      }
-    }
-    return false;
+    auto it = std::find_if(paramDescrip.begin(), paramDescrip.end(),
+                           [&](const AbstractParamDescriptionConstPtr& param) {return param->name == name;});
+
+    if (it == paramDescrip.end())
+      return false;
+
+    boost::any directVal;
+    (*it)->getValue(config, directVal);
+    val = boost::any_cast<T>(directVal);
+    return true;
   }
 
 protected:
@@ -255,6 +255,11 @@ protected:
   ros::NodeHandle &Nh, &PrivNh;
   // ROS server handling SLAM parameters
   dynamic_reconfigure::Server<lidar_slam::LidarSlamConfig> &ParamServer;
+  //TODO do the array at the end
+  const std::unordered_map<std::string, int> LevelConfig = {{"constant", -1},
+                                                            {"slam_general", 0},
+                                                            {"logging", 1},
+                                                            {"em", 2}};
   // SLAM configuration
   lidar_slam::LidarSlamConfig Config;
 
