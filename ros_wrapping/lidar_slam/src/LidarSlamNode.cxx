@@ -940,9 +940,13 @@ void LidarSlamNode::InitParameterCallBack()
 {
   dynamic_reconfigure::Server<lidar_slam::LidarSlamConfig>::CallbackType callbackFunc;
   callbackFunc = boost::bind(&LidarSlamNode::CallbackParam, this, _1, _2);
+
+  // ParamServer.set
   ParamServer.setCallback(callbackFunc);
 }
 
+//------------------------------------------------------------------------------
+// void LidarSlamNode::SetSlam
 //------------------------------------------------------------------------------
 void LidarSlamNode::SetSlamConfig(int level)
 {
@@ -1019,9 +1023,9 @@ void LidarSlamNode::SetSlamConfig(int level)
   if (level < 0 || level == 5)
   {
     SetConfig(overl__sampling_ratio, OverlapSamplingRatio);
-    std::vector<float> acceleration_array = {(float)this->Config.ml__acceleration_min, (float)this->Config.ml__acceleration_max}; 
+    std::vector<float> acceleration_array = {(float)this->Config.ml__acceleration_min, (float)this->Config.ml__acceleration_max};
     this->LidarSlam.SetAccelerationLimits(Eigen::Map<const Eigen::Array2f>(acceleration_array.data()));
-    std::vector<float> velocity_array     = {(float)this->Config.ml__velocity_min, (float)this->Config.ml__velocity_max}; 
+    std::vector<float> velocity_array     = {(float)this->Config.ml__velocity_min, (float)this->Config.ml__velocity_max};
     this->LidarSlam.SetVelocityLimits(Eigen::Map<const Eigen::Array2f>(velocity_array.data()));
     std::cout << "acceleration_array : " << this->LidarSlam.GetAccelerationLimits().transpose() << std::endl;
     std::cout << "velocity_array : " << this->LidarSlam.GetVelocityLimits().transpose() << std::endl;
@@ -1035,22 +1039,22 @@ void LidarSlamNode::SetSlamConfig(int level)
     if (this->LidarSlam.KeypointTypeEnabled(LidarSlam::EDGE))
     {
       this->LidarSlam.SetVoxelGridLeafSize(LidarSlam::EDGE, this->Config.ls__edges);
-      std::cout << "SetVoxelGridLeafSize edge : " << this->Config.ls__edges << std::endl;  
+      std::cout << "SetVoxelGridLeafSize edge : " << this->Config.ls__edges << std::endl;
     }
     if (this->LidarSlam.KeypointTypeEnabled(LidarSlam::INTENSITY_EDGE))
     {
       this->LidarSlam.SetVoxelGridLeafSize(LidarSlam::INTENSITY_EDGE, this->Config.ls__intensity_edges);
-      std::cout << "SetVoxelGridLeafSize intensity edge : " << this->Config.ls__intensity_edges << std::endl;  
+      std::cout << "SetVoxelGridLeafSize intensity edge : " << this->Config.ls__intensity_edges << std::endl;
     }
     if (this->LidarSlam.KeypointTypeEnabled(LidarSlam::PLANE))
     {
       this->LidarSlam.SetVoxelGridLeafSize(LidarSlam::PLANE, this->Config.ls__planes);
-      std::cout << "SetVoxelGridLeafSize plane : " << this->Config.ls__planes << std::endl;  
+      std::cout << "SetVoxelGridLeafSize plane : " << this->Config.ls__planes << std::endl;
     }
     if (this->LidarSlam.KeypointTypeEnabled(LidarSlam::BLOB))
     {
       this->LidarSlam.SetVoxelGridLeafSize(LidarSlam::BLOB, this->Config.ls__blobs);
-      std::cout << "SetVoxelGridLeafSize blob : " << this->Config.ls__blobs << std::endl;  
+      std::cout << "SetVoxelGridLeafSize blob : " << this->Config.ls__blobs << std::endl;
     }
     //TODO replace with Macro SetConfig at the end
     //TODO didn't use it because it didn't have a Getter
