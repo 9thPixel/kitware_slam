@@ -78,6 +78,8 @@ LidarSlamNode::LidarSlamNode(ros::NodeHandle& nh, ros::NodeHandle& priv_nh,
 
   // Init Callback for parameter server
   this->InitParameterCallBack();
+  // Set constant parameters
+  this->InitConstParameter();
   // Get SLAM params
   this->SetSlamParameters();
   // Init SLAM state
@@ -377,6 +379,7 @@ void LidarSlamNode::GpsCallback(const nav_msgs::Odometry& gpsMsg)
 void LidarSlamNode::CallbackParam(lidar_slam::LidarSlamConfig &config, uint32_t level)
 {
   ROS_INFO("Parameters changed, level : %d", level);
+  std::cout << "int_const : " << lidar_slam::LidarSlam_int_const << std::endl;
   this->Config = config;
   this->SetSlamConfig(level);
 }
@@ -946,7 +949,11 @@ void LidarSlamNode::InitParameterCallBack()
 }
 
 //------------------------------------------------------------------------------
-// void LidarSlamNode::SetSlam
+void LidarSlamNode::InitConstParameter()
+{
+
+}
+
 //------------------------------------------------------------------------------
 void LidarSlamNode::SetSlamConfig(int level)
 {

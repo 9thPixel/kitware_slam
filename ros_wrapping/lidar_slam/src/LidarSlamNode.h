@@ -158,6 +158,12 @@ public:
   void InitParameterCallBack();
 
   //----------------------------------------------------------------------------
+  /**!
+   * @brief Init constant parameters
+   */
+  void InitConstParameter();
+
+  //----------------------------------------------------------------------------
   /*!
    * @brief Get and fill Slam parameters from ROS parameters server.
    */
