@@ -1870,6 +1870,45 @@
         </Documentation>
       </DoubleVectorProperty>
 
+      <DoubleVectorProperty name="Loop gap length"
+                         command="SetLoopGapLength"
+                         number_of_elements="1"
+                         default_values="5."
+                         panel_visibility="advanced">
+        <Documentation>
+          The loop gap length is the travelled distance before the query frame where is considered no loop formed
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator" mode="visibility" property="Loop closure detector" value="2" />
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="Loop sample step"
+                         command="SetLoopSampleStep"
+                         number_of_elements="1"
+                         default_values="30"
+                         panel_visibility="advanced">
+        <Documentation>
+          The candidate frames are sampled with a step of loop sample step
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator" mode="visibility" property="Loop closure detector" value="2" />
+        </Hints>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="Loop evaluation threshold"
+                         command="SetLoopEvaluationThreshold"
+                         number_of_elements="1"
+                         default_values="0.7"
+                         panel_visibility="advanced">
+        <Documentation>
+          A overlap threshold to decide whether a candidate frame is the revisited frame or not.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator" mode="visibility" property="Loop closure detector" value="2" />
+        </Hints>
+      </DoubleVectorProperty>
+
       <IntVectorProperty name="Advanced settings"
                          number_of_elements="1"
                          default_values="0"
@@ -1888,6 +1927,9 @@
         <Property name="Revisited frame index" />
         <Property name="Revisited map start range" />
         <Property name="Revisited map end range" />
+        <Property name="Loop gap length" />
+        <Property name="Loop sample step" />
+        <Property name="Loop evaluation threshold" />
         <Property name="Advanced settings" />
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator" mode="visibility" property="Use loop closure constraint" value="1" />
