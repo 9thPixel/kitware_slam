@@ -75,7 +75,6 @@
 #include <ctime>
 
 // LOCAL
-#include "LidarSlam/Slam.h"
 #include "LidarSlam/Utilities.h"
 #include "LidarSlam/KDTreePCLAdaptor.h"
 #include "LidarSlam/ConfidenceEstimators.h"
@@ -90,6 +89,17 @@
 
 // EIGEN
 #include <Eigen/Dense>
+
+// TEASERPP
+#ifdef USE_TEASERPP
+#include <teaser/registration.h>
+#include <teaser/matcher.h>
+#endif //USE_TEASERPP
+
+// LOCAL
+// Note: Slam.h needs to be included after teaser/match.h
+// because of the conflict between opencv and flann
+#include "LidarSlam/Slam.h"
 
 #define PRINT_VERBOSE(minVerbosityLevel, stream) if (this->Verbosity >= (minVerbosityLevel)) {std::cout << stream << std::endl;}
 #define IF_VERBOSE(minVerbosityLevel, command) if (this->Verbosity >= (minVerbosityLevel)) { command; }
