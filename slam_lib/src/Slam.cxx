@@ -777,7 +777,7 @@ bool Slam::OptimizeGraph()
         // by registering the keypoints of the query frame onto the keypoints of the revisited frame
         Eigen::Isometry3d loopClosureTransform;
         Eigen::Matrix6d loopClosureCovariance;
-        if (this->LoopClosureRegistration(itQueryState, itRevisitedState,
+        if (this->LoopClosureRegistration(itQueryState, itRevisitedState, this->LoopParams,
                                           loopClosureTransform, loopClosureCovariance))
         {
           // Add loop closure constraint into pose graph
@@ -2230,6 +2230,7 @@ std::vector<std::pair<int, int>> Slam::CalculateCorrespondences(pcl::PointCloud<
 //-----------------------------------------------------------------------------
 bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState,
                                    std::list<LidarState>::iterator& itRevisitedState,
+                                   LoopClosure::Parameters& loopParams,
                                    Eigen::Isometry3d& loopClosureTransform,
                                    Eigen::Matrix6d& loopClosureCovariance)
 {
@@ -2241,15 +2242,15 @@ bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState
   Maps loopClosureRevisitedSubMaps;
   this->InitSubMaps(loopClosureRevisitedSubMaps);
   this->BuildMaps(loopClosureRevisitedSubMaps,
-                  this->FetchStateIndex(itRevisitedState, this->LoopParams.RevisitedMapStartRange)->Index,
-                  this->FetchStateIndex(itRevisitedState, this->LoopParams.RevisitedMapEndRange)->Index);
+                  this->FetchStateIndex(itRevisitedState, loopParams.RevisitedMapStartRange)->Index,
+                  this->FetchStateIndex(itRevisitedState, loopParams.RevisitedMapEndRange)->Index);
   PRINT_VERBOSE(3, "Sub maps are created around revisited frame #" << itRevisitedState->Index << ".");
 
   // Pose prior for optimization
   Eigen::Isometry3d loopClosureTworld = itQueryState->Isometry;
   if (!this->LoopDetectionTransform.matrix().isIdentity())
     loopClosureTworld = this->LoopDetectionTransform;
-  else if (this->LoopParams.EnableOffset)
+  else if (loopParams.EnableOffset)
   {
     // Enable to add an offset to the pose prior when two poses are too far from each other.
     PointCloud::Ptr revisitedPlaneKeypoints(new PointCloud);
@@ -2269,13 +2270,13 @@ bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState
   std::map<Keypoint, PointCloud::Ptr> loopClosureQueryKeypoints;
   for (auto k : this->UsableKeypoints)
     loopClosureQueryKeypoints[k].reset(new PointCloud);
-  if (this->LoopParams.ICPWithSubmap)
+  if (loopParams.ICPWithSubmap)
   {
     Maps loopClosureQuerySubMaps;
     this->InitSubMaps(loopClosureQuerySubMaps);
     this->BuildMaps(loopClosureQuerySubMaps,
-                    this->FetchStateIndex(itQueryState, this->LoopParams.QueryMapStartRange)->Index,
-                    this->FetchStateIndex(itQueryState, this->LoopParams.QueryMapEndRange)->Index,
+                    this->FetchStateIndex(itQueryState, loopParams.QueryMapStartRange)->Index,
+                    this->FetchStateIndex(itQueryState, loopParams.QueryMapEndRange)->Index,
                     itQueryState->Index);
     PRINT_VERBOSE(3, "Sub maps are created around query frame #" << itQueryState->Index << ".");
     for (auto k : this->UsableKeypoints)
@@ -2330,12 +2331,12 @@ bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState
   this->TotalMatchedKeypoints = 0;
 
   // Set loop closure parameters which do not have a setter
-  this->LoopParams.OptParams.MatchingParams.NbThreads = static_cast<unsigned int>(this->NbThreads);
-  this->LoopParams.OptParams.MatchingParams.SingleEdgePerRing = false;
+  loopParams.OptParams.MatchingParams.NbThreads = static_cast<unsigned int>(this->NbThreads);
+  loopParams.OptParams.MatchingParams.SingleEdgePerRing = false;
   // ICP - Levenberg-Marquardt loop to estimate the pose of the current frame relatively to the close loop frame
   std::map<Keypoint, KeypointsMatcher::MatchingResults> loopMatchingResults;
   loopClosureUncertainty = this->EstimatePose(loopClosureQueryKeypoints, loopClosureRevisitedSubMaps,
-                                              this->LoopParams.OptParams, loopClosureTworld,
+                                              loopParams.OptParams, loopClosureTworld,
                                               loopMatchingResults);
 
   IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Loop closure Registration : whole ICP-LM loop"));

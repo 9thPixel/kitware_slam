@@ -1366,6 +1366,7 @@ private:
   // revisitedFrameIdx is the frame index where the query frame meets a loop.
   bool LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState,
                                std::list<LidarState>::iterator& itRevisitedState,
+                               LoopClosure::Parameters& loopParams,
                                Eigen::Isometry3d& loopClosureTransform,
                                Eigen::Matrix6d& loopClosureCovariance);
 
