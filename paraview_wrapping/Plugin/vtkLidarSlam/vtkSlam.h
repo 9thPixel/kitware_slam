@@ -229,11 +229,13 @@ public:
   void EnablePGOConstraintLandmark(bool enable);
   void EnablePGOConstraintGPS(bool enable);
   void EnablePGOConstraintExtPose(bool enable);
+  void EnablePGOConstraintBundleAdjustment(bool enable);
 
   bool GetPGOConstraintLoopClosure();
   bool GetPGOConstraintLandmark();
   bool GetPGOConstraintGPS();
   bool GetPGOConstraintExtPose();
+  bool GetPGOConstraintBundleAdjustment();
 
   // ---------------------------------------------------------------------------
   //   Loop closure parameters

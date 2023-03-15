@@ -219,13 +219,17 @@ enum class PGOConstraint
   //! External pose
   EXT_POSE = 3,
 
+  //! Bundle adjustment
+  BUNDLE_ADJUSTMENT = 4,
+
   nbPGOConstraints
 };
 
-static const std::map<PGOConstraint, std::string> PGOConstraintNames = { {PGOConstraint::LOOP_CLOSURE, "loop_closure"},
-                                                                         {PGOConstraint::LANDMARK,     "landmark"},
-                                                                         {PGOConstraint::GPS,          "gps"},
-                                                                         {PGOConstraint::EXT_POSE,     "ext_pose"} };
+static const std::map<PGOConstraint, std::string> PGOConstraintNames = { {PGOConstraint::LOOP_CLOSURE,      "loop_closure"},
+                                                                         {PGOConstraint::LANDMARK,          "landmark"},
+                                                                         {PGOConstraint::GPS,               "gps"},
+                                                                         {PGOConstraint::EXT_POSE,          "ext_pose"},
+                                                                         {PGOConstraint::BUNDLE_ADJUSTMENT, "bundle_adjustment"} };
 
 //------------------------------------------------------------------------------
 //! Type of loop closure detector

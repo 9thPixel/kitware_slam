@@ -273,6 +273,12 @@ void vtkSlam::EnablePGOConstraintExtPose(bool enabled)
   this->SlamAlgo->EnablePGOConstraint(LidarSlam::PGOConstraint::EXT_POSE, enabled);
 }
 
+void vtkSlam::EnablePGOConstraintBundleAdjustment(bool enabled)
+{
+  vtkDebugMacro(<< "Enabling bundle adjustment constraint for pose graph optimization");
+  this->SlamAlgo->EnablePGOConstraint(LidarSlam::PGOConstraint::BUNDLE_ADJUSTMENT, enabled);
+}
+
 //-----------------------------------------------------------------------------
 bool vtkSlam::GetPGOConstraintLoopClosure()
 {
@@ -311,6 +317,16 @@ bool vtkSlam::GetPGOConstraintExtPose()
     vtkDebugMacro(<< "Ext pose constraint for PGO is enabled");
   else
     vtkDebugMacro(<< "Ext pose constraint for PGO is disabled");
+  return enabled;
+}
+
+bool vtkSlam::GetPGOConstraintBundleAdjustment()
+{
+  bool enabled = this->SlamAlgo->IsPGOConstraintEnabled(LidarSlam::PGOConstraint::BUNDLE_ADJUSTMENT);
+  if (enabled)
+    vtkDebugMacro(<< "Bundle adjustment constraint for PGO is enabled");
+  else
+    vtkDebugMacro(<< "Bundle adjustment constraint for PGO is disabled");
   return enabled;
 }
 
