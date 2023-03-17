@@ -1786,6 +1786,7 @@
           <Entry value="0" text="Disabled"/>
           <Entry value="1" text="Manual"/>
           <Entry value="2" text="Teaserpp"/>
+          <Entry value="3" text="Scan context"/>
         </EnumerationDomain>
         <Documentation>
           Choose a detector for loop closure:
@@ -1795,6 +1796,8 @@
            (1) Manual detector: users need to indicate the frame indices of the loop closure;
 
            (2) Teaserpp: slam detects automatically loop closure by using teaserpp.
+
+           (3) Scan Context: slam detects automatically loop closure by using scan context.
         </Documentation>
       </IntVectorProperty>
 
