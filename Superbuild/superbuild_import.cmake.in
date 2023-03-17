@@ -3,13 +3,14 @@ get_filename_component(SUPERBUILD_INSTALL_DIR ${SUPERBUILD_INSTALL_DIR} ABSOLUTE
 
 set(CMAKE_FIND_PACKAGE_PREFER_CONFIG True)
 
-option(WITH_EIGEN "Whether to install Eigen3" @WITH_EIGEN@)
-option(WITH_PCL "Whether to install PCL" @WITH_PCL@)
-option(WITH_CERES "Whether to install Ceres" @WITH_CERES@)
+option(WITH_EIGEN     "Whether to install Eigen3"    @WITH_EIGEN@)
+option(WITH_PCL       "Whether to install PCL"       @WITH_PCL@)
+option(WITH_CERES     "Whether to install Ceres"     @WITH_CERES@)
 option(WITH_NANOFLANN "Whether to install nanoflann" @WITH_NANOFLANN@)
-option(WITH_G2O "Whether to install g2o" @WITH_G2O@)
-option(WITH_GTSAM "Whether to install gtsam" @WITH_GTSAM@)
-option(WITH_OPENCV "Whether to install OpenCV" @WITH_OPENCV@)
+option(WITH_G2O       "Whether to install g2o"       @WITH_G2O@)
+option(WITH_GTSAM     "Whether to install gtsam"     @WITH_GTSAM@)
+option(WITH_TEASERPP  "Whether to install teaser++"  @WITH_TEASERPP@)
+option(WITH_OPENCV    "Whether to install OpenCV"    @WITH_OPENCV@)
 
 set(LOG_PREFIX " [Superbuild] -- ")
 
@@ -55,4 +56,10 @@ endif()
 if (WITH_OPENCV)
    set(OpenCV_DIR ${SUPERBUILD_INSTALL_DIR}/lib/cmake/opencv4 CACHE PATH "Path to OpenCVConfig.cmake")
    message(INFO "${LOG_PREFIX} Force OpenCV_DIR to: ${OpenCV_DIR}")
+endif()
+
+# TEASERPP
+if (WITH_TEASERPP)
+   set(teaserpp_DIR ${SUPERBUILD_INSTALL_DIR}/lib/cmake/teaserpp CACHE PATH "Path to teaserppConfig.cmake")
+   message(INFO "${LOG_PREFIX} Force teaserpp_DIR to: ${teaserpp_DIR}")
 endif()

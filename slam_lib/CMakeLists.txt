@@ -17,6 +17,12 @@ if (OpenCV_FOUND)
   message("Lidar SLAM : OPENCV was found, camera API compiled")
 endif()
 
+# If TEASER is available, compile automatic loop closure detection by teaserpp stuff
+if (teaserpp_FOUND)
+  set(teaserpp_targets teaserpp::teaser_registration teaserpp::teaser_features)
+  message("Lidar SLAM : TEASER++ was found, automatic loop closure detection enabled")
+endif()
+
 # Generate export symbols on Windows to use this lib
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
@@ -31,6 +37,7 @@ add_library(LidarSlam
   src/Utilities.cxx
   src/VoxelGrid.cxx
   src/InterpolationModels.cxx
+  src/ScanContext.cxx
   ${SLAM_g2o_sources}
 )
 
@@ -42,6 +49,7 @@ target_link_libraries(LidarSlam
     ${g2o_targets}
     ${gtsam_targets}
     ${opencv_targets}
+    ${teaserpp_targets}
   PRIVATE
     ${Eigen3_target}
     ${OpenMP_target}
@@ -68,11 +76,17 @@ if (OpenCV_FOUND)
   set(opencv_def USE_OPENCV=1)
 endif()
 
+# If TEASERPP is available, set a precompilation variable
+if (teaserpp_FOUND)
+  set(teaserpp_def USE_TEASERPP=1)
+endif()
+
 target_compile_definitions(LidarSlam
   PUBLIC
     ${g2o_def}
     ${gtsam_def}
     ${opencv_def}
+    ${teaserpp_def}
 )
 
 # Prefer rpath over runpath to bypass LD_LIBRARY_PATH at runtime (which can be set by ROS notably)

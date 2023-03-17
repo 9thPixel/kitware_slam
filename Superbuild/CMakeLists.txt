@@ -3,13 +3,14 @@ project(Superbuild)
 
 # -----------------------------------------------------------------------------------------------
 # Select Options
-option(WITH_EIGEN "Whether to install Eigen3" ON)
+option(WITH_EIGEN     "Whether to install Eigen3"    ON)
 option(WITH_NANOFLANN "Whether to install nanoflann" ON)
-option(WITH_PCL "Whether to install PCL" OFF)
-option(WITH_CERES "Whether to install Ceres" ON)
-option(WITH_G2O "Whether to install G2O" OFF)
-option(WITH_GTSAM "Whether to install GTSAM" OFF)
-option(WITH_OPENCV "Whether to install OPENCV" OFF)
+option(WITH_PCL       "Whether to install PCL"       OFF)
+option(WITH_CERES     "Whether to install Ceres"     ON)
+option(WITH_G2O       "Whether to install G2O"       OFF)
+option(WITH_GTSAM     "Whether to install GTSAM"     OFF)
+option(WITH_TEASERPP  "Whether to install teaser++"  OFF)
+option(WITH_OPENCV    "Whether to install OPENCV"    OFF)
 
 set(CV_CUDA_ARCH_BIN 7.5 CACHE STRING "GPU architecture for OPENCV with CUDA (see https://developer.nvidia.com/cuda-gpus). Default is for NVIDIA Quadro T* or RTX*")
 
@@ -49,7 +50,7 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/superbuild_import.cmake.in ${CMAKE_IN
 
 # -----------------------------------------------------------------------------------------------
 # INSTALL Eigen3
-if (WITH_EIGEN OR WITH_G2O OR WITH_PCL OR WITH_NANOFLANN OR WITH_CERES)
+if (WITH_EIGEN OR WITH_G2O OR WITH_PCL OR WITH_NANOFLANN OR WITH_CERES OR WITH_TEASERPP)
 
     message(INFO "${LOG_PREFIX} Generating Eigen3 dependency")
     ExternalProject_Add(
@@ -68,9 +69,26 @@ endif ()
 
 # -----------------------------------------------------------------------------------------------
 # INSTALL PCL
-if (WITH_PCL)
+if (WITH_PCL OR WITH_TEASERPP)
     # INSTALL PCL
     message(INFO "${LOG_PREFIX} Generating PCL dependency")
+    if (WITH_TEASERPP)
+        set(PCL_OPTIONAL_ARGS
+          -DBUILD_kdtree:BOOL=ON
+          -DBUILD_search:BOOL=ON
+          -DBUILD_filters:BOOL=ON
+          -DBUILD_2d:BOOL=ON
+          -DBUILD_features:BOOL=ON
+          )
+    else ()
+        set(PCL_OPTIONAL_ARGS
+          -DBUILD_kdtree:BOOL=OFF
+          -DBUILD_search:BOOL=OFF
+          -DBUILD_filters:BOOL=OFF
+          -DBUILD_2d:BOOL=OFF
+          -DBUILD_features:BOOL=OFF
+          )
+    endif ()
     ExternalProject_Add(
             PCL_ext
             DEPENDS Eigen3_ext
@@ -96,14 +114,9 @@ if (WITH_PCL)
                 -DBUILD_keypoints:BOOL=OFF
                 -DBUILD_outofcore:BOOL=OFF
                 -DBUILD_people:BOOL=OFF
-                -DBUILD_2d:BOOL=OFF
                 -DBUILD_CUDA:BOOL=OFF
                 -DBUILD_GPU:BOOL=OFF
-                -DBUILD_kdtree:BOOL=OFF
-                -DBUILD_search:BOOL=OFF
                 -DBUILD_sample_consensus:BOOL=OFF
-                -DBUILD_features:BOOL=OFF
-                -DBUILD_filters:BOOL=OFF
                 -DBUILD_registration:BOOL=OFF
                 -DBUILD_recognition:BOOL=OFF
                 -DBUILD_segmentation:BOOL=OFF
@@ -119,6 +132,7 @@ if (WITH_PCL)
                 -DWITH_RSSDK:BOOL=OFF
                 -DWITH_RSSDK2:BOOL=OFF
                 -DWITH_OPENGL:BOOL=OFF
+                ${PCL_OPTIONAL_ARGS}
                 -DEIGEN_INCLUDE_DIR:PATH=${CMAKE_INSTALL_PREFIX}/include/eigen3/
                 ${GENERIC_PROJECTS_ARGS}
             )
@@ -299,5 +313,36 @@ if (WITH_OPENCV)
         -DCUDA_NVCC_FLAGS=--expt-relaxed-constexpr
         ${GENERIC_PROJECTS_ARGS}
     )
+
+endif ()
+
+# -----------------------------------------------------------------------------------------------
+# INSTALL teaser++
+if (WITH_TEASERPP)
+
+    message(INFO "${LOG_PREFIX} Generating teaser++ dependency")
+    ExternalProject_Add(
+            Teaserpp_ext
+            DEPENDS Eigen3_ext PCL_ext
+
+            GIT_REPOSITORY https://github.com/MIT-SPARK/TEASER-plusplus.git
+            GIT_TAG v2.0
+            GIT_SHALLOW 1
+
+            CMAKE_ARGS
+                -DBUILD_TEASER_FPFH:BOOL=ON
+                -DBUILD_TESTS:BOOL=OFF
+                -DBUILD_MATLAB_BINDINGS:BOOL=OFF
+                -DBUILD_PYTHON_BINDINGS:BOOL=OFF
+                -DBUILD_DOC:BOOL=OFF
+                -DBUILD_WITH_MARCH_NATIVE:BOOL=OFF
+                -DBUILD_MKL:BOOL=OFF
+                -DBUILD_GMOCK:BOOL=OFF
+                -DBUILD_DIAGNOSTIC_PRINT:BOOL=OFF;
+                -DEigen3_DIR:FILEPATH=${CMAKE_INSTALL_PREFIX}/share/eigen3/cmake
+                -DPCL_DIR:FILEPATH=${CMAKE_INSTALL_PREFIX}/share/pcl-1.10
+                -DBOOST_ROOT:PATH=${BOOST_ROOT}
+                ${GENERIC_PROJECTS_ARGS}
+            )
 
 endif ()

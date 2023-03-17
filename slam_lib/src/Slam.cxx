@@ -75,11 +75,13 @@
 #include <ctime>
 
 // LOCAL
-#include "LidarSlam/Slam.h"
 #include "LidarSlam/Utilities.h"
 #include "LidarSlam/KDTreePCLAdaptor.h"
 #include "LidarSlam/ConfidenceEstimators.h"
 #include "LidarSlam/InterpolationModels.h"
+
+// SCANCONTEXT
+#include "ScanContext/utility.h"
 
 // CERES
 #include <ceres/solver.h>
@@ -90,6 +92,17 @@
 
 // EIGEN
 #include <Eigen/Dense>
+
+// TEASERPP
+#ifdef USE_TEASERPP
+#include <teaser/registration.h>
+#include <teaser/matcher.h>
+#endif //USE_TEASERPP
+
+// LOCAL
+// Note: Slam.h needs to be included after teaser/match.h
+// because of the conflict between opencv and flann
+#include "LidarSlam/Slam.h"
 
 #define PRINT_VERBOSE(minVerbosityLevel, stream) if (this->Verbosity >= (minVerbosityLevel)) {std::cout << stream << std::endl;}
 #define IF_VERBOSE(minVerbosityLevel, command) if (this->Verbosity >= (minVerbosityLevel)) { command; }
@@ -233,6 +246,11 @@ void Slam::Reset(bool resetLog)
   // they would need to be reloaded too.
   this->ResetSensors(true);
 
+  // Reset scan context manager
+  if (this->UsePGOConstraints[LOOP_CLOSURE] &&
+      this->LoopParams.Detector == LoopClosureDetector::SCAN_CONTEXT)
+    this->ScanContextManager.reset(new SCManager);
+
   // Reset log history
   if (resetLog)
   {
@@ -290,7 +308,7 @@ void Slam::EnableKeypointType(Keypoint k, bool enabled)
       this->CurrentWorldKeypoints[k].reset(new PointCloud);
     this->EgoMotionMatchingResults[k] = KeypointsMatcher::MatchingResults();
     this->LocalizationMatchingResults[k] = KeypointsMatcher::MatchingResults();
-    this->LoopClosureMatchingResults[k] = KeypointsMatcher::MatchingResults();
+    this->LoopParams.MatchingResults[k] = KeypointsMatcher::MatchingResults();
   }
 }
 
@@ -424,6 +442,19 @@ void Slam::AddFrames(const std::vector<PointCloud::Ptr>& frames)
     IF_VERBOSE(3, Utils::Timer::Init("Logging"));
     this->LogCurrentFrameState();
     IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Logging"));
+
+    // Update scan context
+    if (this->UsePGOConstraints[LOOP_CLOSURE] &&
+        this->LoopParams.Detector == LoopClosureDetector::SCAN_CONTEXT)
+    {
+      IF_VERBOSE(3, Utils::Timer::Init("Scan context update"));
+      this->UpdateScanContextDescriptor(this->LogStates.back());
+
+      if (this->LogStates.back().Time - this->LastSCDetectionTime >= this->SCDetectionCycle &&
+          this->LogStates.back().Time - this->LastPGOTime >= SCRestTime)
+        this->OptimizeGraph();
+      IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Scan context update"));
+    }
 
     if (this->ImuUpdate && this->ImuHasData())
     {
@@ -609,7 +640,7 @@ bool Slam::OptimizeGraph()
 {
   #ifdef USE_G2O
   // Check if graph can be optimized
-  if (!this->LmHasData() && !this->GpsHasData() && !UsePGOConstraints[LOOP_CLOSURE])
+  if (!this->LmHasData() && !this->GpsHasData() && !this->UsePGOConstraints[LOOP_CLOSURE])
   {
     PRINT_WARNING("No external constraint found, graph cannot be optimized");
     return false;
@@ -635,7 +666,7 @@ bool Slam::OptimizeGraph()
   bool externalConstraint = false;
 
   // Look for loop closure constraints
-  if (UsePGOConstraints[LOOP_CLOSURE])
+  if (this->UsePGOConstraints[LOOP_CLOSURE])
   {
     // Detect loop closure
     auto itRevisitedState = this->LogStates.begin();
@@ -650,7 +681,7 @@ bool Slam::OptimizeGraph()
                                         loopClosureTransform, loopClosureCovariance))
       {
         // Add loop closure constraint into pose graph
-        graphManager.AddLoopClosureConstraint(this->LoopClosureQueryIdx, this->LoopClosureRevisitedIdx,
+        graphManager.AddLoopClosureConstraint(this->LoopParams.QueryIdx, this->LoopParams.RevisitedIdx,
                                               loopClosureTransform, loopClosureCovariance);
         externalConstraint = true;
       }
@@ -660,7 +691,7 @@ bool Slam::OptimizeGraph()
   }
 
   // Look for landmark constraints
-  if (UsePGOConstraints[LANDMARK] && this->LmHasData())
+  if (this->UsePGOConstraints[LANDMARK] && this->LmHasData())
   {
     // Allow the rotation of the covariances when interpolating the measurements
     this->SetLandmarkCovarianceRotation(true);
@@ -696,7 +727,7 @@ bool Slam::OptimizeGraph()
   }
 
   // Look for GPS constraints
-  if (UsePGOConstraints[PGO_GPS] && this->GpsHasData())
+  if (this->UsePGOConstraints[PGO_GPS] && this->GpsHasData())
   {
     graphManager.AddExternalSensor(this->GpsManager->GetCalibration(), int(ExternalSensor::GPS));
     for (auto& s : this->LogStates)
@@ -751,6 +782,8 @@ bool Slam::OptimizeGraph()
   // The last pose has to be updated with new optimized pose
   this->SetWorldTransformFromGuess(this->LogStates.back().Isometry);
 
+  this->LastPGOTime = this->LastSCDetectionTime;
+
   IF_VERBOSE(1, Utils::Timer::StopAndDisplay("Pose graph optimization"));
 
   return true;
@@ -759,6 +792,20 @@ bool Slam::OptimizeGraph()
   PRINT_ERROR("SLAM graph optimization requires G2O, but it was not found.");
   return false;
   #endif  // USE_G2O
+}
+
+//-----------------------------------------------------------------------------
+void Slam::EnablePGOConstraint(PGOConstraint constraint, bool enabled)
+{
+  this->UsePGOConstraints[constraint] = enabled;
+}
+
+//-----------------------------------------------------------------------------
+bool Slam::IsPGOConstraintEnabled(PGOConstraint constraint) const
+{
+  if (!this->UsePGOConstraints.count(constraint))
+    return false;
+  return this->UsePGOConstraints.at(constraint);
 }
 
 //-----------------------------------------------------------------------------
@@ -1596,47 +1643,287 @@ std::vector<LidarState> Slam::GetLastStates(double freq)
 //   Loop Closure usage
 //==============================================================================
 
+bool Slam::DetectLoopClosure()
+{
+  auto itQueryState = this->LogStates.begin();
+  auto itRevisitedState = itQueryState;
+  bool detectionValid = this->DetectLoopClosureIndices(itQueryState, itRevisitedState);
+  std::cout<<" debug in DetectLoopClosure\n";
+  std::cout<<" logstate size = "<<this->LogStates.size()<<" begin = "<<this->LogStates.begin()->Index<<" back = "<<this->LogStates.back().Index<<"\n";
+  // Debug test: save point cloud (to be removed)
+  std::ofstream fout_query_frame("/home/tfu/Documents/3DTarget/test_scancontext/query_frame_" + std::to_string(itQueryState->Index) + ".csv");
+  std::ofstream fout_revisited_frame("/home/tfu/Documents/3DTarget/test_scancontext/revisit_frame_" + std::to_string(itRevisitedState->Index) + ".csv");
+  for (auto k : this->UsableKeypoints)
+  {
+    PointCloud pointCloud_query;
+    pcl::transformPointCloud(*itQueryState->Keypoints[k]->GetCloud(), pointCloud_query, itQueryState->Isometry.matrix().cast<float>());
+    for (const auto pt : pointCloud_query)
+      fout_query_frame << pt.x << "," << pt.y << "," << pt.z << "\n";
+
+    PointCloud pointCloud_revisited;
+    pcl::transformPointCloud(*itRevisitedState->Keypoints[k]->GetCloud(), pointCloud_revisited, itRevisitedState->Isometry.matrix().cast<float>());
+    for (const auto pt : pointCloud_revisited)
+      fout_revisited_frame << pt.x << "," << pt.y << "," << pt.z << "\n";
+  }
+  fout_query_frame.close();
+  fout_revisited_frame.close();
+
+  return detectionValid;
+  // // Save keypoints for scan context detector
+  // PointCloud::Ptr undistortedKeypoints(new PointCloud);
+  // pcl::PointCloud<PointType>::Ptr thisRawCloudKeyFrame(new pcl::PointCloud<PointType>);
+  // for (auto& state : this->LogStates)
+  // {
+  //   std::cout<<" frame id "<<state.Index<<"\n";
+
+  //   undistortedKeypoints.reset(new PointCloud);
+  //   for (auto k : this->UsableKeypoints)
+  //   {
+  //     std::cout<<" k = "<<k<<"\n";
+  //     PointCloud::Ptr keypoints = state.Keypoints[k]->GetCloud();
+  //     std::cout<<" keypoint size = "<<keypoints->size()<<"\n";
+  //     *undistortedKeypoints += *keypoints;
+  //   }
+  //   std::cout<<"created undistortedKeypoints size = "<<undistortedKeypoints->size()<<"\n";
+  //   thisRawCloudKeyFrame.reset(new pcl::PointCloud<PointType>);
+  //   pcl::copyPointCloud(*undistortedKeypoints, *thisRawCloudKeyFrame);
+  //   std::cout<<" pcl copy pointcloud\n";
+  //   scManager.makeAndSaveScancontextAndKeys(*thisRawCloudKeyFrame);
+  //   std::cout<<" scmanager make and save scan context and keys\n";
+  // }
+  // std::cout<<" debug boucle for finished\n";
+  // int detectedRevisitFrameIdx = -1;
+  // auto detectResult = scManager.detectLoopClosureID();
+  // std::cout<<" debug sc manager detection finished\n";
+  // detectedRevisitFrameIdx = detectResult.first;
+
+  // return true;
+
+
+}
+
+//-----------------------------------------------------------------------------
 bool Slam::DetectLoopClosureIndices(std::list<LidarState>::iterator& itQueryState, std::list<LidarState>::iterator& itRevisitedState)
 {
   PRINT_VERBOSE(2, "========== Loop closure : Detection ==========");
-
-  if (this->ExtDetectLoopClosure)
+  bool detectionValid = false;
+  switch (this->LoopParams.Detector)
   {
-    // If ExtDetectLoopClosure is enabled, check whether the input frames are stored in the LogStates
-    // When LogOnlyKeyFrames is enabled, only keyframes are stored in the LogStates.
-    // It is possible that the inputs frame indices are not keyframes.
-    // In this case, replace the input frame index by its neighbor keyframes
-    itQueryState = this->LogStates.begin();
-    itRevisitedState = itQueryState;
-    while (itQueryState->Index < this->LoopClosureQueryIdx && itQueryState->Index != this->LogStates.back().Index)
-      ++itQueryState;
-    if (itQueryState->Index != this->LoopClosureQueryIdx)
+    case LoopClosureDetector::NONE:
     {
-      this->LoopClosureQueryIdx = itQueryState->Index;
-      PRINT_WARNING("The input query frame index is not found in Logstates and is replaced by frame #"
-                    << this->LoopClosureQueryIdx << ".");
+      PRINT_WARNING("Loop closure detection is disabled!");
+      return false;
+    }
+    case LoopClosureDetector::MANUAL:
+    {
+      // If the detector is manual, check whether or not the input frames are stored in the LogStates
+      // When LogOnlyKeyFrames is enabled, only keyframes are stored in the LogStates.
+      // It is possible that the inputs frame indices are not keyframes.
+      // In this case, replace the input frame index by its neighbor keyframe
+      itQueryState = itRevisitedState = this->LogStates.begin();
+      while (itQueryState->Index < this->LoopParams.QueryIdx && itQueryState->Index != this->LogStates.back().Index)
+        ++itQueryState;
+      if (itQueryState->Index != this->LoopParams.QueryIdx)
+      {
+        this->LoopParams.QueryIdx = itQueryState->Index;
+        PRINT_WARNING("The input query frame index is not found in Logstates and is replaced by frame #"
+                      << this->LoopParams.QueryIdx << ".");
+      }
+
+      while (itRevisitedState->Index < this->LoopParams.RevisitedIdx && itRevisitedState->Index != this->LogStates.back().Index)
+        ++itRevisitedState;
+      if (itRevisitedState->Index != this->LoopParams.RevisitedIdx)
+      {
+        this->LoopParams.RevisitedIdx = itRevisitedState->Index;
+        PRINT_WARNING("The input revisited frame index is not found in Logstates and is replaced by frame #"
+                      << this->LoopParams.RevisitedIdx << ".");
+      }
+      PRINT_VERBOSE(3, "Loop closure is detected by external information. The relevant frame indices are:\n"
+                    << " Query frame #" << this->LoopParams.QueryIdx << " Revisited frame #" << this->LoopParams.RevisitedIdx);
+      detectionValid = true;
+      break;
+    }
+    case LoopClosureDetector::TEASERPP:
+    {
+      // Automatic detection of loop closure by teaserpp registration
+      // It detects automatically a revisited frame idx for the current frame
+      itQueryState = std::prev(this->LogStates.end());
+      itRevisitedState = this->LogStates.begin();
+      detectionValid = this->DetectLoopWithTeaser(itQueryState, itRevisitedState);
+      if (detectionValid)
+      {
+        this->LoopParams.QueryIdx = itQueryState->Index;
+        this->LoopParams.RevisitedIdx = itRevisitedState->Index;
+      }
+      break;
+    }
+    case LoopClosureDetector::SCAN_CONTEXT:
+    {
+      // Automatic detection of loop closure by scan context
+      // It detects automatically a revisited frame idx for the current frame
+      int detectedSCRevisitedFrameIdx = -1;
+      auto detectResult = this->ScanContextManager->detectLoopClosureID();
+
+    itQueryState = std::prev(this->LogStates.end());
+    if (this->LogOnlyKeyframes && !itQueryState->IsKeyFrame)
+      --itQueryState;
+    this->LastSCDetectionTime = itQueryState->Time;
+
+      detectedSCRevisitedFrameIdx = detectResult.first;
+      if (detectedSCRevisitedFrameIdx == -1)
+      {
+        PRINT_WARNING("Loop closure is not detected by scan context.")
+        return false;
+      }
+
+      itRevisitedState = this->LogStates.begin();
+      std::advance(itRevisitedState, detectedSCRevisitedFrameIdx);
+      this->LoopParams.QueryIdx     = itQueryState->Index;
+      this->LoopParams.RevisitedIdx = itRevisitedState->Index;
+
+      PRINT_VERBOSE(3, "Loop closure is detected by scan context detector. The relevant frame indices are:\n"
+                    << " Query frame #" << this->LoopParams.QueryIdx << " Revisited frame #" << this->LoopParams.RevisitedIdx);
+      // To do : add check function
+      detectionValid = true;
+      break;
+    }
+  }
+  std::cout<<" sortie switch in DetectLoopClosureIndices\n";
+  return detectionValid;
+}
+
+//-----------------------------------------------------------------------------
+bool Slam::DetectLoopWithTeaser(std::list<LidarState>::iterator& itQueryState, std::list<LidarState>::iterator& itRevisitedState)
+{
+  #ifdef USE_TEASERPP
+  // Create query submap and get keypoints in BASE coordinates
+  Maps querySubMaps;
+  this->InitSubMaps(querySubMaps);
+  this->BuildMaps(querySubMaps,
+                  this->GetSubMapBoundIdx(itQueryState, this->LoopParams.QueryMapStartRange),
+                  this->GetSubMapBoundIdx(itQueryState, this->LoopParams.QueryMapEndRange),
+                  itQueryState->Index);
+  // Convert submap keypoints into teaser used format
+  teaser::PointCloud teaserQueryPoints;
+  for (auto k : this->UsableKeypoints)
+  {
+    PointCloud::Ptr keypoints = querySubMaps[k]->Get();
+    for (const auto& pt: *keypoints)
+      teaserQueryPoints.push_back({pt.x, pt.y, pt.z}); // Note: push_back is defined in teaserpp lib for its pointcloud
+  }
+  // Compute FPFH for query keypoints
+  // The input arguments are: input cloud, radius for estimating normals and
+  // radius for calculating FPFH (needs to be at least normalSearchRadius)
+  teaser::FPFHEstimation fpfh;
+  auto queryDescriptors = fpfh.computeFPFHFeatures(teaserQueryPoints,
+                                                   2 * this->GetVoxelGridLeafSize(PLANE),
+                                                   3 * this->GetVoxelGridLeafSize(PLANE));
+
+  // Compute the frame index relative to the newest frame onto which a loop closure is searched
+  // A frame gap is set to avoid finding a loop closure between the query frame and its direct surrounding.
+  int lastFrameIdx = this->GetSubMapBoundIdx(itQueryState, -this->LoopParams.GapLength);
+
+  // Search the revisited frame by teaser registration
+  auto itSt = this->LogStates.begin();
+  // Temporary value to evaluate the overlap for each candidate
+  float overlap = 0.;
+  // Temporary value to store the transform of the best teaser registration
+  Eigen::Isometry3d queryPose = Eigen::Isometry3d::Identity();
+  while (itSt->Index < static_cast<unsigned int>(lastFrameIdx) && itSt != this->LogStates.end())
+  {
+    // Create candidate submap and build kdtree
+    Maps candidateSubMaps;
+    this->InitSubMaps(candidateSubMaps);
+    this->BuildMaps(candidateSubMaps,
+                    this->GetSubMapBoundIdx(itSt, this->LoopParams.RevisitedMapStartRange),
+                    this->GetSubMapBoundIdx(itSt, this->LoopParams.RevisitedMapEndRange));
+    // Convert submap keypoints into teaser used format
+    teaser::PointCloud teaserCandidatePoints;
+    for (auto k : this->UsableKeypoints)
+    {
+      PointCloud::Ptr keypoints = candidateSubMaps[k]->Get();
+      for (const auto& pt: *keypoints)
+        teaserCandidatePoints.push_back({pt.x, pt.y, pt.z}); // Note: push_back is defined in teaserpp lib for its pointcloud
+    }
+    // Compute FPFH features for candidate keypoints
+    // The input arguments are: input cloud, radius for estimating normals and
+    // radius for calculating FPFH (needs to be at least normalSearchRadius)
+    auto candidateDescriptors = fpfh.computeFPFHFeatures(teaserCandidatePoints,
+                                                         2 * this->GetVoxelGridLeafSize(PLANE),
+                                                         3 * this->GetVoxelGridLeafSize(PLANE));
+    // Compute correspondences between query keypoints and candidate keypoints using their fpfh features
+    teaser::Matcher matcher;
+    auto correspondences = matcher.calculateCorrespondences(teaserQueryPoints, teaserCandidatePoints,
+                                                            *queryDescriptors, *candidateDescriptors);
+
+    // Run TEASER++ registration
+    // Prepare solver parameters
+    teaser::RobustRegistrationSolver::Params params;
+    params.noise_bound = 0.05;              // Noise bound
+    params.cbar2 = 1;                       // maximal allowed residual^2 to noise bound^2 ratio
+    params.estimate_scaling = false;        // no scaling in the pointcloud
+    params.rotation_max_iterations = 100;   // Maximum iterations allowed for the GNC rotation estimators.
+    params.rotation_gnc_factor = 1.4;       // The algorithm multiples the control parameter by the factor every iteration.
+    params.rotation_estimation_algorithm =
+        teaser::RobustRegistrationSolver::ROTATION_ESTIMATION_ALGORITHM::GNC_TLS; // registration solver
+    params.rotation_cost_threshold = 0.005; // The cost threshold compares with the difference between costs of consecutive iterations.
+
+    // Solve with TEASER++
+    teaser::RobustRegistrationSolver solver(params);
+    solver.solve(teaserQueryPoints, teaserCandidatePoints, correspondences);
+    auto solution = solver.getSolution();
+    Eigen::Isometry3d T = Eigen::Isometry3d::Identity();
+    T.translation() = solution.translation;
+    T.linear() = solution.rotation;
+
+    // Registration evaluation
+    // Merge all keypoints in one pointcloud
+    PointCloud::Ptr queryWorldPoints(new PointCloud);
+    for (auto k : this->UsableKeypoints)
+    {
+      // Aggregate all input points into WORLD coordinates
+      PointCloud::Ptr worldKeypoints(new PointCloud);
+      pcl::transformPointCloud(*(querySubMaps.at(k)->Get()), *worldKeypoints, T.matrix().cast<float>());
+      *queryWorldPoints += *worldKeypoints;
+
+      // Build kdtree for candidate sub maps
+      candidateSubMaps[k]->BuildSubMapKdTree();
     }
 
-    while (itRevisitedState->Index < this->LoopClosureRevisitedIdx && itRevisitedState->Index != this->LogStates.back().Index)
-      ++itRevisitedState;
-    if (itRevisitedState->Index != this->LoopClosureRevisitedIdx)
+    // Compute LCP like estimator
+    // (see http://geometry.cs.ucl.ac.uk/projects/2014/super4PCS/ for more info)
+    float overlapEstimation = Confidence::LCPEstimator(queryWorldPoints, candidateSubMaps, 0.3, this->NbThreads, false);
+    if (overlapEstimation > overlap)
     {
-      this->LoopClosureRevisitedIdx = itRevisitedState->Index;
-      PRINT_WARNING("The input revisited frame index is not found in Logstates and is replaced by frame #"
-                    << this->LoopClosureRevisitedIdx << ".");
+      overlap = overlapEstimation;
+      itRevisitedState = itSt;
+      queryPose = T;
     }
-    PRINT_VERBOSE(3, "Loop closure is detected by external information. The relevant frame indices are:\n"
-                  << " Query frame #" << itQueryState->Index << " Revisited frame #" << itRevisitedState->Index);
+
+    // Update iterators
+    Utils::SafeAdvance(itSt, this->LoopParams.SampleStep, this->LogStates.end());
+  }
+
+  if (overlap >= this->LoopParams.EvaluationThreshold)
+  {
+    this->LoopParams.DetectionTransform = queryPose;
+    PRINT_VERBOSE(3, "Loop closure is detected for frame #" << itQueryState->Index << " by teaserpp with " << 100*overlap << "% overlap.\n"
+                     "The revisited frame is #" << itRevisitedState->Index);
     return true;
   }
   else
   {
-    // Automatic detection of loop closure will be implemented here
-    // It detects automatically a revisited frame idx for the current frame
-    itQueryState = this->LogStates.end();
-    itRevisitedState = this->LogStates.begin();
+    this->LoopParams.DetectionTransform = Eigen::Isometry3d::Identity();
+    PRINT_ERROR("Loop closure is NOT detected for frame #" << itQueryState->Index << " by teaserpp.\n"
+                     "The detected frame (#" << itRevisitedState->Index << ") has a low overlap ("<< 100*overlap << "%) ");
     return false;
   }
+  #else
+  PRINT_ERROR("Automatic loop closure detection requires TEASER++, but it was not found.");
+  return false;
+  #endif
+  static_cast<void>(itQueryState);
+  static_cast<void>(itRevisitedState);
 }
 
 //-----------------------------------------------------------------------------
@@ -1653,15 +1940,17 @@ bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState
   Maps loopClosureRevisitedSubMaps;
   this->InitSubMaps(loopClosureRevisitedSubMaps);
   this->BuildMaps(loopClosureRevisitedSubMaps,
-                  itRevisitedState->Index + this->LCRevisitedWindowStartRange,
-                  itRevisitedState->Index + this->LCRevisitedWindowEndRange);
+                  this->GetSubMapBoundIdx(itRevisitedState, this->LoopParams.RevisitedMapStartRange),
+                  this->GetSubMapBoundIdx(itRevisitedState, this->LoopParams.RevisitedMapEndRange));
   PRINT_VERBOSE(3, "Sub maps are created around revisited frame #" << itRevisitedState->Index << ".");
 
   // Pose prior for optimization
   Eigen::Isometry3d loopClosureTworld = itQueryState->Isometry;
-  // Enable to add an offset to the pose prior when two poses are too far from each other.
-  if (this->EnableLoopClosureOffset)
+  if (!this->LoopParams.DetectionTransform.matrix().isIdentity())
+    loopClosureTworld = this->LoopParams.DetectionTransform;
+  else if (this->LoopParams.EnableOffset)
   {
+    // Enable to add an offset to the pose prior when two poses are too far from each other.
     PointCloud::Ptr revisitedPlaneKeypoints(new PointCloud);
     pcl::transformPointCloud(*(itRevisitedState->Keypoints[PLANE]->GetCloud()),
                              *revisitedPlaneKeypoints,
@@ -1679,13 +1968,13 @@ bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState
   std::map<Keypoint, PointCloud::Ptr> loopClosureQueryKeypoints;
   for (auto k : this->UsableKeypoints)
     loopClosureQueryKeypoints[k].reset(new PointCloud);
-  if (this->LoopClosureICPWithSubmap)
+  if (this->LoopParams.ICPWithSubmap)
   {
     Maps loopClosureQuerySubMaps;
     this->InitSubMaps(loopClosureQuerySubMaps);
     this->BuildMaps(loopClosureQuerySubMaps,
-                    itQueryState->Index + this->LCQueryWindowStartRange,
-                    itQueryState->Index + this->LCQueryWindowEndRange,
+                    this->GetSubMapBoundIdx(itQueryState, this->LoopParams.QueryMapStartRange),
+                    this->GetSubMapBoundIdx(itQueryState, this->LoopParams.QueryMapEndRange),
                     itQueryState->Index);
     PRINT_VERBOSE(3, "Sub maps are created around query frame #" << itQueryState->Index << ".");
     for (auto k : this->UsableKeypoints)
@@ -1726,12 +2015,12 @@ bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState
   this->TotalMatchedKeypoints = 0;
 
   // Set loop closure parameters which do not have a setter
-  this->LoopClosureParams.MatchingParams.NbThreads = static_cast<unsigned int>(this->NbThreads);
-  this->LoopClosureParams.MatchingParams.SingleEdgePerRing = false;
+  this->LoopParams.OptParams.MatchingParams.NbThreads = static_cast<unsigned int>(this->NbThreads);
+  this->LoopParams.OptParams.MatchingParams.SingleEdgePerRing = false;
   // ICP - Levenberg-Marquardt loop to estimate the pose of the current frame relatively to the close loop frame
   loopClosureUncertainty = this->EstimatePose(loopClosureQueryKeypoints, loopClosureRevisitedSubMaps,
-                                              this->LoopClosureParams, loopClosureTworld,
-                                              this->LoopClosureMatchingResults);
+                                              this->LoopParams.OptParams, loopClosureTworld,
+                                              this->LoopParams.MatchingResults);
 
   IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Loop closure Registration : whole ICP-LM loop"));
 
@@ -1769,7 +2058,7 @@ bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState
     SET_COUT_FIXED_PRECISION(3);
     std::cout << "Loop closure matched keypoints: " << this->TotalMatchedKeypoints << " (";
     for (auto k : this->UsableKeypoints)
-      std::cout << this->LoopClosureMatchingResults[k].NbMatches() << " " << Utils::Plural(KeypointTypeNames.at(k)) << " ";
+      std::cout << this->LoopParams.MatchingResults[k].NbMatches() << " " << Utils::Plural(KeypointTypeNames.at(k)) << " ";
 
     std::cout << ")"
               << "\nLoop closure position uncertainty    = " << loopClosureUncertainty.PositionError    << " m"
@@ -1784,6 +2073,35 @@ bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState
     RESET_COUT_FIXED_PRECISION;
   }
   return loopClosureUncertainty.Valid;
+}
+
+//-----------------------------------------------------------------------------
+void Slam::UpdateScanContextDescriptor(const LidarState& state)
+{
+  // Init scan context detector
+  if (!this->ScanContextManager)
+  {
+    this->ScanContextManager = std::make_shared<SCManager>();
+    this->LastSCDetectionTime = this->LogStates.front().Time;
+  }
+
+  if (this->LogOnlyKeyframes && !state.IsKeyFrame)
+    return;
+
+  // Save keypoints for scan context detector
+  PointCloud::Ptr undistortedKeypoints(new PointCloud);
+  for (auto k : this->UsableKeypoints)
+  {
+    PointCloud::Ptr keypoints = state.Keypoints.at(k)->GetCloud();
+    *undistortedKeypoints += *keypoints;
+  }
+  // Change point type by copy for scan context
+  pcl::PointCloud<PointType>::Ptr rawCloudKeyFrame(new pcl::PointCloud<PointType>);
+  pcl::copyPointCloud(*undistortedKeypoints, *rawCloudKeyFrame);
+
+  // Make scan context descriptor for the pointcloud of each frame
+  this->ScanContextManager->makeAndSaveScancontextAndKeys(*rawCloudKeyFrame);
+
 }
 
 //==============================================================================
@@ -1858,6 +2176,26 @@ void Slam::BuildMaps(Maps& maps, int windowStartIdx, int windowEndIdx, int idxFr
       maps[k]->Add(keypoints, false);
     }
   }
+}
+
+//-----------------------------------------------------------------------------
+int Slam::GetSubMapBoundIdx(std::list<LidarState>::iterator itState, double windowRange)
+{
+  auto itStop = std::prev(this->LogStates.end());
+  if (windowRange < 0)
+    itStop = this->LogStates.begin();
+  double trajLength = 0;
+  while (trajLength < std::abs(windowRange) && itState != itStop)
+  {
+    // Compute distance between two poses
+    auto itNeighbor = windowRange < 0 ? std::prev(itState) : std::next(itState);
+    trajLength += (itState->Isometry.translation() - itNeighbor->Isometry.translation()).norm();
+    itState = itNeighbor;
+  }
+  if (itState==this->LogStates.end())
+    --itState;
+
+  return itState->Index;
 }
 
 //-----------------------------------------------------------------------------

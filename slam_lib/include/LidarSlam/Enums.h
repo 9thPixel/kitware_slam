@@ -217,4 +217,21 @@ enum PGOConstraint
   PGO_GPS = 2,
 };
 
+//------------------------------------------------------------------------------
+//! Type of loop closure detector
+enum class LoopClosureDetector
+{
+  //! No detection is performed
+  NONE = 0,
+
+  //! Manual detector
+  MANUAL = 1,
+
+  //! Automatic detector by teaserpp registration
+  TEASERPP = 2,
+
+  //! Automatic detector by scan context
+  SCAN_CONTEXT = 3
+};
+
 } // end of LidarSlam namespace
