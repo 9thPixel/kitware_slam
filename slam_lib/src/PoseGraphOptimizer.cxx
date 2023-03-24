@@ -306,6 +306,83 @@ void PoseGraphOptimizer::AddGpsConstraint(int lidarIdx, const ExternalSensors::G
 }
 
 //------------------------------------------------------------------------------
+void PoseGraphOptimizer::AddExtPoseConstraint(int lidarIdx, const ExternalSensors::PoseMeasurement& poseMeas,
+                                              bool fixed, int prevLidarIdx)
+{
+  bool relative = prevLidarIdx > 0 && !fixed;
+  // Add new vertex corresponding to current
+  // state interpolating the poses
+  auto* newVertex = new g2o::VertexSE3;
+  int idx = --this->ExtIdx;
+  this->ExtPoseIndicesLinking[lidarIdx] = idx;
+  newVertex->setId(idx);
+  newVertex->setEstimate(poseMeas.Pose);
+  if (fixed)
+    newVertex->setFixed(true);
+  this->Optimizer.addVertex(newVertex);
+
+  // Add an edge between a SLAM pose vertex and the ext pose vertex
+  auto* externalEdge = new g2o::EdgeSE3;
+  externalEdge->setVertex(0, this->Optimizer.vertex(lidarIdx));
+  externalEdge->setVertex(1, newVertex);
+  externalEdge->setMeasurement(Eigen::Isometry3d::Identity()); // We want to merge this SLAM pose to the ext pose
+  externalEdge->setInformation(100.* Eigen::Matrix<double, 6, 6>::Identity());
+
+  // Add edge
+  if (!this->Optimizer.addEdge(externalEdge))
+    PRINT_ERROR("External pose constraint could not be added to the graph");
+
+  // Add an edge with the previous pose measurement
+  if (relative)
+  {
+    auto* newEdge = new g2o::EdgeSE3Euler;
+    // Set vertices
+    auto* prevVertex = this->Optimizer.vertex(this->ExtPoseIndicesLinking[prevLidarIdx]);
+    double prevG2oPose [7];
+    prevVertex->getEstimateData(prevG2oPose);
+    Eigen::Isometry3d prevPose = Utils::XYZQuatToIsometry(prevG2oPose[0], prevG2oPose[1], prevG2oPose[2],
+                                                          prevG2oPose[3], prevG2oPose[4], prevG2oPose[5],
+                                                          prevG2oPose[6]);
+    newEdge->setVertex(0, prevVertex);
+    newEdge->setVertex(1, this->Optimizer.vertex(idx));
+    // Get inverse of last frame
+    Eigen::Isometry3d lastPoseInv = prevPose.inverse();
+    // Compute relative transform with new frame
+    Eigen::Isometry3d Trelative = lastPoseInv * poseMeas.Pose;
+    // Rotate covariance
+    // Lidar Slam gives the covariance expressed in the map frame
+    // We want the covariance expressed in the last frame to be consistent with supplied relative transform
+    Eigen::Vector6d xyzrpy = Utils::IsometryToXYZRPY(poseMeas.Pose);
+    Eigen::Matrix6d covariance = CeresTools::RotateCovariance(xyzrpy, poseMeas.Covariance, lastPoseInv, true); // new = poseMeas^-1 * init
+    // Use g2o read function to transform Euler covariance into quaternion covariance
+    // This function takes an istream as input
+    // It needs the measurement vector as 6D euler pose in addition to the covariance
+    // Luckily, g2o uses the same convention as SLAM lib (RPY)
+    std::stringstream measureInfo;
+    Eigen::Vector6d poseRelative = Utils::IsometryToXYZRPY(Trelative);
+    measureInfo << poseRelative(0) << " " << poseRelative(1) << " " << poseRelative(2) << " "
+                << poseRelative(3) << " " << poseRelative(4) << " " << poseRelative(5) << " ";
+
+    Eigen::Matrix6d information = covariance.inverse();
+    for (int i = 0; i < 6; ++i)
+    {
+      for (int j = i; j < 6; ++j)
+        measureInfo << information(i, j) << " ";
+    }
+    newEdge->read(measureInfo);
+    // Add robustifier
+    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+    newEdge->setRobustKernel(rk);
+    newEdge->robustKernel()->setDelta(this->SaturationDistance);
+    // Add edge
+    this->Optimizer.addEdge(newEdge);
+  }
+
+  if (this->Verbose)
+    PRINT_INFO("Add external pose constraint for state #" << lidarIdx);
+}
+
+//------------------------------------------------------------------------------
 bool PoseGraphOptimizer::Process(std::list<LidarState>& statesToOptimize)
 {
   // Save Graph before optimization
