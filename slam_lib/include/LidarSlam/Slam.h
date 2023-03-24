@@ -422,11 +422,17 @@ public:
   GetMacro(FixLastVertex, bool)
   SetMacro(FixLastVertex, bool)
 
+  GetMacro(ExtPosesAsAnchors, bool)
+  SetMacro(ExtPosesAsAnchors, bool)
+
   GetMacro(CovarianceScale, float)
   SetMacro(CovarianceScale, float)
 
   GetMacro(NbGraphIterations, int)
   SetMacro(NbGraphIterations, int)
+
+  GetMacro(GraphSaturationDistance, float)
+  SetMacro(GraphSaturationDistance, float)
 
   // Set the pose graph constraint type to use
   void EnablePGOConstraint(PGOConstraint constraint, bool enabled = true);
@@ -1183,12 +1189,17 @@ private:
   // Boolean to decide if we want to some vertices of the graph
   bool FixFirstVertex = false;
   bool FixLastVertex = false;
+  // Boolean to decide if the external poses are fixed in the graph
+  // or if they can move
+  bool ExtPosesAsAnchors = false;
   // Scale to increase or decrease SLAM pose covariances
   float CovarianceScale = 1.f;
   int NbGraphIterations = 100;
+  // Saturation distance to exclude graph constraints
+  float GraphSaturationDistance = 5.f;
 
   // Booleans to decide whether to use a pose graph constraint for the optimization
-  std::map<PGOConstraint, bool> UsePGOConstraints = {{LOOP_CLOSURE, true}, {LANDMARK, true}, {PGO_GPS, true}};
+  std::map<PGOConstraint, bool> UsePGOConstraints = {{LOOP_CLOSURE, true}, {LANDMARK, true}, {PGO_GPS, true}, {PGO_EXT_POSE, false}};
 
   // ---------------------------------------------------------------------------
   //   Confidence estimation

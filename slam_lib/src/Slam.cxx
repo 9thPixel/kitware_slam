@@ -711,7 +711,10 @@ bool Slam::OptimizeGraph()
 {
   #ifdef USE_G2O
   // Check if graph can be optimized
-  if (!this->LmHasData() && !this->GpsHasData() && !this->UsePGOConstraints[LOOP_CLOSURE])
+  if ((!this->UsePGOConstraints[LANDMARK]     || !this->LmHasData())  &&
+      (!this->UsePGOConstraints[PGO_GPS]      || !this->GpsHasData()) &&
+      (!this->UsePGOConstraints[PGO_EXT_POSE] || !this->PoseHasData()) &&
+      !this->UsePGOConstraints[LOOP_CLOSURE])
   {
     PRINT_WARNING("No external constraint found, graph cannot be optimized");
     return false;
@@ -810,6 +813,71 @@ bool Slam::OptimizeGraph()
       // Add synchronized gps measurement to the graph
       graphManager.AddGpsConstraint(s.Index, gpsSynchMeasure);
       externalConstraint = true;
+    }
+  }
+
+  // Look for ext pose constraints
+  if (this->UsePGOConstraints[PGO_EXT_POSE] && this->PoseHasData())
+  {
+    if (this->FixFirstVertex && this->ExtPosesAsAnchors)
+    {
+      PRINT_WARNING("External poses are fixed but first SLAM pose is also fixed"
+                     << " this may give inconsistent results...")
+    }
+    std::vector<ExternalSensors::PoseMeasurement> poseMeasurements;
+    int startIdx = this->PoseManager->ComputeEquivalentTrajectory(this->LogStates, poseMeasurements);
+    int prevVertIdx = startIdx - 1;
+    auto startIt = this->LogStates.begin();
+    std::advance(startIt, startIdx);
+    int idx = startIdx;
+
+    // Store the first frames to make the alignement easier
+    Eigen::Isometry3d firstSlamFrame = startIt->Isometry;
+    Eigen::Isometry3d firstExtPoseFrame = poseMeasurements[startIdx].Pose;
+    Eigen::Isometry3d update = firstSlamFrame * firstExtPoseFrame.inverse();
+    bool moveExtPoses = !this->ExtPosesAsAnchors && update.translation().norm() > this->GraphSaturationDistance;
+    if (moveExtPoses)
+    {
+      PRINT_VERBOSE(1, "External poses are represented in SLAM reference frame in pose graph")
+    }
+    else if (this->ExtPosesAsAnchors)
+    {
+      PRINT_VERBOSE(1, "SLAM poses are represented in external poses reference frame in pose graph")
+      this->InitTworldWithPoseMeasurement(startIt->Time);
+    }
+
+    for (auto itState = startIt; itState != this->LogStates.end(); ++itState)
+    {
+      ExternalSensors::PoseMeasurement& poseSynchMeasure = poseMeasurements[idx];
+      ++idx;
+      if (std::abs(poseSynchMeasure.Time - itState->Time) > 1e-6)
+        continue;
+
+      // If ext poses are represented in a different frame,
+      // align the two first poses together to be sure the error
+      // overlap for optimization convergence.
+      if (moveExtPoses)
+      {
+        Eigen::Vector6d pose = Utils::IsometryToXYZRPY(poseSynchMeasure.Pose);
+        poseSynchMeasure.Pose = update * poseSynchMeasure.Pose;
+        CeresTools::RotateCovariance(pose, poseSynchMeasure.Covariance, update, true);
+      }
+
+      // Make infinite covariance for first pose to allow convergence even with
+      // different frames representation (far initialization)
+      if (prevVertIdx < startIdx)
+      {
+        poseSynchMeasure.Covariance = 1e6 * Eigen::Matrix6d::Identity();
+        poseSynchMeasure.Covariance.block(3, 3, 3, 3) = 2*M_PI * Eigen::Matrix6d::Identity();
+        // Add ext pose constraint to the graph
+        graphManager.AddExtPoseConstraint(itState->Index, poseSynchMeasure, this->ExtPosesAsAnchors);
+      }
+      else
+        // Add ext pose constraint to the graph
+        graphManager.AddExtPoseConstraint(itState->Index, poseSynchMeasure, this->ExtPosesAsAnchors, prevVertIdx);
+
+      externalConstraint = true;
+      ++prevVertIdx;
     }
   }
 
