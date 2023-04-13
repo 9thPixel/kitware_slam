@@ -209,6 +209,9 @@ public:
   vtkCustomGetMacro(FixLastVertex, bool)
   vtkCustomSetMacro(FixLastVertex, bool)
 
+  vtkCustomGetMacro(ExtPosesAsAnchors, bool)
+  vtkCustomSetMacro(ExtPosesAsAnchors, bool)
+
   vtkCustomGetMacro(CovarianceScale, float)
   vtkCustomSetMacro(CovarianceScale, float)
 
@@ -218,10 +221,12 @@ public:
   void EnablePGOConstraintLoopClosure(bool enable);
   void EnablePGOConstraintLandmark(bool enable);
   void EnablePGOConstraintGPS(bool enable);
+  void EnablePGOConstraintExtPose(bool enable);
 
   bool GetPGOConstraintLoopClosure();
   bool GetPGOConstraintLandmark();
   bool GetPGOConstraintGPS();
+  bool GetPGOConstraintExtPose();
 
   // ---------------------------------------------------------------------------
   //   Loop closure parameters
