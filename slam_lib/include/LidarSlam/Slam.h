@@ -1178,6 +1178,12 @@ private:
   // if not, detect automatically a revisited frame idx for the current frame (TBA)
   bool DetectLoopClosureIndices(std::list<LidarState>::iterator& itQueryState, std::list<LidarState>::iterator& itRevisitedState);
 
+  // Compute FPFH features for a input pointcloud
+  // The input arguments are: input cloud, search radius for estimating normals and
+  // search radius for calculating FPFH (needs to be at least normalSearchRadius)
+  void ComputeNormals(const PointCloud::Ptr inputCloud,
+                      double normalSearchRadius);
+
   // Compute the transform between a query frame and the revisited frame
   // by registering query frame keypoints onto keypoints of the submap around the revisited frame.
   // revisitedFrameIdx is the frame index where the query frame meets a loop.

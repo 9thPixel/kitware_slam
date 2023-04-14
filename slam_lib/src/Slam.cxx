@@ -75,7 +75,6 @@
 #include <ctime>
 
 // LOCAL
-#include "LidarSlam/Slam.h"
 #include "LidarSlam/Utilities.h"
 #include "LidarSlam/KDTreePCLAdaptor.h"
 #include "LidarSlam/ConfidenceEstimators.h"
@@ -90,6 +89,13 @@
 
 // EIGEN
 #include <Eigen/Dense>
+
+#include <pcl/features/normal_3d.h>
+
+// LOCAL
+// Note: Slam.h needs to be included after pcl/features/xx.h
+// because of the conflict between opencv and flann
+#include "LidarSlam/Slam.h"
 
 #define PRINT_VERBOSE(minVerbosityLevel, stream) if (this->Verbosity >= (minVerbosityLevel)) {std::cout << stream << std::endl;}
 #define IF_VERBOSE(minVerbosityLevel, command) if (this->Verbosity >= (minVerbosityLevel)) { command; }
@@ -1650,6 +1656,20 @@ bool Slam::DetectLoopClosureIndices(std::list<LidarState>::iterator& itQueryStat
     itRevisitedState = this->LogStates.begin();
     return false;
   }
+}
+
+//-----------------------------------------------------------------------------
+void Slam::ComputeNormals(const PointCloud::Ptr inputCloud,
+                          double normalSearchRadius)
+{
+  pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
+  // Estimate normals
+  pcl::NormalEstimation<Point, pcl::Normal> normalEstimation;
+  normalEstimation.setInputCloud(inputCloud);
+  pcl::search::KdTree<Point>::Ptr kdtree(new pcl::search::KdTree<Point>);
+  normalEstimation.setSearchMethod(kdtree);
+  normalEstimation.setRadiusSearch(normalSearchRadius);
+  normalEstimation.compute(*normals);
 }
 
 //-----------------------------------------------------------------------------
