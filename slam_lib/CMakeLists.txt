@@ -32,6 +32,7 @@ add_library(LidarSlam
   src/VoxelGrid.cxx
   src/InterpolationModels.cxx
   ${SLAM_g2o_sources}
+  src/NormalEstimation.cxx
 )
 
 target_link_libraries(LidarSlam
