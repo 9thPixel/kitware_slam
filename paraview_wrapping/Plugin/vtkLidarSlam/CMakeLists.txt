@@ -26,3 +26,8 @@ paraview_add_server_manager_xmls(
 )
 
 target_link_libraries(vtkLidarSlam PUBLIC LidarSlam)
+
+target_include_directories(vtkLidarSlam
+  PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}
+)
