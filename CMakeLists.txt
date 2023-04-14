@@ -71,7 +71,7 @@ endif()
 
 find_package(Ceres REQUIRED)
 
-find_package(PCL REQUIRED COMPONENTS common io octree geometry)
+find_package(PCL REQUIRED COMPONENTS common io octree geometry features search kdtree)
 include_directories(SYSTEM ${PCL_INCLUDE_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 link_directories(${PCL_LIBRARY_DIRS})
