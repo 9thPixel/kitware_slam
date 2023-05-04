@@ -907,11 +907,8 @@ bool Slam::OptimizeGraph()
     while (itQueryState->Index <= this->BAEndFrameIdx)
     {
       itRevisitedState = this->FetchStateIndex(itQueryState, this->BAInterval);
-        std::cout<<" bundle adjustement between query frame #"<<itQueryState->Index
-                 <<" and revisit frame #"<<itRevisitedState->Index<<"\n";
       Eigen::Isometry3d bundleAdjustmentTransform;
       Eigen::Matrix6d bundleAdjustmentCovariance;
-      this->DetectLoopWithTeaser(itQueryState,itRevisitedState);
       if (this->LoopClosureRegistration(itQueryState, itRevisitedState, this->BAParams,
                                         bundleAdjustmentTransform, bundleAdjustmentCovariance))
       {
@@ -2353,28 +2350,6 @@ bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState
     std::cout << std::endl;
   }
 
-  // Save maps before registration --------------------------------------------------------
-  std::ofstream fout0("/home/tfu/Documents/3DTarget/test_bundle_adjustment/submap" + std::to_string(itRevisitedState->Index) + "revisit.csv");
-  std::ofstream fout0_sub("/home/tfu/Documents/3DTarget/test_bundle_adjustment/submap" + std::to_string(itRevisitedState->Index) + "revisit_submap.csv");
-  std::ofstream fout1("/home/tfu/Documents/3DTarget/test_bundle_adjustment/submap" + std::to_string(itQueryState->Index) + "query.csv");
-  for (auto k : this->UsableKeypoints)
-  {
-    PointCloud::Ptr pointCloud = loopClosureRevisitedSubMaps[k]->Get();
-    for (const auto &pt : *pointCloud)
-      fout0 << pt.x << "," << pt.y << "," << pt.z << "\n";
-    PointCloud::Ptr pointCloud_sub = loopClosureRevisitedSubMaps[k]->GetSubMapKdTree().GetInputCloud();
-    for (const auto &pt : *pointCloud_sub)
-      fout0_sub << pt.x << "," << pt.y << "," << pt.z << "\n";
-    PointCloud queryWorldKeypoints;
-    pcl::transformPointCloud(*loopClosureQueryKeypoints[k], queryWorldKeypoints, loopClosureTworld.matrix());
-    for (const auto pt : queryWorldKeypoints)
-      fout1 << pt.x << "," << pt.y << "," << pt.z << "\n";
-  }
-  fout0.close();
-  fout0_sub.close();
-  fout1.close();
-  // Save maps before registration --------------------------------------------------------
-
   IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Loop closure Registration : submap keypoints extraction"));
   IF_VERBOSE(3, Utils::Timer::Init("Loop closure Registration : whole ICP-LM loop"));
 
@@ -2397,18 +2372,6 @@ bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState
     PRINT_ERROR("Loop closure registration failed.")
     return loopClosureUncertainty.Valid;
   }
-
-  // Save maps after registration --------------------------------------------------------
-  std::ofstream fout2("/home/tfu/Documents/3DTarget/test_bundle_adjustment/submap" + std::to_string(itQueryState->Index) + "query_reg.csv");
-  for (auto k : this->UsableKeypoints)
-  {
-    PointCloud queryWorldKeypoints;
-    pcl::transformPointCloud(*loopClosureQueryKeypoints[k], queryWorldKeypoints, loopClosureTworld.matrix());
-    for (const auto pt : queryWorldKeypoints)
-      fout2 << pt.x << "," << pt.y << "," << pt.z << "\n";
-  }
-  fout2.close();
-  // Save maps after registration --------------------------------------------------------
 
   // Get covariance
   Eigen::Matrix6d covariance = std::pow(this->CovarianceScale, 2) * loopClosureUncertainty.Covariance;
