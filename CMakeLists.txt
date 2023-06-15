@@ -36,6 +36,7 @@ list(APPEND CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}
 # MSVC enforce MT
 if(WIN32 AND MSVC)
 	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+  add_compile_options(/bigobj)
 endif()
 
 #-------------------------
