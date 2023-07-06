@@ -769,6 +769,7 @@ void vtkSlam::SetSensorData(const std::string& fileName)
     auto arrayPitch = csvTable->GetRowData()->GetArray("pitch");
     auto arrayYaw   = csvTable->GetRowData()->GetArray("yaw"  );
 
+    Eigen::Isometry3d T0 = Eigen::Isometry3d::Identity();
     for (vtkIdType i = 0; i < arrayTime->GetNumberOfTuples(); ++i)
     {
       LidarSlam::ExternalSensors::PoseMeasurement meas;
@@ -781,12 +782,17 @@ void vtkSlam::SetSensorData(const std::string& fileName)
                            );
       meas.Pose.translation() = Eigen::Vector3d(arrayY->GetTuple1(i), arrayX->GetTuple1(i), -1.0*arrayZ->GetTuple1(i));
       meas.Pose.makeAffine();
+      if (i==0)
+        T0 = meas.Pose;
+      meas.Pose = T0.inverse() * meas.Pose;
+
       this->SlamAlgo->AddPoseMeasurement(meas);
     }
 
     PRINT_INFO("Pose data successfully loaded")
     extSensorFit = true;
 
+    this->SlamAlgo->InitTworldWithPoseMeasurement(arrayTime->GetTuple1(0));
     bool calibrationEstimated = this->SlamAlgo->CalibrateWithExtPoses();
     if (!calibrationSupplied && !calibrationEstimated)
       vtkWarningMacro(<< this->GetClassName() << " (" << this
