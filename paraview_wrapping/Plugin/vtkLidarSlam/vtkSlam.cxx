@@ -769,7 +769,16 @@ void vtkSlam::SetSensorData(const std::string& fileName)
     auto arrayPitch = csvTable->GetRowData()->GetArray("pitch");
     auto arrayYaw   = csvTable->GetRowData()->GetArray("yaw"  );
 
+    std::ofstream fout0("/home/tfu/Documents/lidardata/CAR_45_2/ext_pose_axes.csv");
+    fout0 <<  "x,y,z,axe_x_0,axe_x_1,axe_x_2,axe_y_0,axe_y_1,axe_y_2,axe_z_0,axe_z_1,axe_z_2,time\n";
     Eigen::Isometry3d T0 = Eigen::Isometry3d::Identity();
+    // Eigen::Isometry3d rot = Eigen::Isometry3d::Identity();
+    // rot(0,0) = 0;
+    // rot(0,1) = 1;
+    // rot(1,0) = 1;
+    // rot(1,1) = 0;
+    // rot(2,2) = -1;
+
     for (vtkIdType i = 0; i < arrayTime->GetNumberOfTuples(); ++i)
     {
       LidarSlam::ExternalSensors::PoseMeasurement meas;
@@ -787,13 +796,33 @@ void vtkSlam::SetSensorData(const std::string& fileName)
       meas.Pose = T0.inverse() * meas.Pose;
 
       this->SlamAlgo->AddPoseMeasurement(meas);
+      fout0 << meas.Pose(0, 3) << "," << meas.Pose(1, 3) << "," << meas.Pose(2, 3) << ",";
+      fout0 << meas.Pose(0, 0) << "," << meas.Pose(1, 0) << "," << meas.Pose(2, 0) << ",";
+      fout0 << meas.Pose(0, 1) << "," << meas.Pose(1, 1) << "," << meas.Pose(2, 1) << ",";
+      fout0 << meas.Pose(0, 2) << "," << meas.Pose(1, 2) << "," << meas.Pose(2, 2) << ",";
+      fout0 << std::fixed << std::setprecision(9) << meas.Time << std::scientific << "\n";
     }
+    fout0.close();
 
     PRINT_INFO("Pose data successfully loaded")
     extSensorFit = true;
 
     this->SlamAlgo->InitTworldWithPoseMeasurement(arrayTime->GetTuple1(0));
     bool calibrationEstimated = this->SlamAlgo->CalibrateWithExtPoses();
+
+    std::ofstream fout1("/home/tfu/Documents/lidardata/CAR_45_2/slam_traj_axes.csv");
+    fout1 <<  "x,y,z,axe_x_0,axe_x_1,axe_x_2,axe_y_0,axe_y_1,axe_y_2,axe_z_0,axe_z_1,axe_z_2,time\n";
+    const std::list<LidarSlam::LidarState>& lidarStates = this->SlamAlgo->GetLogStates();
+    for (auto const& state: lidarStates)
+    {
+      fout1 << state.Isometry(0, 3) << "," << state.Isometry(1, 3) << "," << state.Isometry(2, 3) << ",";
+      fout1 << state.Isometry(0, 0) << "," << state.Isometry(1, 0) << "," << state.Isometry(2, 0) << ",";
+      fout1 << state.Isometry(0, 1) << "," << state.Isometry(1, 1) << "," << state.Isometry(2, 1) << ",";
+      fout1 << state.Isometry(0, 2) << "," << state.Isometry(1, 2) << "," << state.Isometry(2, 2) << ",";
+      fout1 << std::fixed << std::setprecision(9) << state.Time << std::scientific << "\n";
+    }
+    fout1.close();
+    std::cout<<" save trajectory with axe vector!\n";
     if (!calibrationSupplied && !calibrationEstimated)
       vtkWarningMacro(<< this->GetClassName() << " (" << this
                       << "): Calibration was not supplied for the external poses sensor, "
