@@ -92,7 +92,7 @@ bool AggregationNode::SavePointcloudService(lidar_slam::save_pcRequest& req, lid
   if (req.format > 2 || req.format < 0)
     req.format = 0;
   LidarSlam::PCDFormat f = static_cast<LidarSlam::PCDFormat>(req.format);
-  std::cout << ros::Time().toSec() << std::endl;
+
   std::string outputFilePath = outputPrefixPath.string() + "_" + std::to_string(int(ros::Time::now().toSec())) + ".pcd";
   LidarSlam::savePointCloudToPCD<PointS>(outputFilePath, *this->Pointcloud, f);
   ROS_INFO_STREAM("Pointcloud saved to " << outputFilePath);
