@@ -230,12 +230,12 @@ void SlamControlPanel::SaveMaps()
   QString extension = fileInfo.suffix();
   if (extension != "")
     filePath = fileInfo.path() + "/" + fileInfo.baseName();
-  // Save SLAM keypoint maps
-  this->SendCommand(lidar_slam::SlamCommand::SAVE_FILTERED_KEYPOINTS_MAPS, filePath.toStdString());
-  // Save aggregated points if available
+
+  // Call the save_pc service
   lidar_slam::save_pc srv;
   srv.request.output_prefix_path = filePath.toStdString();
   srv.request.format = 0;
+  srv.request.filtered = false;
   this->SavePcClient.call(srv);
 }
 
