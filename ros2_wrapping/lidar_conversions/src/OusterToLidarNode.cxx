@@ -20,7 +20,9 @@
 #include "Utilities.h"
 #include <pcl_conversions/pcl_conversions.h>
 #include "rmw/qos_profiles.h"
-
+//! TEST
+#include <chrono>
+using namespace std::chrono;
 #define BOLD_GREEN(s) "\033[1;32m" << s << "\033[0m"
 
 namespace lidar_conversions
@@ -106,6 +108,35 @@ void OusterToLidarNode::Callback(const Pcl2_msg& msg_received)
 
     cloudS.push_back(slamPoint);
   }
+
+  //! TEST
+  auto start = high_resolution_clock::now();
+  for (int _i = 0; _i < 10; ++_i)
+  {
+    pcl::PointCloud<PointTest> cloudTest;
+    pcl::fromROSMsg(msg_received, cloudTest);
+
+    // RCLCPP_INFO_STREAM(this->get_logger(), "size cloudTest : " << cloudTest.size());
+    for (auto i = 0; i < cloudTest.size(); i += 10000)
+    {
+      if (cloudO[i].ring != cloudTest[i].ring)
+      {
+        RCLCPP_ERROR(this->get_logger(), "not same ring");
+        if (cloudO[i].intensity == cloudTest[i].ring)
+          RCLCPP_INFO(this->get_logger(), "same as intensity");
+      }
+      else
+      {
+        // RCLCPP_INFO(this->get_logger(), "SAME RING!!!");
+      }
+     }
+   }
+  auto stop = high_resolution_clock::now();
+  auto duration = duration_cast<microseconds>(stop - start);
+
+  std::cout << "duration " << duration.count() << " microseconds" << std::endl;
+  //!
+
 
   //conversion to msg
   Pcl2_msg msg_sended;

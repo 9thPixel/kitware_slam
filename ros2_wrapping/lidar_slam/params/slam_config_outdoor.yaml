@@ -179,7 +179,7 @@
       #  3) 2 + sub-problems processing duration
       #  4) 3 + ceres optimization summary
       #  5) 4 + logging/maps memory usage
-      verbosity: 3
+      verbosity: 0
 
       # Determine the interpolation model which allows to get a pose (position + orientation)
       # at a specific timestamp from a list of stamped poses.

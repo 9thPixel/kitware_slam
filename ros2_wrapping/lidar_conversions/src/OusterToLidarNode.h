@@ -23,6 +23,8 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <os_point.h>
 #include <LidarSlam/LidarPoint.h>
+//! TEST
+#include "VelodyneToLidarNode.h"
 
 namespace lidar_conversions
 {

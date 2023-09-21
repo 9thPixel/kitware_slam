@@ -26,6 +26,30 @@
 namespace lidar_conversions
 {
 
+//! TEST
+struct PointTest
+{
+  // PCL_ADD_POINT4D;                    // quad-word XYZ
+  // float    intensity;                 ///< laser intensity reading
+  uint16_t ring;                      ///< laser ring number
+  // float    time;                      ///< laser time reading
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW     // ensure proper alignment
+}
+EIGEN_ALIGN16;
+}
+POINT_CLOUD_REGISTER_POINT_STRUCT(lidar_conversions::PointTest,
+                                  // (float, x, x)
+                                  // (float, y, y)
+                                  // (float, z, z)
+                                  // (float, intensity, intensity)
+                                  (uint16_t, ring, ring)
+                                  // (float, time, time)
+)
+//! TEST
+
+namespace lidar_conversions
+{
+
 /**
  * @class VelodyneToLidarNode aims at converting pointclouds published by ROS
  * Velodyne driver to the expected SLAM pointcloud format.
