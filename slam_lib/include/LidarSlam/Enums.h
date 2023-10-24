@@ -33,11 +33,12 @@ enum Keypoint
   INTENSITY_EDGE  = 1,   ///< intensity edge keypoint (sharp local intensity)
   PLANE = 2,   ///< plane keypoint (flat local structure)
   BLOB  = 3,   ///< blob keypoint (spherical local structure)
+  UNDEFINED = 4,
   nKeypointTypes
 };
 
-static const std::vector<Keypoint> KeypointTypes = { EDGE, INTENSITY_EDGE, PLANE, BLOB };
-static const std::map<Keypoint, std::string> KeypointTypeNames = { {EDGE, "edge"}, {INTENSITY_EDGE, "intensity_edge"}, {PLANE, "plane"}, {BLOB, "blob"} };
+static const std::vector<Keypoint> KeypointTypes = { EDGE, INTENSITY_EDGE, PLANE, BLOB, UNDEFINED };
+static const std::map<Keypoint, std::string> KeypointTypeNames = { {EDGE, "edge"}, {INTENSITY_EDGE, "intensity_edge"}, {PLANE, "plane"}, {BLOB, "blob"}, {UNDEFINED, "undefined"} };
 
 //------------------------------------------------------------------------------
 //! How to deal with undistortion

@@ -27,6 +27,25 @@
 
 namespace LidarSlam
 {
+
+struct PtFeat
+{
+  int Index;
+  float Depth;
+  float SpaceGapH;
+  float DepthGapH;
+  float IntensityGapH;
+  float Angle;
+  Keypoint KptType;
+
+  PtFeat() : Index(0), Depth(0.0f), SpaceGapH(-1.0f), DepthGapH(-1.0f), IntensityGapH(-1.0f), Angle(-1.0f), KptType(UNDEFINED) {}
+};
+
+struct IdxVM
+{
+  int Row;
+  int Col;
+};
 class DenseSpinningSensorKeypointExtractor : public KeypointExtractor
 {
 public:
@@ -40,14 +59,31 @@ public:
   PointCloud::Ptr GetKeypoints(Keypoint k) override;
 
 private:
-  // Compute the curvature features within each scan line : depth
-  // space gap, intensity gap and line angle
-  void ComputeCurvature() override;
+  // Find the pointer to PtFeat of a point in the scan (designated by its index in the scan)
+  // (PtFeat containing the features of the point : space gap, depth...)
+  std::shared_ptr<PtFeat> GetPtFeat(int idxInScan);
+
+  // Count the number of non null ptr in a scanline
+  int GetScanLineSize(const std::vector<std::shared_ptr<PtFeat>>& scanLine);
+
+  // Initialize LaserIdMap, NbLaserRings, AzimuthalResolution and Pc2VmIndices
+  void InitInternalParameters();
 
   // Auto estimate azimuth angle resolution
   // WARNING: to be correct, the points need to be in the LIDAR sensor
   // coordinates system, where the sensor is spinning around Z axis.
   void EstimateAzimuthalResolution() override;
+
+  // Create vertex map from input pointcloud using indices stored in Pc2VmIndices
+  void CreateVertexMap();
+
+  // Clear pointers to PtFeat in the vertex map
+  // and the vector of indices Pc2VmIndices
+  void ClearVertexMap();
+
+  // Compute the curvature features within each scan line : depth
+  // space gap, intensity gap and line angle
+  void ComputeCurvature() override;
 
   // Labelize points (unvalid, edge, plane, blob)
   // and extract them in correspondant pointcloud
@@ -59,7 +95,7 @@ private:
   // Add all keypoints of the type k that comply with the threshold criteria for these values
   // The threshold can be a minimum or maximum value (threshIsMax)
   // The weight basis allow to weight the keypoint depending on its certainty
-  void AddKptsUsingCriterion (Keypoint k);
+  void AddKptsUsingCriterion(Keypoint k);
 
   // ---------------------------------------------------------------------------
   //   Parameters specific to the DenseSpinningSensorKeypointExtractor
@@ -71,8 +107,21 @@ private:
   //   Internal variables specific to the DenseSpinningSensorKeypointExtractor
   // ---------------------------------------------------------------------------
 
-  //TODO
+  // Dimensions of the Vertex Map
+  int HeightVM;
+  int WidthVM;
 
+  // Rotation sense of the lidar
+  bool RotationIsClockwise;
+
+  // Map of laser_id to fit random laser_ids into {0, ..., NbLaserRings-1}
+  std::unordered_map<int, int> LaserIdMap;
+
+  // Vector linking the index of a point in the pointcloud to its index in the Vertex Map
+  std::vector<IdxVM> Pc2VmIndices;
+
+  // Vertex Map of points' indices in the pointcloud
+  std::vector<std::vector<std::shared_ptr<PtFeat>>> VertexMap;
 };
 
 } // namespace LidarSlam
