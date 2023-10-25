@@ -81,6 +81,9 @@ private:
   // and the vector of indices Pc2VmIndices
   void ClearVertexMap();
 
+  // Output separate point features contained in Vertex Map in pgm format to visualize as 2D image
+  void OutputFeatures();
+
   // Compute the curvature features within each scan line : depth
   // space gap, intensity gap and line angle
   void ComputeCurvature() override;

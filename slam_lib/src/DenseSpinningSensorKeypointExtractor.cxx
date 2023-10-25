@@ -26,6 +26,9 @@
 
 #include <random>
 
+#include <iostream>
+#include <fstream>
+
 namespace LidarSlam
 {
 
@@ -160,6 +163,48 @@ void DenseSpinningSensorKeypointExtractor::ClearVertexMap()
   }
 
   this->Pc2VmIndices.clear();
+}
+
+//-----------------------------------------------------------------------------
+#define OUTPUT_FEATURE(filename, featName, maxFeat)                               \
+do                                                                                \
+{                                                                                 \
+  int nbColors = std::max(5, std::min(255,                                        \
+                  static_cast<int>(maxFeat < 255.f ? maxFeat + 1.f : 255.f)));    \
+  std::ofstream file(filename);                                                   \
+  file << "P2\n";                                                                 \
+  file << this->WidthVM << " " << this->HeightVM << "\n";                         \
+  file << nbColors << "\n";                                                       \
+  for (int i = 0; i < this->HeightVM; ++i)                                        \
+  {                                                                               \
+    for (int j = 0; j < this->WidthVM; ++j)                                       \
+    {                                                                             \
+      int value;                                                                  \
+      if (this->VertexMap[i][j] == nullptr)                                       \
+        value = 0;                                                                \
+      else                                                                        \
+      {                                                                           \
+        float featValue = this->VertexMap[i][j]->featName;                        \
+        if (featValue >= 0.f)                                                     \
+        {                                                                         \
+          float scaledValue = std::min(static_cast<float>(maxFeat), featValue);   \
+          value = static_cast<int>((scaledValue / maxFeat) * (nbColors - 2)) + 1; \
+        }                                                                         \
+        else                                                                      \
+          value = 1;                                                              \
+      }                                                                           \
+      file << value << " ";                                                       \
+    }                                                                             \
+    file << "\n";                                                                 \
+  }                                                                               \
+  file.close();                                                                   \
+} while (0)
+
+void DenseSpinningSensorKeypointExtractor::OutputFeatures()
+{
+  int totalSize = this->WidthVM * this->HeightVM;
+  OUTPUT_FEATURE("/tmp/Index.pgm", Index, totalSize);
+  OUTPUT_FEATURE("/tmp/Depth.pgm", Depth, 20.);
 }
 
 //-----------------------------------------------------------------------------
