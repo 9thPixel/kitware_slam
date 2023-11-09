@@ -35,7 +35,21 @@ namespace LidarSlam
 //-----------------------------------------------------------------------------
 DenseSpinningSensorKeypointExtractor::PointCloud::Ptr DenseSpinningSensorKeypointExtractor::GetKeypoints(Keypoint k)
 {
-  //TODO
+  if (!this->Enabled.count(k) || !this->Enabled[k])
+  {
+    PRINT_ERROR("Unable to get keypoints of type " << KeypointTypeNames.at(k));
+    return PointCloud::Ptr();
+  }
+
+  PointCloud::Ptr keypointsCloud(new PointCloud);
+  Utils::CopyPointCloudMetadata(*this->Scan, *keypointsCloud);
+
+  std::vector<LidarPoint> points = this->Keypoints.at(k);
+  keypointsCloud->reserve(points.size());
+  for (const auto& pt : points)
+    keypointsCloud->push_back(pt);
+
+  return keypointsCloud;
 }
 
 //-----------------------------------------------------------------------------
@@ -166,6 +180,18 @@ void DenseSpinningSensorKeypointExtractor::ClearVertexMap()
 }
 
 //-----------------------------------------------------------------------------
+void DenseSpinningSensorKeypointExtractor::ClearKeypoints()
+{
+  for (const auto& k : KeypointTypes)
+  {
+    if (this->Keypoints.count(k))
+      this->Keypoints[k].clear();
+    if (this->Enabled[k])
+      this->Keypoints[k].reserve(this->Scan->size());
+  }
+}
+
+//-----------------------------------------------------------------------------
 #define OUTPUT_FEATURE(filename, featName, maxFeat)                               \
 do                                                                                \
 {                                                                                 \
@@ -218,11 +244,24 @@ void DenseSpinningSensorKeypointExtractor::ComputeKeyPoints(const PointCloud::Pt
 
   this->InitInternalParameters();
 
+  this->ClearKeypoints();
+
   this->CreateVertexMap();
 
   this->ComputeCurvature();
 
-  this->ClearVertexMap();
+  // Label and extract keypoints
+  // Warning : order matters
+  if (this->Enabled[Keypoint::BLOB])
+    this->ComputeBlobs();
+  if (this->Enabled[Keypoint::PLANE])
+    this->ComputePlanes();
+  if (this->Enabled[Keypoint::EDGE])
+    this->ComputeEdges();
+  if (this->Enabled[Keypoint::INTENSITY_EDGE])
+    this->ComputeIntensityEdges();
+
+  this-> ClearVertexMap();
 }
 
 //-----------------------------------------------------------------------------
@@ -473,32 +512,206 @@ void DenseSpinningSensorKeypointExtractor::ComputeCurvature()
 }
 
 //-----------------------------------------------------------------------------
-void DenseSpinningSensorKeypointExtractor::AddKptsUsingCriterion(Keypoint k)
+void DenseSpinningSensorKeypointExtractor::AddKeypoint(const Keypoint& k, const LidarPoint& point)
 {
-  //TODO
+  this->Keypoints.at(k).push_back(point);
+}
+
+//-----------------------------------------------------------------------------
+void DenseSpinningSensorKeypointExtractor::CreatePatchGrid(std::function<bool(const std::shared_ptr<PtFeat>&)> isPtFeatValid)
+{
+  int nbPatchesX = std::ceil(this->WidthVM / this->PatchSize);
+  int nbPatchesY = std::ceil(this->HeightVM / this->PatchSize);
+  this->PatchGrid.reserve(nbPatchesX * nbPatchesY);
+
+  // Fill grid with smart pointers to PtFeat
+  for (unsigned int i = 0; i < this->HeightVM; ++i)
+  {
+    for (unsigned int j = 0; j < this->WidthVM; ++j)
+    {
+      const auto& ptFeat = this->VertexMap[i][j];
+      if (!isPtFeatValid(ptFeat))
+        continue;
+      int idxPatchY = ((i + this->HeightVM) % this->HeightVM) / this->PatchSize;
+      int idxPatchX = ((j + this->WidthVM)  % this->WidthVM)  / this->PatchSize;
+      int indexPatch = idxPatchY * nbPatchesX + idxPatchX;
+      this->PatchGrid[indexPatch].emplace_back(ptFeat);
+      this->NbPointsInGrid++;
+    }
+  }
+}
+
+//-----------------------------------------------------------------------------
+void DenseSpinningSensorKeypointExtractor::ClearPatchGrid()
+{
+  this->PatchGrid.clear();
+  this->NbPointsInGrid = 0;
+}
+
+//-----------------------------------------------------------------------------
+void DenseSpinningSensorKeypointExtractor::AddKptsUsingPatchGrid(Keypoint k,
+                                                                 std::function<bool(const std::shared_ptr<PtFeat>&, const std::shared_ptr<PtFeat>&)> comparePtFeat)
+{
+  // If we have less candidates than the max keypoints number
+  if (this->NbPointsInGrid < this->MaxPoints)
+  {
+    for (auto& cell : this->PatchGrid)
+    {
+      auto& vec = cell.second;
+      for (auto& pt : vec)
+      {
+        if (pt != nullptr && pt->KptType == UNDEFINED)
+        {
+          this->AddKeypoint(k, this->Scan->at(pt->Index));
+          pt->KptType = k;
+        }
+      }
+    }
+    return;
+  }
+
+  // While nbkeypointextracted < nbpointmax && remains keypoints candidates
+  int ptIdx = 0;
+  while (ptIdx < this->MaxPoints)
+  {
+    bool remainKptCandidate = false;
+    for (auto& cell : this->PatchGrid)
+    {
+      auto& vec = cell.second;
+      // Check if cell has point that could be keypoints
+      bool hasKptCandidate = std::any_of(vec.begin(), vec.end(), [](const std::shared_ptr<PtFeat>& pt) {return pt->KptType == UNDEFINED;});
+      if (!hasKptCandidate)
+        continue;
+      remainKptCandidate = true;
+
+      // Search for max element in patch using comparePtFeat to compare all feats simultaneously
+      auto maxPtIt = std::max_element(vec.begin(), vec.end(), comparePtFeat);
+      const auto& maxPt = *maxPtIt;
+
+      // Add to keypoints
+      this->AddKeypoint(k, this->Scan->at(maxPt->Index));
+      maxPt->KptType = k;
+      ++ptIdx;
+
+      if (ptIdx >= this->MaxPoints)
+        break;
+    }
+    if (!remainKptCandidate)
+      break;
+  }
 }
 
 //-----------------------------------------------------------------------------
 void DenseSpinningSensorKeypointExtractor::ComputePlanes()
 {
-  //TODO
+  auto isPtValid = [this](const std::shared_ptr<PtFeat>& pt)
+  {
+    return pt != nullptr &&
+           pt->KptType == UNDEFINED &&
+           pt->Angle < this->PlaneCosAngleThreshold;
+  };
+  this->CreatePatchGrid(isPtValid);
+  this->AddKptsUsingPatchGrid(Keypoint::PLANE,
+                              [&](const std::shared_ptr<PtFeat>& a, const std::shared_ptr<PtFeat>& b)
+                              {
+                                if (!isPtValid(a) && isPtValid(b))
+                                  return true;  // b is considered greater when a is nullptr
+                                else if (isPtValid(a) && !isPtValid(b))
+                                  return false;   // a is considered greater when b is nullptr
+                                else if (!isPtValid(a) && !isPtValid(b))
+                                  return true;  // Both are nullptr, no preference
+
+                                return (a->Angle > b->Angle);
+                              });
+  this->ClearPatchGrid();
 }
 
 //-----------------------------------------------------------------------------
 void DenseSpinningSensorKeypointExtractor::ComputeEdges()
 {
-  //TODO
+  auto isPtValid = [this](const std::shared_ptr<PtFeat>& pt)
+  {
+    return pt != nullptr &&
+           pt->KptType == UNDEFINED &&
+           ((pt->DepthGapH - (-1.0f) > 1e-6 && pt->DepthGapH > this->EdgeDepthGapThreshold) ||
+            (pt->Angle < -this->PlaneCosAngleThreshold && pt->Angle > this->EdgeCosAngleThreshold) ||
+            (pt->SpaceGapH - (-1.0f) > 1e-6 && pt->SpaceGapH > this->EdgeDepthGapThreshold));
+  };
+  this->ClearPatchGrid();
+  this->CreatePatchGrid(isPtValid);
+  this->AddKptsUsingPatchGrid(Keypoint::EDGE,
+                              [&](const std::shared_ptr<PtFeat>& a, const std::shared_ptr<PtFeat>& b)
+                              {
+                                if (!isPtValid(a) && isPtValid(b))
+                                  return true;  // b is considered greater when a is nullptr
+                                else if (isPtValid(a) && !isPtValid(b))
+                                  return false;   // a is considered greater when b is nullptr
+                                else if (!isPtValid(a) && !isPtValid(b))
+                                  return true;  // Both are nullptr, no preference
+
+                                if (a->DepthGapH < b->DepthGapH && b->DepthGapH > this->EdgeDepthGapThreshold)
+                                  return true;
+                                if (b->DepthGapH < a->DepthGapH && a->DepthGapH > this->EdgeDepthGapThreshold)
+                                  return false;
+
+                                if (a->Angle < b->Angle && b->Angle < -this->PlaneCosAngleThreshold && b->Angle > this->EdgeCosAngleThreshold)
+                                  return true;
+                                if (b->Angle < a->Angle && a->Angle < -this->PlaneCosAngleThreshold && a->Angle > this->EdgeCosAngleThreshold)
+                                  return false;
+
+                                if (a->SpaceGapH < b->SpaceGapH && b->SpaceGapH > this->EdgeDepthGapThreshold)
+                                  return true;
+                                if (b->SpaceGapH < a->SpaceGapH && a->SpaceGapH > this->EdgeDepthGapThreshold)
+                                  return false;
+
+                                return true;
+                              });
 }
 
 //-----------------------------------------------------------------------------
 void DenseSpinningSensorKeypointExtractor::ComputeIntensityEdges()
 {
-  //TODO
+  auto isPtValid = [this](const std::shared_ptr<PtFeat>& pt)
+  {
+    return pt != nullptr &&
+           pt->KptType == UNDEFINED &&
+           (pt->IntensityGapH - (-1.0f) > 1e-6 && pt->IntensityGapH > this->EdgeIntensityGapThreshold);
+  };
+  this->ClearPatchGrid();
+  this->CreatePatchGrid(isPtValid);
+  this->AddKptsUsingPatchGrid(Keypoint::INTENSITY_EDGE,
+                              [&](const std::shared_ptr<PtFeat>& a, const std::shared_ptr<PtFeat>& b)
+                              {
+                                if (!isPtValid(a) && isPtValid(b))
+                                  return true;  // b is considered greater when a is nullptr
+                                else if (isPtValid(a) && !isPtValid(b))
+                                  return false;   // a is considered greater when b is nullptr
+                                else if (!isPtValid(a) && !isPtValid(b))
+                                  return true;  // Both are nullptr, no preference
+
+                                if (a->IntensityGapH < b->IntensityGapH && b->IntensityGapH > this->EdgeIntensityGapThreshold)
+                                  return true;
+                                if (b->IntensityGapH < a->IntensityGapH && a->IntensityGapH > this->EdgeIntensityGapThreshold)
+                                  return false;
+                                return true;
+                              });
 }
 
 //-----------------------------------------------------------------------------
 void DenseSpinningSensorKeypointExtractor::ComputeBlobs()
 {
-  //TODO
+  // Init random distribution
+  std::mt19937 gen(2023); // Fix seed for deterministic processes
+  std::uniform_real_distribution<> dis(0.0, 1.0);
+
+  for (const auto& point : *this->Scan)
+  {
+    // Random sampling to decrease keypoints extraction
+    // computation time
+    if (this->InputSamplingRatio < 1.f && dis(gen) > this->InputSamplingRatio)
+      continue;
+
+    this->AddKeypoint(Keypoint::BLOB, point);
+  }
 }
 } // end of LidarSlam namespace

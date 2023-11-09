@@ -1805,6 +1805,10 @@ void LidarSlamNode::SetSlamParameters()
           this->get_parameter<float>(prefix + "edge_cos_angle_threshold", edgeCosAngleThreshold);
           ke->SetEdgeCosAngleThreshold(edgeCosAngleThreshold);
 
+          int patchSize;
+          if (this->get_parameter(prefix + "patch_size", patchSize))
+            ke->SetPatchSize(patchSize);
+
           // Add extractor to SLAM
           this->LidarSlam.SetKeyPointsExtractor(ke, deviceId);
           RCLCPP_INFO_STREAM(this->get_logger(), "Adding dense keypoints extractor for LiDAR device " << deviceId);
@@ -1859,6 +1863,10 @@ void LidarSlamNode::SetSlamParameters()
         float edgeCosAngleThreshold;
         this->get_parameter<float>("slam.ke.edge_cos_angle_threshold", edgeCosAngleThreshold);
         ke->SetEdgeCosAngleThreshold(edgeCosAngleThreshold);
+
+        int patchSize;
+        if (this->get_parameter("slam.ke.patch_size", patchSize))
+          ke->SetPatchSize(patchSize);
 
         this->LidarSlam.SetKeyPointsExtractor(ke);
         RCLCPP_INFO_STREAM(this->get_logger(), "Adding dense keypoints extractor");

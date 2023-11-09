@@ -404,6 +404,8 @@
         edge_intensity_gap_threshold: 50.  # [0-255] Threshold upon intensity gap to select an edge keypoint.
         # Additional parameter for the sparse extractor
         voxel_grid_resolution: 2.          # [m/voxel] Size of a voxel to downsample the extracted keypoints.
+        # Additional parameter for the dense extractor
+        patch_size: 64                     # [nb] Size of a patch. It will contain at much patch_size*patch_size keypoints candidates.
 
         # # Multi LiDAR inputs
         # # The multiple devices to use for SLAM.

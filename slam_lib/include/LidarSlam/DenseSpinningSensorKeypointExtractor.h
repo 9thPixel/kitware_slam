@@ -56,6 +56,9 @@ public:
   GetMacro(EdgeCosAngleThreshold, float)
   SetMacro(EdgeCosAngleThreshold, float)
 
+  GetMacro(PatchSize, int)
+  SetMacro(PatchSize, int)
+
   // Extract keypoints from the pointcloud. The key points
   // will be separated in two classes : Edges keypoints which
   // correspond to area with high curvature scan lines and
@@ -88,6 +91,9 @@ private:
   // and the vector of indices Pc2VmIndices
   void ClearVertexMap();
 
+  // Clear Keypoints Poinclouds, reserve new size
+  void ClearKeypoints();
+
   // Output separate point features contained in Vertex Map in pgm format to visualize as 2D image
   void OutputFeatures();
 
@@ -102,10 +108,21 @@ private:
   void ComputeIntensityEdges() override;
   void ComputeBlobs() override;
 
-  // Add all keypoints of the type k that comply with the threshold criteria for these values
-  // The threshold can be a minimum or maximum value (threshIsMax)
-  // The weight basis allow to weight the keypoint depending on its certainty
-  void AddKptsUsingCriterion(Keypoint k);
+  // Add point to the keypoint pointcloud
+  void AddKeypoint(const Keypoint& k, const LidarPoint &pt);
+
+  // Create square division of the image using 2 dimensions
+  void CreatePatchGrid(std::function<bool(const std::shared_ptr<PtFeat>&)> isPtFeatValid);
+
+  // Clear patch grid and resets the number of points in the grid
+  // To be called at each keypoint computation (in ComputeEdges, ComputePlanes, etc.))
+  void ClearPatchGrid();
+
+  // Add keypoints of type k to a keypoint pointcloud
+  // Using patches to have a uniform distribution of keypoints
+  void AddKptsUsingPatchGrid(Keypoint k,
+                            std::function<bool(const std::shared_ptr<PtFeat>&,
+                                               const std::shared_ptr<PtFeat>&)> comparePtFeats);
 
   // ---------------------------------------------------------------------------
   //   Parameters specific to the DenseSpinningSensorKeypointExtractor
@@ -117,6 +134,11 @@ private:
 
   // Sharpness threshold to select an edge keypoint
   float EdgeCosAngleThreshold = -0.5; // ~cos(120°) (selected, if cos angle is more than threshold)
+
+  // Size of a patch (nb of points in one dimension, a patch is a square)
+  // Patches are used for 2D grid construction to downsample the keypoints
+  // A patch with size 32 means that the patch will contain at most 32x32 points
+  int PatchSize = 32; // [nb]
 
   // ---------------------------------------------------------------------------
   //   Internal variables specific to the DenseSpinningSensorKeypointExtractor
@@ -137,6 +159,15 @@ private:
 
   // Vertex Map of points' indices in the pointcloud
   std::vector<std::vector<std::shared_ptr<PtFeat>>> VertexMap;
+
+  // Patch grid used to downsample the keypoints to reduce global computation time
+  std::unordered_map<int, std::vector<std::shared_ptr<PtFeat>>> PatchGrid;
+
+  // Struct to store the number of points in each voxel/patch of the used grid;
+  int NbPointsInGrid;
+
+  // Extracted keypoints of current frame
+  std::map<Keypoint, std::vector<LidarPoint>> Keypoints;
 };
 
 } // namespace LidarSlam
