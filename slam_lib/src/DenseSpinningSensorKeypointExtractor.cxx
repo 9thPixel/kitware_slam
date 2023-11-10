@@ -238,6 +238,43 @@ void DenseSpinningSensorKeypointExtractor::OutputFeatures()
 }
 
 //-----------------------------------------------------------------------------
+bool DenseSpinningSensorKeypointExtractor::OutputKeypoints()
+{
+  for (const auto& type : this->Keypoints)
+  {
+    const Keypoint& k = type.first;
+    int width = this->WidthVM;
+    int height = this->HeightVM;
+
+    std::ofstream fileCsv("/tmp/keypoints_" + KeypointTypeNames.at(k) + ".csv");
+    fileCsv << "x,y,z,kpt\n";
+
+    std::ofstream filePgm("/tmp/keypoints_" + KeypointTypeNames.at(k) + ".pgm");
+    filePgm << "P2\n";
+    filePgm << width << " " << height << "\n";
+    filePgm << 1 << "\n";
+
+    for (int i = 0; i < height; ++i)
+    {
+      for (int j = 0; j < width; ++j)
+      {
+        const auto& ptFeat = this->VertexMap[i][j];
+        if (ptFeat == nullptr)
+          continue;
+        const Point& point = this->Scan->at(ptFeat->Index);
+        int isKpt = ptFeat->KptType == k ? 1 : 0;
+        fileCsv << point.x << "," << point.y << "," << point.z << "," << isKpt << "\n";
+        filePgm << isKpt << " ";
+      }
+      filePgm << "\n";
+    }
+    fileCsv.close();
+    filePgm.close();
+  }
+  return true;
+}
+
+//-----------------------------------------------------------------------------
 void DenseSpinningSensorKeypointExtractor::ComputeKeyPoints(const PointCloud::Ptr& pc)
 {
   this->Scan = pc;
