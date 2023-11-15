@@ -14,19 +14,27 @@ Before, on master, the SLAM was doing this. The goal of this MR is to do this an
 
 # Results
 
-## Commands to reproduce the results
+## Data
+
+I have used those data to test.
+
+## Build
 
 `colcon build --base-paths slam/ros2_wrapping --cmake-args -DCMAKE_BUILD_TYPE=Release`
+
+### Parameters
 
 * Change the parameters :
   * leaf_size=5
   * ...
 
+## Run
+
 `ros2 launch my_launch.launch param1:=2`
 
 `ros2 bag play --clock path/to/this_bag.bag`
 
-## Results
+## Output
 
 * Here is a resulting map
 * Here is a resulting trajectory
