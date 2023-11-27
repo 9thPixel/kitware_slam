@@ -233,6 +233,8 @@ linux_ros2_wrapping_build:
     # Allow to manually create a reference for feat/ROS2 from the web interface
     - if: $CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "feat/ROS2"
       when: manual
+    - if: $CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "ROS2/CI"
+      when: manual
     - if: $CI_COMMIT_BRANCH == "feat/ROS2"
       when: always
   script:
