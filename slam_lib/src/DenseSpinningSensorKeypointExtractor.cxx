@@ -555,7 +555,7 @@ void DenseSpinningSensorKeypointExtractor::AddKeypoint(const Keypoint& k, const 
 }
 
 //-----------------------------------------------------------------------------
-void DenseSpinningSensorKeypointExtractor::CreatePatchGrid(std::function<bool(const std::shared_ptr<PtFeat>&)> isPtFeatValid)
+void DenseSpinningSensorKeypointExtractor::Create2DGrid(std::function<bool(const std::shared_ptr<PtFeat>&)> isPtFeatValid)
 {
   int nbPatchesX = std::ceil(this->WidthVM / this->PatchSize);
   int nbPatchesY = std::ceil(this->HeightVM / this->PatchSize);
@@ -579,20 +579,56 @@ void DenseSpinningSensorKeypointExtractor::CreatePatchGrid(std::function<bool(co
 }
 
 //-----------------------------------------------------------------------------
-void DenseSpinningSensorKeypointExtractor::ClearPatchGrid()
+void DenseSpinningSensorKeypointExtractor::Create3DGrid(std::function<bool(const std::shared_ptr<PtFeat>&)> isPtFeatValid)
 {
-  this->PatchGrid.clear();
+  // Find width and height of the scan (in meters)
+  Eigen::Vector4f ptMax, ptMin;
+  pcl::getMinMax3D(*this->Scan, ptMax, ptMin);
+  int xSize = std::abs(ptMax.x() - ptMin.x());
+  int ySize = std::abs(ptMax.y() - ptMin.y());
+  int zSize = std::abs(ptMax.z() - ptMin.z());
+
+  // Compute the number of voxels in each direction
+  int nbVoxelsX = std::ceil(xSize / this->VoxelDim);
+  int nbVoxelsY = std::ceil(ySize / this->VoxelDim);
+  int nbVoxelsZ = std::ceil(zSize / this->VoxelDim);
+  // Reserve memory for the grid
+  this->VoxGrid.reserve(nbVoxelsX * nbVoxelsY * nbVoxelsZ);
+
+  // Compute the 3D position of the center of the first voxel
+  // Considering that the voxel grid is centered on th
+  Eigen::Array3f voxelGridOrigin = ptMin.head(3).array();
+
+  // Fill grid with smart pointers to PtFeat
+  for (unsigned int i = 0; i < this->Scan->size(); i++)
+  {
+    const LidarPoint& point = this->Scan->at(i);
+    auto ptFeat = this->GetPtFeat(i);
+    if (!isPtFeatValid(ptFeat))
+      continue;
+    Eigen::Array3i voxel = ((point.getArray3fMap() - voxelGridOrigin) / this->VoxelDim).array().round().template cast<int>();
+    int index1D = voxel.z() * nbVoxelsX * nbVoxelsY + voxel.y() * nbVoxelsY + voxel.x();
+    this->VoxGrid[index1D].push_back(ptFeat);
+    this->NbPointsInGrid++;
+  }
+}
+
+//-----------------------------------------------------------------------------
+void DenseSpinningSensorKeypointExtractor::ClearGrid(std::unordered_map<int, std::vector<std::shared_ptr<PtFeat>>>& grid)
+{
+  grid.clear();
   this->NbPointsInGrid = 0;
 }
 
 //-----------------------------------------------------------------------------
-void DenseSpinningSensorKeypointExtractor::AddKptsUsingPatchGrid(Keypoint k,
-                                                                 std::function<bool(const std::shared_ptr<PtFeat>&, const std::shared_ptr<PtFeat>&)> comparePtFeat)
+void DenseSpinningSensorKeypointExtractor::AddKptsUsingGrid(Keypoint k,
+                                                            std::unordered_map<int, std::vector<std::shared_ptr<PtFeat>>>& grid,
+                                                            std::function<bool(const std::shared_ptr<PtFeat>&, const std::shared_ptr<PtFeat>&)> comparePtFeat)
 {
   // If we have less candidates than the max keypoints number
   if (this->NbPointsInGrid < this->MaxPoints)
   {
-    for (auto& cell : this->PatchGrid)
+    for (auto& cell : grid)
     {
       auto& vec = cell.second;
       for (auto& pt : vec)
@@ -612,7 +648,7 @@ void DenseSpinningSensorKeypointExtractor::AddKptsUsingPatchGrid(Keypoint k,
   while (ptIdx < this->MaxPoints)
   {
     bool remainKptCandidate = false;
-    for (auto& cell : this->PatchGrid)
+    for (auto& cell : grid)
     {
       auto& vec = cell.second;
       // Check if cell has point that could be keypoints
@@ -647,20 +683,51 @@ void DenseSpinningSensorKeypointExtractor::ComputePlanes()
            pt->KptType == UNDEFINED &&
            pt->Angle < this->PlaneCosAngleThreshold;
   };
-  this->CreatePatchGrid(isPtValid);
-  this->AddKptsUsingPatchGrid(Keypoint::PLANE,
-                              [&](const std::shared_ptr<PtFeat>& a, const std::shared_ptr<PtFeat>& b)
-                              {
-                                if (!isPtValid(a) && isPtValid(b))
-                                  return true;  // b is considered greater when a is nullptr
-                                else if (isPtValid(a) && !isPtValid(b))
-                                  return false;   // a is considered greater when b is nullptr
-                                else if (!isPtValid(a) && !isPtValid(b))
-                                  return true;  // Both are nullptr, no preference
+  switch (this->SamplingDSSKE[Keypoint::PLANE])
+  {
+    // If Patch mode activated : use a 2D grid built on vertex map
+    // to extract keypoints
+    case SamplingModeDSSKE::PATCH:
+    {
+      this->ClearGrid(this->PatchGrid);
+      this->Create2DGrid(isPtValid);
+      this->AddKptsUsingGrid(Keypoint::PLANE,
+                             this->PatchGrid,
+                             [&](const std::shared_ptr<PtFeat>& a, const std::shared_ptr<PtFeat>& b)
+                             {
+                              if (!isPtValid(a) && isPtValid(b))
+                                return true;  // b is considered greater when a is nullptr
+                              else if (isPtValid(a) && !isPtValid(b))
+                                return false;   // a is considered greater when b is nullptr
+                              else if (!isPtValid(a) && !isPtValid(b))
+                                return true;  // Both are nullptr, no preference
 
-                                return (a->Angle > b->Angle);
-                              });
-  this->ClearPatchGrid();
+                              return (a->Angle > b->Angle);
+                             });
+      break;
+    }
+    // If Voxel mode activated : use a 3D grid built on scan cloud
+    // to extract keypoints
+    case SamplingModeDSSKE::VOXEL:
+    {
+      this->ClearGrid(this->VoxGrid);
+      this->Create3DGrid(isPtValid);
+      this->AddKptsUsingGrid(Keypoint::PLANE,
+                             this->VoxGrid,
+                             [&](const std::shared_ptr<PtFeat>& a, const std::shared_ptr<PtFeat>& b)
+                             {
+                               if (!isPtValid(a) && isPtValid(b))
+                                 return true;  // b is considered greater when a is nullptr
+                               else if (isPtValid(a) && !isPtValid(b))
+                                 return false;   // a is considered greater when b is nullptr
+                               else if (!isPtValid(a) && !isPtValid(b))
+                                 return true;  // Both are nullptr, no preference
+
+                               return (a->Angle > b->Angle);
+                             });
+      break;
+    }
+  }
 }
 
 //-----------------------------------------------------------------------------
@@ -674,22 +741,29 @@ void DenseSpinningSensorKeypointExtractor::ComputeEdges()
             (pt->Angle < -this->PlaneCosAngleThreshold && pt->Angle > this->EdgeCosAngleThreshold) ||
             (pt->SpaceGapH - (-1.0f) > 1e-6 && pt->SpaceGapH > this->EdgeDepthGapThreshold));
   };
-  this->ClearPatchGrid();
-  this->CreatePatchGrid(isPtValid);
-  this->AddKptsUsingPatchGrid(Keypoint::EDGE,
-                              [&](const std::shared_ptr<PtFeat>& a, const std::shared_ptr<PtFeat>& b)
-                              {
-                                if (!isPtValid(a) && isPtValid(b))
-                                  return true;  // b is considered greater when a is nullptr
-                                else if (isPtValid(a) && !isPtValid(b))
-                                  return false;   // a is considered greater when b is nullptr
-                                else if (!isPtValid(a) && !isPtValid(b))
-                                  return true;  // Both are nullptr, no preference
+  switch (this->SamplingDSSKE[Keypoint::EDGE])
+  {
+    // If Patch mode activated : use a 2D grid built on vertex map
+    // to extract keypoints
+    case SamplingModeDSSKE::PATCH:
+    {
+      this->ClearGrid(this->PatchGrid);
+      this->Create2DGrid(isPtValid);
+      this->AddKptsUsingGrid(Keypoint::EDGE,
+                             this->PatchGrid,
+                             [&](const std::shared_ptr<PtFeat>& a, const std::shared_ptr<PtFeat>& b)
+                             {
+                               if (!isPtValid(a) && isPtValid(b))
+                                 return true;  // b is considered greater when a is nullptr
+                               else if (isPtValid(a) && !isPtValid(b))
+                                 return false;   // a is considered greater when b is nullptr
+                               else if (!isPtValid(a) && !isPtValid(b))
+                                 return true;  // Both are nullptr, no preference
 
-                                if (a->DepthGapH < b->DepthGapH && b->DepthGapH > this->EdgeDepthGapThreshold)
-                                  return true;
-                                if (b->DepthGapH < a->DepthGapH && a->DepthGapH > this->EdgeDepthGapThreshold)
-                                  return false;
+                               if (a->DepthGapH < b->DepthGapH && b->DepthGapH > this->EdgeDepthGapThreshold)
+                                 return true;
+                               if (b->DepthGapH < a->DepthGapH && a->DepthGapH > this->EdgeDepthGapThreshold)
+                                 return false;
 
                                 if (a->Angle < b->Angle && b->Angle < -this->PlaneCosAngleThreshold && b->Angle > this->EdgeCosAngleThreshold)
                                   return true;
@@ -703,6 +777,45 @@ void DenseSpinningSensorKeypointExtractor::ComputeEdges()
 
                                 return true;
                               });
+      break;
+    }
+    // If Voxel mode activated : use a 3D grid built on scan cloud
+    // to extract keypoints
+    case SamplingModeDSSKE::VOXEL:
+    {
+      this->ClearGrid(this->VoxGrid);
+      this->Create3DGrid(isPtValid);
+      this->AddKptsUsingGrid(Keypoint::EDGE,
+                             this->VoxGrid,
+                             [&](const std::shared_ptr<PtFeat>& a, const std::shared_ptr<PtFeat>& b)
+                             {
+                               if (!isPtValid(a) && isPtValid(b))
+                                 return true;  // b is considered greater when a is nullptr
+                               else if (isPtValid(a) && !isPtValid(b))
+                                 return false;   // a is considered greater when b is nullptr
+                               else if (!isPtValid(a) && !isPtValid(b))
+                                 return true;  // Both are nullptr, no preference
+
+                               if (a->DepthGapH < b->DepthGapH && b->DepthGapH > this->EdgeDepthGapThreshold)
+                                 return true;
+                               if (b->DepthGapH < a->DepthGapH && a->DepthGapH > this->EdgeDepthGapThreshold)
+                                 return false;
+
+                               if (a->Angle < b->Angle && b->Angle < -this->PlaneCosAngleThreshold && b->Angle > this->EdgeCosAngleThreshold)
+                                  return true;
+                                if (b->Angle < a->Angle && a->Angle < -this->PlaneCosAngleThreshold && a->Angle > this->EdgeCosAngleThreshold)
+                                  return false;
+
+                               if (a->SpaceGapH < b->SpaceGapH && b->SpaceGapH > this->EdgeDepthGapThreshold)
+                                 return true;
+                               if (b->SpaceGapH < a->SpaceGapH && a->SpaceGapH > this->EdgeDepthGapThreshold)
+                                 return false;
+
+                               return true;
+                             });
+      break;
+    }
+  }
 }
 
 //-----------------------------------------------------------------------------
@@ -714,24 +827,59 @@ void DenseSpinningSensorKeypointExtractor::ComputeIntensityEdges()
            pt->KptType == UNDEFINED &&
            (pt->IntensityGapH - (-1.0f) > 1e-6 && pt->IntensityGapH > this->EdgeIntensityGapThreshold);
   };
-  this->ClearPatchGrid();
-  this->CreatePatchGrid(isPtValid);
-  this->AddKptsUsingPatchGrid(Keypoint::INTENSITY_EDGE,
-                              [&](const std::shared_ptr<PtFeat>& a, const std::shared_ptr<PtFeat>& b)
-                              {
-                                if (!isPtValid(a) && isPtValid(b))
-                                  return true;  // b is considered greater when a is nullptr
-                                else if (isPtValid(a) && !isPtValid(b))
-                                  return false;   // a is considered greater when b is nullptr
-                                else if (!isPtValid(a) && !isPtValid(b))
-                                  return true;  // Both are nullptr, no preference
+  switch (this->SamplingDSSKE[Keypoint::INTENSITY_EDGE])
+  {
+    // If Patch mode activated : use a 2D grid built on vertex map
+    // to extract keypoints
+    case SamplingModeDSSKE::PATCH:
+    {
+      this->ClearGrid(this->PatchGrid);
+      this->Create2DGrid(isPtValid);
+      this->AddKptsUsingGrid(Keypoint::INTENSITY_EDGE,
+                             this->PatchGrid,
+                             [&](const std::shared_ptr<PtFeat>& a, const std::shared_ptr<PtFeat>& b)
+                             {
+                               if (!isPtValid(a) && isPtValid(b))
+                                 return true;  // b is considered greater when a is nullptr
+                               else if (isPtValid(a) && !isPtValid(b))
+                                 return false;   // a is considered greater when b is nullptr
+                               else if (!isPtValid(a) && !isPtValid(b))
+                                 return true;  // Both are nullptr, no preference
 
-                                if (a->IntensityGapH < b->IntensityGapH && b->IntensityGapH > this->EdgeIntensityGapThreshold)
-                                  return true;
-                                if (b->IntensityGapH < a->IntensityGapH && a->IntensityGapH > this->EdgeIntensityGapThreshold)
-                                  return false;
-                                return true;
-                              });
+                               if (a->IntensityGapH < b->IntensityGapH && b->IntensityGapH > this->EdgeIntensityGapThreshold)
+                                 return true;
+                               if (b->IntensityGapH < a->IntensityGapH && a->IntensityGapH > this->EdgeIntensityGapThreshold)
+                                 return false;
+                               return true;
+                             });
+      break;
+    }
+    // If Voxel mode activated : use a 3D grid built on scan cloud
+    // to extract keypoints
+    case SamplingModeDSSKE::VOXEL:
+    {
+      this->ClearGrid(this->VoxGrid);
+      this->Create3DGrid(isPtValid);
+      this->AddKptsUsingGrid(Keypoint::INTENSITY_EDGE,
+                             this->VoxGrid,
+                             [&](const std::shared_ptr<PtFeat>& a, const std::shared_ptr<PtFeat>& b)
+                             {
+                               if (!isPtValid(a) && isPtValid(b))
+                                 return true;  // b is considered greater when a is nullptr
+                               else if (isPtValid(a) && !isPtValid(b))
+                                 return false;   // a is considered greater when b is nullptr
+                               else if (!isPtValid(a) && !isPtValid(b))
+                                 return true;  // Both are nullptr, no preference
+
+                               if (a->IntensityGapH < b->IntensityGapH && b->IntensityGapH > this->EdgeIntensityGapThreshold)
+                                 return true;
+                               if (b->IntensityGapH < a->IntensityGapH && a->IntensityGapH > this->EdgeIntensityGapThreshold)
+                                 return false;
+                               return true;
+                             });
+      break;
+    }
+  }
 }
 
 //-----------------------------------------------------------------------------

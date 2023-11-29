@@ -59,6 +59,13 @@ public:
   GetMacro(PatchSize, int)
   SetMacro(PatchSize, int)
 
+  GetMacro(VoxelDim, float)
+  SetMacro(VoxelDim, float)
+
+  void SetSamplingDSSKE(Keypoint k, SamplingModeDSSKE samplingMode) {this->SamplingDSSKE[k] = samplingMode;};
+
+  SamplingModeDSSKE GetSamplingDSSKE(Keypoint k) {return this->SamplingDSSKE[k];};
+
   // Extract keypoints from the pointcloud. The key points
   // will be separated in two classes : Edges keypoints which
   // correspond to area with high curvature scan lines and
@@ -116,17 +123,21 @@ private:
   void AddKeypoint(const Keypoint& k, const LidarPoint &pt);
 
   // Create square division of the image using 2 dimensions
-  void CreatePatchGrid(std::function<bool(const std::shared_ptr<PtFeat>&)> isPtFeatValid);
+  void Create2DGrid(std::function<bool(const std::shared_ptr<PtFeat>&)> isPtFeatValid);
+
+  // Create cubic division of the pointcloud using 3 dimensions
+  void Create3DGrid(std::function<bool(const std::shared_ptr<PtFeat>&)> isPtFeatValid);
 
   // Clear patch grid and resets the number of points in the grid
   // To be called at each keypoint computation (in ComputeEdges, ComputePlanes, etc.))
-  void ClearPatchGrid();
+  void ClearGrid(std::unordered_map<int, std::vector<std::shared_ptr<PtFeat>>>& grid);
 
   // Add keypoints of type k to a keypoint pointcloud
   // Using patches to have a uniform distribution of keypoints
-  void AddKptsUsingPatchGrid(Keypoint k,
-                            std::function<bool(const std::shared_ptr<PtFeat>&,
-                                               const std::shared_ptr<PtFeat>&)> comparePtFeats);
+  void AddKptsUsingGrid(Keypoint k,
+                        std::unordered_map<int, std::vector<std::shared_ptr<PtFeat>>> &grid,
+                        std::function<bool(const std::shared_ptr<PtFeat>&,
+                                           const std::shared_ptr<PtFeat>&)> comparePtFeats);
 
   // ---------------------------------------------------------------------------
   //   Parameters specific to the DenseSpinningSensorKeypointExtractor
@@ -139,10 +150,19 @@ private:
   // Sharpness threshold to select an edge keypoint
   float EdgeCosAngleThreshold = -0.5; // ~cos(120°) (selected, if cos angle is more than threshold)
 
+  // Downsampling mode
+  std::unordered_map<Keypoint, LidarSlam::SamplingModeDSSKE> SamplingDSSKE = {
+    {EDGE, LidarSlam::SamplingModeDSSKE::PATCH},
+    {PLANE, LidarSlam::SamplingModeDSSKE::PATCH},
+    {INTENSITY_EDGE, LidarSlam::SamplingModeDSSKE::PATCH}};
+
   // Size of a patch (nb of points in one dimension, a patch is a square)
   // Patches are used for 2D grid construction to downsample the keypoints
   // A patch with size 32 means that the patch will contain at most 32x32 points
   int PatchSize = 32; // [nb]
+
+  // Size in meters of a voxel, useful for 3D grid construction
+  float VoxelDim = 5.f; // [m]
 
   // ---------------------------------------------------------------------------
   //   Internal variables specific to the DenseSpinningSensorKeypointExtractor
@@ -163,6 +183,9 @@ private:
 
   // Vertex Map of points' indices in the pointcloud
   std::vector<std::vector<std::shared_ptr<PtFeat>>> VertexMap;
+
+  // 3D grid to detect planes far away from the sensor
+  std::unordered_map<int, std::vector<std::shared_ptr<PtFeat>>> VoxGrid;
 
   // Patch grid used to downsample the keypoints to reduce global computation time
   std::unordered_map<int, std::vector<std::shared_ptr<PtFeat>>> PatchGrid;

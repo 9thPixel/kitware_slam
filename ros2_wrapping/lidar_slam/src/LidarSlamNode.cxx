@@ -1809,6 +1809,29 @@ void LidarSlamNode::SetSlamParameters()
           if (this->get_parameter(prefix + "patch_size", patchSize))
             ke->SetPatchSize(patchSize);
 
+          float voxelDim;
+          if (this->get_parameter(prefix + "voxel_dim", voxelDim))
+            ke->SetVoxelDim(voxelDim);
+
+          for (auto k : LidarSlam::KeypointTypes)
+          {
+            if (!this->LidarSlam.KeypointTypeEnabled(k))
+              continue;
+            int samplingMode;
+            if (this->get_parameter(prefix + "sampling_mode." + LidarSlam::KeypointTypeNames.at(k), samplingMode))
+            {
+              LidarSlam::SamplingModeDSSKE sampling = static_cast<LidarSlam::SamplingModeDSSKE>(samplingMode);
+              if (sampling != LidarSlam::SamplingModeDSSKE::PATCH &&
+                  sampling != LidarSlam::SamplingModeDSSKE::VOXEL)
+              {
+                RCLCPP_ERROR_STREAM(this->get_logger(), "Invalid DSSKE sampling mode (" << samplingMode << ") for "
+                                                        << LidarSlam::Utils::Plural(LidarSlam::KeypointTypeNames.at(k))
+                                                        << ". Setting it to 'PATCH'.");
+                sampling = LidarSlam::SamplingModeDSSKE::PATCH;
+              }
+              ke->SetSamplingDSSKE(k, sampling);
+            }
+          }
           // Add extractor to SLAM
           this->LidarSlam.SetKeyPointsExtractor(ke, deviceId);
           RCLCPP_INFO_STREAM(this->get_logger(), "Adding dense keypoints extractor for LiDAR device " << deviceId);
@@ -1867,6 +1890,30 @@ void LidarSlamNode::SetSlamParameters()
         int patchSize;
         if (this->get_parameter("slam.ke.patch_size", patchSize))
           ke->SetPatchSize(patchSize);
+
+        float voxelDim;
+        if (this->get_parameter("slam.ke.voxel_dim", voxelDim))
+          ke->SetVoxelDim(voxelDim);
+
+        for (auto k : LidarSlam::KeypointTypes)
+        {
+          if (!this->LidarSlam.KeypointTypeEnabled(k))
+            continue;
+          int samplingMode;
+          if (this->get_parameter("slam.ke.sampling_mode." + LidarSlam::KeypointTypeNames.at(k), samplingMode))
+          {
+            LidarSlam::SamplingModeDSSKE sampling = static_cast<LidarSlam::SamplingModeDSSKE>(samplingMode);
+            if (sampling != LidarSlam::SamplingModeDSSKE::PATCH &&
+                sampling != LidarSlam::SamplingModeDSSKE::VOXEL)
+            {
+              RCLCPP_ERROR_STREAM(this->get_logger(), "Invalid DSSKE sampling mode (" << samplingMode << ") for "
+                                                      << LidarSlam::Utils::Plural(LidarSlam::KeypointTypeNames.at(k))
+                                                      << ". Setting it to 'PATCH'.");
+              sampling = LidarSlam::SamplingModeDSSKE::PATCH;
+            }
+            ke->SetSamplingDSSKE(k, sampling);
+          }
+        }
 
         this->LidarSlam.SetKeyPointsExtractor(ke);
         RCLCPP_INFO_STREAM(this->get_logger(), "Adding dense keypoints extractor");
