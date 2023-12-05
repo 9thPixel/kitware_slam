@@ -1735,7 +1735,6 @@ void LidarSlamNode::SetSlamParameters()
     SetKeypointsExtractorParam(int, prefix + "edge_nb_gap_points", EdgeNbGapPoints)
     SetKeypointsExtractorParam(float, prefix + "edge_intensity_gap_threshold", EdgeIntensityGapThreshold)
     SetKeypointsExtractorParam(int,   prefix + "max_points", MaxPoints)
-    SetKeypointsExtractorParam(float, prefix + "voxel_grid_resolution", VoxelResolution)
     SetKeypointsExtractorParam(float, prefix + "input_sampling_ratio", InputSamplingRatio)
 
     #define EnableKeypoint(kType) \
@@ -1762,28 +1761,80 @@ void LidarSlamNode::SetSlamParameters()
     RCLCPP_INFO_STREAM(this->get_logger(), "Multi-LiDAR devices setup");
     for (auto deviceId: deviceIds)
     {
-      // Init Keypoint extractor with default params
-      auto ke = std::make_shared<LidarSlam::SpinningSensorKeypointExtractor>();
-
-      // Change default parameters using ROS parameter server
       std::string prefix = "slam.ke.device_" + deviceId + ".";
-      initKeypointsExtractor(ke, prefix);
+      int keypointExtractorMode;
+      if (this->get_parameter<int>(prefix + "extractor_mode", keypointExtractorMode))
+      {
+        LidarSlam::KeypointExtractorMode keypointExtractor = static_cast<LidarSlam::KeypointExtractorMode>(keypointExtractorMode);
+        if (keypointExtractor != LidarSlam::KeypointExtractorMode::SPARSE &&
+            keypointExtractor != LidarSlam::KeypointExtractorMode::DENSE)
+        {
+          RCLCPP_ERROR_STREAM(this->get_logger(), "Incorrect keypoint extractor mode value (" << keypointExtractorMode <<
+                                                  ")" << "for device " << deviceId << ". Setting it to '0', corresponding to sparse extractor.");
+          keypointExtractor = LidarSlam::KeypointExtractorMode::SPARSE;
+        }
+        if (keypointExtractor == LidarSlam::KeypointExtractorMode::SPARSE)
+        {
+          auto ke = std::make_shared<LidarSlam::SpinningSensorKeypointExtractor>();
+          initKeypointsExtractor(ke, prefix);
 
-      // Add extractor to SLAM
-      this->LidarSlam.SetKeyPointsExtractor(ke, deviceId);
-      RCLCPP_INFO_STREAM(this->get_logger(), "Adding keypoints extractor for LiDAR device " << deviceId);
+          float voxelResolution;
+          this->get_parameter<float>(prefix + "voxel_grid_resolution", voxelResolution);
+          ke->SetVoxelResolution(voxelResolution);
+
+          // Add extractor to SLAM
+          this->LidarSlam.SetKeyPointsExtractor(ke, deviceId);
+          RCLCPP_INFO_STREAM(this->get_logger(), "Adding sparse keypoints extractor for LiDAR device " << deviceId);
+        }
+        else
+        {
+          auto ke = std::make_shared<LidarSlam::DenseSpinningSensorKeypointExtractor>();
+          initKeypointsExtractor(ke, prefix);
+
+          // Add extractor to SLAM
+          this->LidarSlam.SetKeyPointsExtractor(ke, deviceId);
+          RCLCPP_INFO_STREAM(this->get_logger(), "Adding dense keypoints extractor for LiDAR device " << deviceId);
+        }
+      }
     }
   }
   // Single LiDAR device
   else
   {
     RCLCPP_INFO_STREAM(this->get_logger(), "Single LiDAR device setup");
-    auto ke = std::make_shared<LidarSlam::SpinningSensorKeypointExtractor>();
-    initKeypointsExtractor(ke, "slam.ke.");
-    this->LidarSlam.SetKeyPointsExtractor(ke);
-    RCLCPP_INFO_STREAM(this->get_logger(), "Adding keypoints extractor");
-  }
+    int keypointExtractorMode;
+    if (this->get_parameter<int>("slam.ke.extractor_mode", keypointExtractorMode))
+    {
+      LidarSlam::KeypointExtractorMode keypointExtractor = static_cast<LidarSlam::KeypointExtractorMode>(keypointExtractorMode);
+      if (keypointExtractor != LidarSlam::KeypointExtractorMode::SPARSE &&
+          keypointExtractor != LidarSlam::KeypointExtractorMode::DENSE)
+      {
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Incorrect keypoint extractor mode value (" << keypointExtractorMode <<
+                                                "). Setting it to '0', corresponding to sparse extractor.");
+        keypointExtractor = LidarSlam::KeypointExtractorMode::SPARSE;
+      }
+      if (keypointExtractor == LidarSlam::KeypointExtractorMode::SPARSE)
+      {
+        auto ke = std::make_shared<LidarSlam::SpinningSensorKeypointExtractor>();
+        initKeypointsExtractor(ke, "slam.ke.");
 
+        float voxelResolution;
+        this->get_parameter<float>("slam.ke.voxel_grid_resolution", voxelResolution);
+        ke->SetVoxelResolution(voxelResolution);
+
+        this->LidarSlam.SetKeyPointsExtractor(ke);
+        RCLCPP_INFO_STREAM(this->get_logger(), "Adding sparse keypoints extractor");
+      }
+      else
+      {
+        auto ke = std::make_shared<LidarSlam::DenseSpinningSensorKeypointExtractor>();
+        initKeypointsExtractor(ke, "slam.ke.");
+
+        this->LidarSlam.SetKeyPointsExtractor(ke);
+        RCLCPP_INFO_STREAM(this->get_logger(), "Adding dense keypoints extractor");
+      }
+    }
+  }
 
   // Ego motion
   SetSlamParam(int,    "slam.ego_motion_registration.ICP_max_iter", EgoMotionICPMaxIter)

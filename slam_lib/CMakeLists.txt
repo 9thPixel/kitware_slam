@@ -33,7 +33,9 @@ add_library(LidarSlam
   src/RollingGrid.cxx
   src/ExternalSensorManagers.cxx
   src/Slam.cxx
+  src/KeypointExtractor.cxx
   src/SpinningSensorKeypointExtractor.cxx
+  src/DenseSpinningSensorKeypointExtractor.cxx
   src/Utilities.cxx
   src/VoxelGrid.cxx
   src/InterpolationModels.cxx
@@ -129,7 +131,9 @@ set(target_public_header
     ${CMAKE_CURRENT_SOURCE_DIR}/include/LidarSlam/PoseGraphOptimizer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/LidarSlam/RollingGrid.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/LidarSlam/Slam.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/LidarSlam/KeypointExtractor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/LidarSlam/SpinningSensorKeypointExtractor.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/LidarSlam/DenseSpinningSensorKeypointExtractor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/LidarSlam/State.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/LidarSlam/Utilities.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/LidarSlam/VoxelGrid.h

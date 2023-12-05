@@ -376,13 +376,16 @@
       # Keypoint extractor for each LiDAR sensor
       # Single LiDAR input
       ke:
+        # The extractor modes allow to decide which keypoint extractor to choose
+        # 0) Sparse extractor called SpinningSensorKeypointExtractor. Convenient for all lidars.
+        # 1) Dense extractor called DenseSpinningSensorKeypointExtractor. Better option for lidars with 64 and 128 lasers.
+        extractor_mode: 0
         enable:
           edge: true
           intensity_edge: true
           plane: true
           blob: false
         max_points: 1000                   # [points] Maximum number of keypoints of each type to extract
-        voxel_grid_resolution: 2.          # [m/voxel] Size of a voxel to downsample the extracted keypoints
         input_sampling_ratio: 1.           # [0-1] Ratio of points from which to extract the keypoints (for computation time issues)
         min_distance_to_sensor: 1.5        # [m] Minimal point to sensor distance to consider a point as valid.
         max_distance_to_sensor: 200.       # [m] Maximal point to sensor distance to consider a point as valid.
@@ -396,6 +399,8 @@
         edge_depth_gap_threshold: 1.       # [m] Threshold upon depth gap in neighborhood to select an edge keypoint.
         edge_nb_gap_points: 10             # [points] Minimum number of successive missing points to consider a space gap.
         edge_intensity_gap_threshold: 50.  # [0-255] Threshold upon intensity gap to select an edge keypoint.
+        # Additional parameter for the sparse extractor
+        voxel_grid_resolution: 2.          # [m/voxel] Size of a voxel to downsample the extracted keypoints.
 
         # # Multi LiDAR inputs
         # # The multiple devices to use for SLAM.
