@@ -38,7 +38,7 @@ struct PtFeat
   float Angle;
   Keypoint KptType;
 
-  PtFeat() : Index(0), Depth(0.0f), SpaceGapH(-1.0f), DepthGapH(-1.0f), IntensityGapH(-1.0f), Angle(-1.0f), KptType(UNDEFINED) {}
+  PtFeat() : Index(0), Depth(0.0f), SpaceGapH(-1.0f), DepthGapH(-1.0f), IntensityGapH(-1.0f), Angle(1.0f), KptType(UNDEFINED) {}
 };
 
 struct IdxVM
@@ -49,6 +49,13 @@ struct IdxVM
 class DenseSpinningSensorKeypointExtractor : public KeypointExtractor
 {
 public:
+
+  GetMacro(PlaneCosAngleThreshold, float)
+  SetMacro(PlaneCosAngleThreshold, float)
+
+  GetMacro(EdgeCosAngleThreshold, float)
+  SetMacro(EdgeCosAngleThreshold, float)
+
   // Extract keypoints from the pointcloud. The key points
   // will be separated in two classes : Edges keypoints which
   // correspond to area with high curvature scan lines and
@@ -104,7 +111,12 @@ private:
   //   Parameters specific to the DenseSpinningSensorKeypointExtractor
   // ---------------------------------------------------------------------------
 
-  //TODO
+  // Sharpness threshold to select a planar keypoint
+  // Also used, with its opposite value, to filter too sharp edges
+  float PlaneCosAngleThreshold = -0.86;  // ~cos(150°) (selected if cos angle is less than threshold)
+
+  // Sharpness threshold to select an edge keypoint
+  float EdgeCosAngleThreshold = -0.5; // ~cos(120°) (selected, if cos angle is more than threshold)
 
   // ---------------------------------------------------------------------------
   //   Internal variables specific to the DenseSpinningSensorKeypointExtractor

@@ -99,12 +99,6 @@ public:
   GetMacro(MinBeamSurfaceAngle, float)
   SetMacro(MinBeamSurfaceAngle, float)
 
-  GetMacro(PlaneSinAngleThreshold, float)
-  SetMacro(PlaneSinAngleThreshold, float)
-
-  GetMacro(EdgeSinAngleThreshold, float)
-  SetMacro(EdgeSinAngleThreshold, float)
-
   GetMacro(EdgeDepthGapThreshold, float)
   SetMacro(EdgeDepthGapThreshold, float)
 
@@ -210,12 +204,6 @@ protected:
 
   float AzimuthMin = 0; // [°]
   float AzimuthMax = 360; // [°]
-
-  // Sharpness threshold to select a planar keypoint
-  float PlaneSinAngleThreshold = 0.5;  // sin(30°) (selected if sin angle is less than threshold)
-
-  // Sharpness threshold to select an edge keypoint
-  float EdgeSinAngleThreshold = 0.86;  // ~sin(60°) (selected, if sin angle is more than threshold)
 
   // Threshold upon depth gap in neighborhood to select an edge keypoint
   float EdgeDepthGapThreshold = 0.5;  // [m]

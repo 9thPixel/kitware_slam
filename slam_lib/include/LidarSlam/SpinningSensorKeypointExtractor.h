@@ -43,6 +43,12 @@ public:
   GetMacro(VoxelResolution, float)
   SetMacro(VoxelResolution, float)
 
+  GetMacro(PlaneSinAngleThreshold, float)
+  SetMacro(PlaneSinAngleThreshold, float)
+
+  GetMacro(EdgeSinAngleThreshold, float)
+  SetMacro(EdgeSinAngleThreshold, float)
+
   // Extract keypoints from the pointcloud. The key points
   // will be separated in two classes : Edges keypoints which
   // correspond to area with high curvature scan lines and
@@ -101,6 +107,12 @@ private:
   // Size of a voxel used to downsample the keypoints
   // It corresponds approx to the mean distance between closest neighbors in the output keypoints cloud.
   float VoxelResolution = 0.1; // [m]
+
+  // Sharpness threshold to select a planar keypoint
+  float PlaneSinAngleThreshold = 0.5;  // sin(30°) (selected if sin angle is less than threshold)
+
+  // Sharpness threshold to select an edge keypoint
+  float EdgeSinAngleThreshold = 0.86; // ~sin(60°) (selected, if sin angle is more than threshold)
 
   // ---------------------------------------------------------------------------
   //   Internal variables specific to the SpinningSensorKeypointExtractor

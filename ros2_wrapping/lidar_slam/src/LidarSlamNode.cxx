@@ -1729,8 +1729,6 @@ void LidarSlamNode::SetSlamParameters()
     SetKeypointsExtractorParam(float, prefix + "min_beam_surface_angle", MinBeamSurfaceAngle)
     SetKeypointsExtractorParam(float, prefix + "min_azimuth", AzimuthMin)
     SetKeypointsExtractorParam(float, prefix + "max_azimuth", AzimuthMax)
-    SetKeypointsExtractorParam(float, prefix + "plane_sin_angle_threshold", PlaneSinAngleThreshold)
-    SetKeypointsExtractorParam(float, prefix + "edge_sin_angle_threshold", EdgeSinAngleThreshold)
     SetKeypointsExtractorParam(float, prefix + "edge_depth_gap_threshold", EdgeDepthGapThreshold)
     SetKeypointsExtractorParam(int, prefix + "edge_nb_gap_points", EdgeNbGapPoints)
     SetKeypointsExtractorParam(float, prefix + "edge_intensity_gap_threshold", EdgeIntensityGapThreshold)
@@ -1782,6 +1780,14 @@ void LidarSlamNode::SetSlamParameters()
           this->get_parameter<float>(prefix + "voxel_grid_resolution", voxelResolution);
           ke->SetVoxelResolution(voxelResolution);
 
+          float planeSinAngleThreshold;
+          this->get_parameter<float>(prefix + "plane_sin_angle_threshold", planeSinAngleThreshold);
+          ke->SetPlaneSinAngleThreshold(planeSinAngleThreshold);
+
+          float edgeSinAngleThreshold;
+          this->get_parameter<float>(prefix + "edge_sin_angle_threshold", edgeSinAngleThreshold);
+          ke->SetEdgeSinAngleThreshold(edgeSinAngleThreshold);
+
           // Add extractor to SLAM
           this->LidarSlam.SetKeyPointsExtractor(ke, deviceId);
           RCLCPP_INFO_STREAM(this->get_logger(), "Adding sparse keypoints extractor for LiDAR device " << deviceId);
@@ -1790,6 +1796,14 @@ void LidarSlamNode::SetSlamParameters()
         {
           auto ke = std::make_shared<LidarSlam::DenseSpinningSensorKeypointExtractor>();
           initKeypointsExtractor(ke, prefix);
+
+          float planeCosAngleThreshold;
+          this->get_parameter<float>(prefix + "plane_cos_angle_threshold", planeCosAngleThreshold);
+          ke->SetPlaneCosAngleThreshold(planeCosAngleThreshold);
+
+          float edgeCosAngleThreshold;
+          this->get_parameter<float>(prefix + "edge_cos_angle_threshold", edgeCosAngleThreshold);
+          ke->SetEdgeCosAngleThreshold(edgeCosAngleThreshold);
 
           // Add extractor to SLAM
           this->LidarSlam.SetKeyPointsExtractor(ke, deviceId);
@@ -1822,6 +1836,14 @@ void LidarSlamNode::SetSlamParameters()
         this->get_parameter<float>("slam.ke.voxel_grid_resolution", voxelResolution);
         ke->SetVoxelResolution(voxelResolution);
 
+        float planeSinAngleThreshold;
+        this->get_parameter<float>("slam.ke.plane_sin_angle_threshold", planeSinAngleThreshold);
+        ke->SetPlaneSinAngleThreshold(planeSinAngleThreshold);
+
+        float edgeSinAngleThreshold;
+        this->get_parameter<float>("slam.ke.edge_sin_angle_threshold", edgeSinAngleThreshold);
+        ke->SetEdgeSinAngleThreshold(edgeSinAngleThreshold);
+
         this->LidarSlam.SetKeyPointsExtractor(ke);
         RCLCPP_INFO_STREAM(this->get_logger(), "Adding sparse keypoints extractor");
       }
@@ -1829,6 +1851,14 @@ void LidarSlamNode::SetSlamParameters()
       {
         auto ke = std::make_shared<LidarSlam::DenseSpinningSensorKeypointExtractor>();
         initKeypointsExtractor(ke, "slam.ke.");
+
+        float planeCosAngleThreshold;
+        this->get_parameter<float>("slam.ke.plane_cos_angle_threshold", planeCosAngleThreshold);
+        ke->SetPlaneCosAngleThreshold(planeCosAngleThreshold);
+
+        float edgeCosAngleThreshold;
+        this->get_parameter<float>("slam.ke.edge_cos_angle_threshold", edgeCosAngleThreshold);
+        ke->SetEdgeCosAngleThreshold(edgeCosAngleThreshold);
 
         this->LidarSlam.SetKeyPointsExtractor(ke);
         RCLCPP_INFO_STREAM(this->get_logger(), "Adding dense keypoints extractor");
