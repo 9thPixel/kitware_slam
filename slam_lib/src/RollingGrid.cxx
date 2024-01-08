@@ -140,8 +140,8 @@ void RollingGrid::Roll(const Eigen::Array3f& minPoint, const Eigen::Array3f& max
 
   // Compute how much the new frame does not fit in current grid
   double halfGridSize = static_cast<double>(this->GridSize) / 2 * this->VoxelWidth;
-  Eigen::Array3f downOffset = minPoint - (VoxelGridPosition - halfGridSize);
-  Eigen::Array3f upOffset   = maxPoint - (VoxelGridPosition + halfGridSize);
+  Eigen::Array3f downOffset = minPoint - (this->VoxelGridPosition - halfGridSize);
+  Eigen::Array3f upOffset   = maxPoint - (this->VoxelGridPosition + halfGridSize);
   Eigen::Array3f offset = (upOffset + downOffset) / 2;
 
   // Clamp the rolling movement so that it only moves what is really necessary
