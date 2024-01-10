@@ -35,7 +35,8 @@ class KDTreePCLAdaptor
   using PointCloudPtr = typename PointCloud::Ptr;
 
   using metric_t = typename nanoflann::metric_L2_Simple::traits<float, KDTreePCLAdaptor<Point>>::distance_t;
-  using index_t = nanoflann::KDTreeSingleIndexAdaptor<metric_t, KDTreePCLAdaptor<Point>, 3, int>;
+  // using index_t = nanoflann::KDTreeSingleIndexAdaptor<metric_t, KDTreePCLAdaptor<Point>, 3, int>;
+  using index_t = nanoflann::KDTreeSingleIndexDynamicAdaptor<metric_t, KDTreePCLAdaptor<Point>, 3, int>;
 
 public:
 
@@ -63,7 +64,18 @@ public:
 
     // Build KD-tree
     this->Index = std::make_unique<index_t>(3, *this, nanoflann::KDTreeSingleIndexAdaptorParams(leafMaxSize));
-    this->Index->buildIndex();
+    // this->Index->buildIndex();
+  }
+
+  /**
+   * @brief Add points in the dynamic Kd-tree
+   * 
+   * @param start The start index from the point to add
+   * @param end the last index from the point to add
+   */
+  void addPoints(int start, int end)
+  {
+    this->Index->addPoints(start, end);
   }
 
   /**
@@ -80,7 +92,14 @@ public:
     */
   inline size_t KnnSearch(const float queryPoint[3], int knearest, int* knnIndices, float* knnSqDistances) const
   {
-    return this->Index->knnSearch(queryPoint, knearest, knnIndices, knnSqDistances);
+    // TODO Replace it for dynamicAdaptor
+    // return this->Index->knnSearch(queryPoint, knearest, knnIndices, knnSqDistances);
+
+    nanoflann::KNNResultSet<float, int> resultSet(knearest);
+    resultSet.init(knnIndices, knnSqDistances);
+    this->Index->findNeighbors(resultSet, queryPoint, {});
+    
+    return resultSet.size();
   }
   inline size_t KnnSearch(const float queryPoint[3], int knearest, std::vector<int>& knnIndices, std::vector<float>& knnSqDistances) const
   {

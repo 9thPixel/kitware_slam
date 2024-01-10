@@ -1067,6 +1067,9 @@ private:
   // Keypoints local map
   Maps LocalMaps;
 
+  // Frame of the last update of the map
+  unsigned int LastMapUpdate = 0;
+
   // ---------------------------------------------------------------------------
   //   Loop closure parameters
   // ---------------------------------------------------------------------------

@@ -1637,9 +1637,13 @@ void Slam::Localization()
     // Check the current frame contains not null number of k type keypoints
     if (this->CurrentUndistortedKeypoints[k] && this->CurrentUndistortedKeypoints[k]->empty())
       continue;
-    // If the map has been updated, the KD-tree needs to be updated
-    if (!this->LocalMaps[k]->IsSubMapKdTreeValid())
+    // If the map has been updated, the KD-tree needs to be updated or if the KdTree is too old
+    if (!this->LocalMaps[k]->IsSubMapKdTreeValid() ||
+        (this->LocalMaps[k]->IsSubMapUpdated() && this->NbrFrameProcessed - this->LastMapUpdate >= 10))
     {
+      PRINT_WARNING("Rebuilding submaps << at frame " << this->NbrFrameProcessed
+                    << " / last update : " << this->LastMapUpdate)
+      this->LastMapUpdate = this->NbrFrameProcessed;
       // If maps are fixed, we can build a single KD-tree
       // of the entire map to avoid rebuilding it again
       if (this->MapUpdate == MappingMode::NONE)
@@ -1778,6 +1782,17 @@ void Slam::UpdateMapsUsingTworld()
     // Add not fixed points
     this->LocalMaps[k]->Add(this->CurrentWorldKeypoints[k], false);
   }
+  
+  //! Test if a local map has been updated
+  bool updated = false;
+  for (int i = 0; i < nbKeypointTypes; ++i)
+  {
+    Keypoint k = static_cast<Keypoint>(this->UsableKeypoints[i]);
+    if (this->LocalMaps[k]->IsSubMapUpdated())
+      updated = true;
+  }
+  if (updated)
+    PRINT_WARNING("A LOCAL MAP HAS BEEN UPDATED");
 }
 
 //-----------------------------------------------------------------------------

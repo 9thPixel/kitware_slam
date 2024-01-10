@@ -56,6 +56,7 @@ void RollingGrid::Clear()
   this->NbPoints = 0;
   this->Voxels.clear();
   this->KdTree.Reset();
+  this->SubMapUpdated = false;
 }
 
 //------------------------------------------------------------------------------
@@ -184,6 +185,9 @@ void RollingGrid::Add(const PointCloud::Ptr& pointcloud, bool fixed, bool roll)
     return;
   }
 
+  // Save the previous number of points in the SubMap
+  size_t prevSizeSubmap = this->SubMap->size();
+
   // Optionally roll the map so that all new points can fit in rolled map
   if (roll)
   {
@@ -201,8 +205,6 @@ void RollingGrid::Add(const PointCloud::Ptr& pointcloud, bool fixed, bool roll)
   // Voxels' states info (for CENTROID sampling mode) :
   // mean point of current added points in each voxel
   std::unordered_map<int, std::unordered_map<int, Voxel>> meanPts;
-  // Boolean to check if the tree will need update
-  bool updated = false;
   // Add points in the rolling grid
   for (const Point& point : *pointcloud)
   {
@@ -224,9 +226,10 @@ void RollingGrid::Add(const PointCloud::Ptr& pointcloud, bool fixed, bool roll)
           !this->Voxels[idxOut].count(idxIn))
       {
         this->Voxels[idxOut][idxIn].point = point;
+        this->SubMap->push_back(point);
         ++this->NbPoints;
         // Notify that the voxel point has been updated
-        updated = true;
+        this->SubMapUpdated = true;
       }
       else
       {
@@ -252,8 +255,9 @@ void RollingGrid::Add(const PointCloud::Ptr& pointcloud, bool fixed, bool roll)
           {
             // Update the point
             voxel.point = point;
+            this->SubMap->push_back(point);
             // Notify that the voxel point has been updated
-            updated = true;
+            this->SubMapUpdated = true;
             break;
           }
           // If max_intensity mode enabled,
@@ -263,8 +267,9 @@ void RollingGrid::Add(const PointCloud::Ptr& pointcloud, bool fixed, bool roll)
             if (point.intensity > voxel.point.intensity)
             {
               voxel.point = point;
+              this->SubMap->push_back(point);
               // Notify that the voxel point has been updated
-              updated = true;
+              this->SubMapUpdated = true;
             }
             break;
           }
@@ -277,8 +282,9 @@ void RollingGrid::Add(const PointCloud::Ptr& pointcloud, bool fixed, bool roll)
             if ((point.getVector3fMap()- voxelCenter).norm() < (voxel.point.getVector3fMap() - voxelCenter).norm())
             {
               voxel.point = point;
+              this->SubMap->push_back(point);
               // Notify that the voxel point has been updated
-              updated = true;
+              this->SubMapUpdated = true;
             }
             break;
           }
@@ -294,7 +300,7 @@ void RollingGrid::Add(const PointCloud::Ptr& pointcloud, bool fixed, bool roll)
             ++v.count;
 
             // Notify that the voxel point has been updated
-            updated = true;
+            this->SubMapUpdated = true;
             break;
           }
         }
@@ -314,6 +320,7 @@ void RollingGrid::Add(const PointCloud::Ptr& pointcloud, bool fixed, bool roll)
             auto& voxel = this->Voxels[idxOut][idxIn];
             // Update the voxel point computing the centroid of all mean points laying in it
             voxel.point.getVector3fMap() = (voxel.point.getVector3fMap() * voxel.count + vIn.second.point.getVector3fMap()) / (voxel.count + 1);
+            this->SubMap->push_back(voxel.point);
           }
         }
       }
@@ -335,9 +342,12 @@ void RollingGrid::Add(const PointCloud::Ptr& pointcloud, bool fixed, bool roll)
     }
   }
 
-  // Clear the deprecated KD-tree if the map has been updated
-  if (updated)
-    this->KdTree.Reset();
+  // Add the new points to the KD-tree if the map has been updated
+  if (this->SubMapUpdated)
+  {
+    this->KdTree.addPoints(static_cast<int>(prevSizeSubmap), static_cast<int>(this->SubMap->size() - 1));
+    // this->KdTree.Reset();
+  }
 }
 
 //==============================================================================
@@ -622,6 +632,7 @@ void RollingGrid::BuildKdTree(bool allPoints)
   }
 
   this->KdTree.Reset(this->SubMap);
+  this->SubMapUpdated = false;
 }
 
 //==============================================================================

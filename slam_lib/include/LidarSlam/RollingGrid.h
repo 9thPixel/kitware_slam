@@ -177,6 +177,8 @@ public:
   //! useful to remove the points around a specific point of view
   void EmptyAroundPoint(double distThreshold, const Eigen::Array3f& position = Eigen::Array3f::Zero());
 
+  bool IsSubMapUpdated() {return this->SubMapUpdated;}
+
   //============================================================================
   //   Attributes and helper methods
   //============================================================================
@@ -221,6 +223,9 @@ private:
 
   //! Local sub-map stored for further visualization
   PointCloud::Ptr SubMap;
+
+  //! Flag raised when the submap has been updated
+  bool SubMapUpdated = false;
 
   //! Minimum number of points in a voxel
   //! to extract it in a submap
