@@ -25,6 +25,8 @@
 namespace LidarSlam
 {
 
+#define DEFAULT_LEAF_MAX_SIZE 16
+
 template<typename PointT>
 class KDTreePCLAdaptor
 {
@@ -43,7 +45,7 @@ public:
     * \param leafMaxSize The maximum size of a leaf of the tree (refer to
     * https://github.com/jlblancoc/nanoflann#21-kdtreesingleindexadaptorparamsleaf_max_size)
     */
-  KDTreePCLAdaptor(PointCloudPtr cloud = PointCloudPtr(new PointCloud), int leafMaxSize = 16)
+  KDTreePCLAdaptor(PointCloudPtr cloud = PointCloudPtr(new PointCloud), int leafMaxSize = DEFAULT_LEAF_MAX_SIZE)
   {
     this->Reset(cloud, leafMaxSize);
   }
@@ -54,7 +56,7 @@ public:
     * \param leafMaxSize The maximum size of a leaf of the tree (refer to
     * https://github.com/jlblancoc/nanoflann#21-kdtreesingleindexadaptorparamsleaf_max_size)
     */
-  void Reset(PointCloudPtr cloud = PointCloudPtr(new PointCloud), int leafMaxSize = 16)
+  void Reset(PointCloudPtr cloud = PointCloudPtr(new PointCloud), int leafMaxSize = DEFAULT_LEAF_MAX_SIZE)
   {
     // Copy the input cloud
     this->Cloud = cloud;
