@@ -299,8 +299,8 @@
 
       # Keyframes parameters. Only keyframes points are added to the maps.
       keyframes:
-        distance_threshold: 0.5  # [m] Min distance to travel since last KF to add a new one
-        angle_threshold: 5.      # [°] Min angle to rotate since last KF to add a new one
+        distance_threshold: 0.1  # [m] Min distance to travel since last KF to add a new one
+        angle_threshold: 1.      # [°] Min angle to rotate since last KF to add a new one
       # WARNING : these parameters are linked to the confidence threshold parameter
       # If they are reduced, the confidence threshold may need to be increased to not take too many moving objects
 
