@@ -55,10 +55,15 @@ struct LineFitting
   inline float DistanceToPoint(Eigen::Vector3f const& point) const;
 
   // Direction and position
-  Eigen::Vector3f Direction;
-  Eigen::Vector3f Position;
+  Eigen::Vector3f Direction = Eigen::Vector3f::Zero();
+  Eigen::Vector3f Position = Eigen::Vector3f::Zero();
 
-  //! Max line width to be trustworthy for lines < 20cm
+  //! Min number of points to fit a line
+  //! Should be superior or equal to min number of points in a neighborhood
+  // Should never be inferior to 2
+  int MinNbToFit = 4;
+
+  //! Max line width to be trustworthy for lines < 2cm
   float MaxLineWidth = 0.02;  // [m]
 
   // Ratio between length and width to be trustworthy
@@ -206,7 +211,7 @@ private:
   float InputSamplingRatio = 1.;
 
   // Minimum number of points used on each side of the studied point to compute its curvature
-  int MinNeighNb = 4;
+  int MinNeighNb = 5;
 
   // Minimum radius to define the neighborhood to compute curvature of a studied point
   float MinNeighRadius = 0.10f;
@@ -228,7 +233,6 @@ private:
 
   // Sharpness threshold to select an edge keypoint
   float EdgeSinAngleThreshold = 0.86;  // ~sin(60°) (selected, if sin angle is more than threshold)
-  float MaxDistance = 0.20;  // [m]
 
   // Threshold upon depth gap in neighborhood to select an edge keypoint
   float EdgeDepthGapThreshold = 0.5;  // [m]
