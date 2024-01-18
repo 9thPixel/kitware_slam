@@ -385,7 +385,7 @@
           intensity_edge: true
           plane: true
           blob: false
-        max_points: 1000                   # [points] Maximum number of keypoints of each type to extract
+        max_points: 100000000                   # [points] Maximum number of keypoints of each type to extract
         input_sampling_ratio: 1.           # [0-1] Ratio of points from which to extract the keypoints (for computation time issues)
         min_distance_to_sensor: 1.5        # [m] Minimal point to sensor distance to consider a point as valid.
         max_distance_to_sensor: 200.       # [m] Maximal point to sensor distance to consider a point as valid.

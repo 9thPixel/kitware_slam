@@ -54,7 +54,10 @@ struct LineFitting
   //! Min number of points to fit a line
   //! Should be superior or equal to min number of points in a neighborhood
   // Should never be inferior to 2
-  int MinNbToFit = 4;
+  int MinNbToFit = 5;
+
+  //! Ratio (squared) for squared distances of direct neighbors to consider a neighborhood as valid to fit line on
+  float SquaredRatio = 100.; // [.]
 
   //! Max line width to be trustworthy for lines < 2cm
   float MaxLineWidth = 0.02;  // [m]
@@ -198,6 +201,9 @@ protected:
 
   // Maximal point/sensor sensor to consider a point as valid
   float MaxDistanceToSensor = 200.;  // [m]
+
+  // Ratio (squared) for squared distances of direct neighbors to consider a neighborhood as valid to fit line on
+  float SquaredRatio = 81.; // [.]
 
   // Minimum angle between laser beam and surface to consider a point as valid
   float MinBeamSurfaceAngle = 10; // [°]

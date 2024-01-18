@@ -36,9 +36,9 @@ struct PtFeat
   float DepthGapH;
   float IntensityGapH;
   float Angle;
-  Keypoint KptType;
+  std::bitset<Keypoint::nKeypointTypes> KptTypes;
 
-  PtFeat() : Index(0), Depth(0.0f), SpaceGapH(-1.0f), DepthGapH(-1.0f), IntensityGapH(-1.0f), Angle(1.0f), KptType(UNDEFINED) {}
+  PtFeat() : Index(0), Depth(0.0f), SpaceGapH(-1.0f), DepthGapH(0.0f), IntensityGapH(-1.0f), Angle(1.0f), KptTypes({}) {}
 };
 
 struct IdxVM

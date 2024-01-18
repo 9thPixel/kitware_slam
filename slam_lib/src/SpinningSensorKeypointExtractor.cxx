@@ -27,7 +27,6 @@
 #include <pcl/common/common.h>
 
 #include <random>
-
 namespace LidarSlam
 {
 

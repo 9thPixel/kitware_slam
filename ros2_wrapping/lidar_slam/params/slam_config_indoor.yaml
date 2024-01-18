@@ -379,13 +379,13 @@
         # The extractor modes allow to decide which keypoint extractor to choose
         # 0) Sparse extractor called SpinningSensorKeypointExtractor. Convenient for all lidars.
         # 1) Dense extractor called DenseSpinningSensorKeypointExtractor. Better option for lidars with 64 and 128 lasers.
-        extractor_mode: 0
+        extractor_mode: 1
         enable:
           edge: true
           intensity_edge: true
           plane: true
           blob: false
-        max_points: 1000                   # [points] Maximum number of keypoints of each type to extract
+        max_points: 100000000                   # [points] Maximum number of keypoints of each type to extract
         input_sampling_ratio: 1.           # [0-1] Ratio of points from which to extract the keypoints (for computation time issues)
         min_distance_to_sensor: 1.         # [m] Minimal point to sensor distance to consider a point as valid.
         max_distance_to_sensor: 200.       # [m] Maximal point to sensor distance to consider a point as valid.

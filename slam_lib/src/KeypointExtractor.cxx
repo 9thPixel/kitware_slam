@@ -31,8 +31,27 @@ namespace LidarSlam
 
 //-----------------------------------------------------------------------------
 bool LineFitting::FitLineAndCheckConsistency(const KeypointExtractor::PointCloud& cloud,
-                                            const std::vector<int>& indices)
+                                            const std::vector<int>& allIndices)
 {
+  // Sample the indices vector for computation time concerns
+  int step = allIndices.size() > this->MinNbToFit ? allIndices.size() / this->MinNbToFit : 1;
+  std::vector<int> indices;
+  indices.reserve(allIndices.size() / step);
+  for (int i = 0; i < allIndices.size(); i += step)
+    indices.emplace_back(allIndices[i]);
+
+  // Check consistency of the line
+  float distMax = 0.f;
+  float distMin = std::numeric_limits<float>::max();
+  for (int i = 1; i < indices.size(); ++i)
+  {
+    const float distCurr = (cloud[indices[i]].getVector3fMap() - cloud[indices[i-1]].getVector3fMap()).squaredNorm();
+    distMax = std::max(distMax, distCurr);
+    distMin = std::min(distMin, distCurr);
+  }
+  if (distMax / distMin > this->SquaredRatio)
+    return false;
+
   // Check line width
   float lineLength = (cloud[indices.front()].getVector3fMap() - cloud[indices.back()].getVector3fMap()).norm();
   float widthThreshold = std::max(this->MaxLineWidth, lineLength / this->LengthWidthRatio);
@@ -42,21 +61,14 @@ bool LineFitting::FitLineAndCheckConsistency(const KeypointExtractor::PointCloud
   Eigen::Vector3f bestPosition = Eigen::Vector3f::Zero();
 
   // RANSAC
-  // Sample the indices vector for computation time concerns
-  int step = indices.size() > this->MinNbToFit ? indices.size() / this->MinNbToFit : 1;
-  std::vector<int> sampledIndices;
-  sampledIndices.reserve(indices.size() / step);
-  for (int i = 0; i < indices.size(); i += step)
-    sampledIndices.emplace_back(indices[i]);
-
-  for (int i = 0; i < sampledIndices.size(); ++i)
+  for (int i = 0; i < indices.size(); ++i)
   {
     // Extract first point
-    auto& point1 = cloud[sampledIndices[i]].getVector3fMap();
-    for (int j = i+1; j < sampledIndices.size(); ++j)
+    auto& point1 = cloud[indices[i]].getVector3fMap();
+    for (int j = i+1; j < indices.size(); ++j)
     {
       // Extract second point
-      auto& point2 = cloud[sampledIndices[j]].getVector3fMap();
+      auto& point2 = cloud[indices[j]].getVector3fMap();
 
       // Compute position of the line (the mean of the two points)
       this->Position = (point1 + point2) / 2.f;
@@ -67,7 +79,7 @@ bool LineFitting::FitLineAndCheckConsistency(const KeypointExtractor::PointCloud
       // Reset score for new points pair
       float currentMaxDist = 0;
       // Compute score : maximum distance of one neighbor to the current line
-      for (int idx : sampledIndices)
+      for (int idx : indices)
       {
         currentMaxDist = std::max(currentMaxDist, this->DistanceToPoint(cloud[idx].getVector3fMap()));
 
@@ -77,11 +89,6 @@ bool LineFitting::FitLineAndCheckConsistency(const KeypointExtractor::PointCloud
         if (currentMaxDist > widthThreshold)
           break;
       }
-
-      // If the current line implies high error for one neighbor
-      // the output line is considered as not trustworthy
-      if (currentMaxDist > 2.f * widthThreshold)
-        return false;
 
       if (currentMaxDist <= maxDist)
       {

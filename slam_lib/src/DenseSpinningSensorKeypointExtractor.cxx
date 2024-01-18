@@ -262,7 +262,7 @@ bool DenseSpinningSensorKeypointExtractor::OutputKeypoints()
         if (ptFeat == nullptr)
           continue;
         const Point& point = this->Scan->at(ptFeat->Index);
-        int isKpt = ptFeat->KptType == k ? 1 : 0;
+        int isKpt = ptFeat->KptTypes[k] ? 1 : 0;
         fileCsv << point.x << "," << point.y << "," << point.z << "," << isKpt << "\n";
         filePgm << isKpt << " ";
       }
@@ -288,15 +288,15 @@ void DenseSpinningSensorKeypointExtractor::ComputeKeyPoints(const PointCloud::Pt
   this->ComputeCurvature();
 
   // Label and extract keypoints
-  // Warning : order matters
-  if (this->Enabled[Keypoint::BLOB])
-    this->ComputeBlobs();
+  //! Warning : order matters
   if (this->Enabled[Keypoint::PLANE])
     this->ComputePlanes();
   if (this->Enabled[Keypoint::EDGE])
     this->ComputeEdges();
   if (this->Enabled[Keypoint::INTENSITY_EDGE])
     this->ComputeIntensityEdges();
+  if (this->Enabled[Keypoint::BLOB])
+    this->ComputeBlobs();
 
   this-> ClearVertexMap();
 }
@@ -429,34 +429,31 @@ void DenseSpinningSensorKeypointExtractor::ComputeCurvature()
 
         // ---- Compute horizontal depth gap ----
 
-        distRight = -1.f;
-        distLeft = -1.f;
-        auto& directRightNeigh = this->VertexMap[i][j + 1];
-        auto& directLeftNeigh = this->VertexMap[i][j - 1];
-        auto& postRightNeigh = this->VertexMap[i][j + 2];
-        auto& preLeftNeigh = this->VertexMap[i][j - 2];
-
-        if (directRightNeigh != nullptr)
+        int idxNext = this->VertexMap[i][j + 1] ? j + 1 : this->VertexMap[i][j + 2] ? j + 2 : -1;
+        int idxPrev = this->VertexMap[i][j - 1] ? j - 1 : this->VertexMap[i][j - 2] ? j - 2 : -1;
+        if (idxNext > 0 && idxPrev > 0)
         {
-          distRight = directRightNeigh->Depth - currentFeat->Depth;
+          auto& directRightNeigh = this->VertexMap[i][idxNext];
+          float distRight = directRightNeigh->Depth - currentFeat->Depth;
+          auto& directLeftNeigh = this->VertexMap[i][idxPrev];
+          float distLeft = directLeftNeigh->Depth - currentFeat->Depth;
+
+          auto& postRightNeigh = this->VertexMap[i][idxNext + 1];
+          auto& preLeftNeigh = this->VertexMap[i][idxPrev - 1];
           if (postRightNeigh != nullptr)
           {
             float distPostRight = postRightNeigh->Depth - directRightNeigh->Depth;
             if (distRight < distPostRight)
-              distRight = -1.0f;
+              distRight = 0.0f;
           }
-        }
-        if (directLeftNeigh != nullptr)
-        {
-          distLeft = directLeftNeigh->Depth - currentFeat->Depth;
           if (preLeftNeigh != nullptr)
           {
             float distPreLeft = preLeftNeigh->Depth - directLeftNeigh->Depth;
             if (distLeft < distPreLeft)
-              distLeft = -1.0f;
+              distLeft = 0.0f;
           }
+          currentFeat->DepthGapH = std::abs(distLeft) > std::abs(distRight) ? distLeft : distRight;
         }
-        currentFeat->DepthGapH = std::abs(distLeft) > std::abs(distRight) ? distLeft : distRight;
       }
 
       if (currentFeat->SpaceGapH > this->EdgeDepthGapThreshold || currentFeat->DepthGapH > this->EdgeDepthGapThreshold)
@@ -469,10 +466,6 @@ void DenseSpinningSensorKeypointExtractor::ComputeCurvature()
       // skip point if they are not usable
       if (!leftLine.FitLineAndCheckConsistency(*this->Scan, leftNeighbors) ||
           !rightLine.FitLineAndCheckConsistency(*this->Scan, rightNeighbors))
-        continue;
-
-      if (!this->IsBeamAngleValid(centralPoint, currentFeat->Depth, rightLine) ||
-          !this->IsBeamAngleValid(centralPoint, currentFeat->Depth, leftLine))
         continue;
 
       if (this->Enabled[INTENSITY_EDGE])
@@ -633,11 +626,8 @@ void DenseSpinningSensorKeypointExtractor::AddKptsUsingGrid(Keypoint k,
       auto& vec = cell.second;
       for (auto& pt : vec)
       {
-        if (pt != nullptr && pt->KptType == UNDEFINED)
-        {
-          this->AddKeypoint(k, this->Scan->at(pt->Index));
-          pt->KptType = k;
-        }
+        this->AddKeypoint(k, this->Scan->at(pt->Index));
+        pt->KptTypes.set(k);
       }
     }
     return;
@@ -652,7 +642,7 @@ void DenseSpinningSensorKeypointExtractor::AddKptsUsingGrid(Keypoint k,
     {
       auto& vec = cell.second;
       // Check if cell has point that could be keypoints
-      bool hasKptCandidate = std::any_of(vec.begin(), vec.end(), [](const std::shared_ptr<PtFeat>& pt) {return pt->KptType == UNDEFINED;});
+      bool hasKptCandidate = std::any_of(vec.begin(), vec.end(), [&](const std::shared_ptr<PtFeat>& pt) {return ~pt->KptTypes[k];});
       if (!hasKptCandidate)
         continue;
       remainKptCandidate = true;
@@ -663,7 +653,7 @@ void DenseSpinningSensorKeypointExtractor::AddKptsUsingGrid(Keypoint k,
 
       // Add to keypoints
       this->AddKeypoint(k, this->Scan->at(maxPt->Index));
-      maxPt->KptType = k;
+      maxPt->KptTypes.set(k);
       ++ptIdx;
 
       if (ptIdx >= this->MaxPoints)
@@ -679,8 +669,8 @@ void DenseSpinningSensorKeypointExtractor::ComputePlanes()
 {
   auto isPtValid = [this](const std::shared_ptr<PtFeat>& pt)
   {
-    return pt != nullptr &&
-           pt->KptType == UNDEFINED &&
+    return pt != nullptr &
+           ~(pt->KptTypes[EDGE] | pt->KptTypes[PLANE]) &&
            pt->Angle < this->PlaneCosAngleThreshold;
   };
   switch (this->SamplingDSSKE[Keypoint::PLANE])
@@ -736,7 +726,7 @@ void DenseSpinningSensorKeypointExtractor::ComputeEdges()
   auto isPtValid = [this](const std::shared_ptr<PtFeat>& pt)
   {
     return pt != nullptr &&
-           pt->KptType == UNDEFINED &&
+           ~(pt->KptTypes[PLANE] | pt->KptTypes[INTENSITY_EDGE] | pt->KptTypes[EDGE]) &&
            ((pt->DepthGapH - (-1.0f) > 1e-6 && pt->DepthGapH > this->EdgeDepthGapThreshold) ||
             (pt->Angle < -this->PlaneCosAngleThreshold && pt->Angle > this->EdgeCosAngleThreshold) ||
             (pt->SpaceGapH - (-1.0f) > 1e-6 && pt->SpaceGapH > this->EdgeDepthGapThreshold));
@@ -765,15 +755,15 @@ void DenseSpinningSensorKeypointExtractor::ComputeEdges()
                                if (b->DepthGapH < a->DepthGapH && a->DepthGapH > this->EdgeDepthGapThreshold)
                                  return false;
 
-                                if (a->Angle < b->Angle && b->Angle < -this->PlaneCosAngleThreshold && b->Angle > this->EdgeCosAngleThreshold)
-                                  return true;
-                                if (b->Angle < a->Angle && a->Angle < -this->PlaneCosAngleThreshold && a->Angle > this->EdgeCosAngleThreshold)
-                                  return false;
+                               if (a->Angle < b->Angle && b->Angle < -this->PlaneCosAngleThreshold && b->Angle > this->EdgeCosAngleThreshold)
+                                 return true;
+                               if (b->Angle < a->Angle && a->Angle < -this->PlaneCosAngleThreshold && a->Angle > this->EdgeCosAngleThreshold)
+                                 return false;
 
-                                if (a->SpaceGapH < b->SpaceGapH && b->SpaceGapH > this->EdgeDepthGapThreshold)
-                                  return true;
-                                if (b->SpaceGapH < a->SpaceGapH && a->SpaceGapH > this->EdgeDepthGapThreshold)
-                                  return false;
+                               if (a->SpaceGapH < b->SpaceGapH && b->SpaceGapH > this->EdgeDepthGapThreshold)
+                                 return true;
+                               if (b->SpaceGapH < a->SpaceGapH && a->SpaceGapH > this->EdgeDepthGapThreshold)
+                                 return false;
 
                                 return true;
                               });
@@ -802,9 +792,9 @@ void DenseSpinningSensorKeypointExtractor::ComputeEdges()
                                  return false;
 
                                if (a->Angle < b->Angle && b->Angle < -this->PlaneCosAngleThreshold && b->Angle > this->EdgeCosAngleThreshold)
-                                  return true;
-                                if (b->Angle < a->Angle && a->Angle < -this->PlaneCosAngleThreshold && a->Angle > this->EdgeCosAngleThreshold)
-                                  return false;
+                                 return true;
+                               if (b->Angle < a->Angle && a->Angle < -this->PlaneCosAngleThreshold && a->Angle > this->EdgeCosAngleThreshold)
+                                 return false;
 
                                if (a->SpaceGapH < b->SpaceGapH && b->SpaceGapH > this->EdgeDepthGapThreshold)
                                  return true;
@@ -824,7 +814,7 @@ void DenseSpinningSensorKeypointExtractor::ComputeIntensityEdges()
   auto isPtValid = [this](const std::shared_ptr<PtFeat>& pt)
   {
     return pt != nullptr &&
-           pt->KptType == UNDEFINED &&
+           ~(pt->KptTypes[EDGE] | pt->KptTypes[INTENSITY_EDGE]) &&
            (pt->IntensityGapH - (-1.0f) > 1e-6 && pt->IntensityGapH > this->EdgeIntensityGapThreshold);
   };
   switch (this->SamplingDSSKE[Keypoint::INTENSITY_EDGE])
