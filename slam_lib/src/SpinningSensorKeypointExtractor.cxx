@@ -215,7 +215,7 @@ void SpinningSensorKeypointExtractor::ComputeCurvature()
       continue;
 
     // Loop over points in the current scan line
-    for (int index = 0; index < nPts; ++index)
+    for (int index = this->MinNeighNb; index < nPts - this->MinNeighNb; ++index)
     {
       // Random sampling to decrease keypoints extraction
       // computation time
@@ -236,19 +236,23 @@ void SpinningSensorKeypointExtractor::ComputeCurvature()
       auto getNeighbors = [&](bool right, std::vector<int>& neighbors)
       {
         neighbors.reserve(nPts);
-        neighbors.emplace_back(index);
         int rightOrLeft = right ? 1 : -1;
-        int idxNeigh = 1;
-        float lineLength = 0.f;
-        do {
-          neighbors.emplace_back((index + rightOrLeft * idxNeigh + nPts) % nPts);
-          if (lineLength < this->MinNeighRadius)
-            lineLength = (scanLineCloud[neighbors.back()].getVector3fMap() - scanLineCloud[neighbors.front()].getVector3fMap()).norm();
-          ++idxNeigh;
+        int idxNeigh = index;
+        while (int(neighbors.size()) < this->MinNeighNb)
+        {
+          neighbors.emplace_back(idxNeigh);
+          idxNeigh += rightOrLeft;
         }
-        while ((lineLength < this->MinNeighRadius ||
-               int(neighbors.size()) < this->MinNeighNb) &&
-               int(neighbors.size()) < nPts);
+        float lineLength = ((scanLineCloud[neighbors.back()]).getVector3fMap() - (scanLineCloud[neighbors.front()]).getVector3fMap()).norm();
+        idxNeigh += rightOrLeft;
+        while (idxNeigh > 0 &&
+               idxNeigh < nPts &&
+               lineLength < this->MinNeighRadius)
+        {
+          neighbors.emplace_back(idxNeigh);
+          lineLength = ((scanLineCloud[neighbors.back()]).getVector3fMap() - (scanLineCloud[neighbors.front()]).getVector3fMap()).norm();
+          idxNeigh += rightOrLeft;
+        }
         neighbors.shrink_to_fit();
       };
 

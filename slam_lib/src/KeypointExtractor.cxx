@@ -24,86 +24,46 @@
 
 #include <pcl/common/common.h>
 
-#include <random>
 
 namespace LidarSlam
 {
 
 //-----------------------------------------------------------------------------
 bool LineFitting::FitLineAndCheckConsistency(const KeypointExtractor::PointCloud& cloud,
-                                            const std::vector<int>& allIndices)
+                                             const std::vector<int>& indices)
 {
-  // Sample the indices vector for computation time concerns
-  int step = allIndices.size() > this->MinNbToFit ? allIndices.size() / this->MinNbToFit : 1;
-  std::vector<int> indices;
-  indices.reserve(allIndices.size() / step);
-  for (int i = 0; i < allIndices.size(); i += step)
-    indices.emplace_back(allIndices[i]);
-
   // Check consistency of the line
+  if (indices.size() < 2)
+    return false;
+
   float distMax = 0.f;
   float distMin = std::numeric_limits<float>::max();
+  float distCurr;
   for (int i = 1; i < indices.size(); ++i)
   {
-    const float distCurr = (cloud[indices[i]].getVector3fMap() - cloud[indices[i-1]].getVector3fMap()).squaredNorm();
+    distCurr = (cloud[indices[i]].getVector3fMap() - cloud[indices[i-1]].getVector3fMap()).squaredNorm();
     distMax = std::max(distMax, distCurr);
     distMin = std::min(distMin, distCurr);
   }
   if (distMax / distMin > this->SquaredRatio)
     return false;
 
+  Eigen::Vector3f diffVec = cloud[indices.back()].getVector3fMap() - cloud[indices.front()].getVector3fMap();
+  this->Direction = diffVec.normalized();
+  Eigen::Vector4f centroid;
+  pcl::compute3DCentroid(cloud, indices, centroid);
+  this->Position = centroid.head(3);
+
   // Check line width
-  float lineLength = (cloud[indices.front()].getVector3fMap() - cloud[indices.back()].getVector3fMap()).norm();
+  float lineLength = diffVec.norm();
   float widthThreshold = std::max(this->MaxLineWidth, lineLength / this->LengthWidthRatio);
 
-  float maxDist = widthThreshold;
-  Eigen::Vector3f bestDirection = Eigen::Vector3f::Zero();
-  Eigen::Vector3f bestPosition = Eigen::Vector3f::Zero();
-
-  // RANSAC
-  for (int i = 0; i < indices.size(); ++i)
+  for (auto idx : indices)
   {
-    // Extract first point
-    auto& point1 = cloud[indices[i]].getVector3fMap();
-    for (int j = i+1; j < indices.size(); ++j)
-    {
-      // Extract second point
-      auto& point2 = cloud[indices[j]].getVector3fMap();
-
-      // Compute position of the line (the mean of the two points)
-      this->Position = (point1 + point2) / 2.f;
-
-      // Compute line formed by point1 and point2
-      this->Direction = (point2 - point1).normalized();
-
-      // Reset score for new points pair
-      float currentMaxDist = 0;
-      // Compute score : maximum distance of one neighbor to the current line
-      for (int idx : indices)
-      {
-        currentMaxDist = std::max(currentMaxDist, this->DistanceToPoint(cloud[idx].getVector3fMap()));
-
-        // If the current point distance is too high,
-        // the current line won't be selected anyway so we
-        // can avoid computing next points' distances
-        if (currentMaxDist > widthThreshold)
-          break;
-      }
-
-      if (currentMaxDist <= maxDist)
-      {
-        bestDirection = this->Direction;
-        bestPosition = this->Position;
-        maxDist = currentMaxDist;
-      }
-    }
+    float error = (cloud[idx].getVector3fMap() - this->Position).cross(this->Direction).norm();
+    if (error > widthThreshold)
+      return false;
   }
-
-  if (bestDirection == Eigen::Vector3f::Zero())
-    return false;
-
-  this->Direction = bestDirection;
-  this->Position = bestPosition;
 
   return true;
 }
