@@ -1850,6 +1850,9 @@ void LidarSlamNode::SetSlamParameters()
 
       deviceIds.size() == 1 ? setSamplingMode(dsske, prefix)
                             : setSamplingMode(dsske, prefix, " for LiDAR device " + deviceId);
+      float minKernelRadius;
+      if (this->get_parameter(prefix + "kernel_radius", minKernelRadius))
+        dsske->SetMinKernelRadius(minKernelRadius);
       ke = dsske;
     }
 
