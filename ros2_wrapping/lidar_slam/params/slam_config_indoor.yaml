@@ -393,7 +393,6 @@
         min_beam_surface_angle: 10.        # [°] Minimal angle between the point surface and the laser beam to consider a point as valid.
         neighbors_side_nb: 5               # [>1] Minimum number of neighbors used on each side to estimate curvature and detect edges and planes.
         neighbors_radius: 0.10             # [m] Minimum radius to define a neighborhood on each side of the studied point.
-        kernel_radius: 0.1                 # [m] Radius of the kernel used to compute normals.
         plane_angle_threshold: 150.        # [°] Threshold upon angle between left and right lines to consider a point as plane.
                                            # It is used with its absolute sine value in SSKE for planes,
                                            # with its cosine value in DSSKE for planes and
@@ -401,8 +400,6 @@
         edge_angle_threshold: 120.         # [°] Threshold upon angle between left and right lines to consider a point as edge.
                                            # It is used with its absolute sine value in SSKE for edges and
                                            # with its cosine value in DSSKE for edges.
-        plane_pt_dist_thresh: 0.005        # [m] Threshold upon distance to plane to select a plane keypoint.
-        edge_pt_dist_thresh: 0.01          # [m] Threshold upon distance to the plane to select an edge keypoint.
         edge_depth_gap_threshold: 0.5      # [m] Threshold upon depth gap in neighborhood to select an edge keypoint.
         edge_nb_gap_points: 10             # [points] Minimum number of successive missing points to consider a space gap.
         edge_intensity_gap_threshold: 20.  # [0-255] Threshold upon intensity gap to select an edge keypoint.
@@ -440,7 +437,6 @@
         #   min_beam_surface_angle: 10.        # [°] Minimal angle between the point surface and the laser beam to consider a point as valid.
         #   neighbors_side_nb: 5               # [>1] Minimum number of neighbors used on each side to estimate curvature and detect edges and planes.
         #   neighbors_radius: 0.10             # [m] Minimum radius to define a neighborhood on each side of the studied point.
-        #   kernel_radius: 0.1                 # [m] Radius of the kernel used to compute normals.
         #   plane_angle_threshold: 150.        # [°] Threshold upon angle between left and right lines to consider a point as plane.
         #                                      # It is used with its absolute sine value in SSKE for planes,
         #                                      # with its cosine value in DSSKE for planes and
@@ -448,8 +444,6 @@
         #   edge_angle_threshold: 120.         # [°] Threshold upon angle between left and right lines to consider a point as edge.
         #                                      # It is used with its absolute sine value in SSKE for edges and
         #                                      # with its cosine value in DSSKE for edges.
-        #   plane_pt_dist_thresh: 0.005        # [m] Threshold upon distance to plane to select a plane keypoint.
-        #   edge_pt_dist_thresh: 0.01          # [m] Threshold upon distance to the plane to select an edge keypoint.
         #   edge_depth_gap_threshold: 0.5      # [m] Threshold upon depth gap in neighborhood to select an edge keypoint.
         #   edge_nb_gap_points: 10             # [points] Minimum number of successive missing points to consider a space gap.
         #   edge_intensity_gap_threshold: 20.  # [0-255] Threshold upon intensity gap to select an edge keypoint.
@@ -479,7 +473,6 @@
         #   min_beam_surface_angle: 10.        # [°] Minimal angle between the point surface and the laser beam to consider a point as valid.
         #   neighbors_side_nb: 5               # [>1] Minimum number of neighbors used on each side to estimate curvature and detect edges and planes.
         #   neighbors_radius: 0.10             # [m] Minimum radius to define a neighborhood on each side of the studied point.
-        #   kernel_radius: 0.1                 # [m] Radius of the kernel used to compute normals.
         #   plane_angle_threshold: 150.        # [°] Threshold upon angle between left and right lines to consider a point as plane.
         #                                      # It is used with its absolute sine value in SSKE for planes,
         #                                      # with its cosine value in DSSKE for planes and
@@ -487,8 +480,6 @@
         #   edge_angle_threshold: 120.         # [°] Threshold upon angle between left and right lines to consider a point as edge.
         #                                      # It is used with its absolute sine value in SSKE for edges and
         #                                      # with its cosine value in DSSKE for edges.
-        #   plane_pt_dist_thresh: 0.005        # [m] Threshold upon distance to plane to select a plane keypoint.
-        #   edge_pt_dist_thresh: 0.01          # [m] Threshold upon distance to the plane to select an edge keypoint.
         #   edge_depth_gap_threshold: 0.5      # [m] Threshold upon depth gap in neighborhood to select an edge keypoint.
         #   edge_nb_gap_points: 10             # [points] Minimum number of successive missing points to consider a space gap.
         #   edge_intensity_gap_threshold: 200. # [0-255] Threshold upon intensity gap to select an edge keypoint.

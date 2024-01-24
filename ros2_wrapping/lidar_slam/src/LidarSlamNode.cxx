@@ -1850,19 +1850,6 @@ void LidarSlamNode::SetSlamParameters()
 
       deviceIds.size() == 1 ? setSamplingMode(dsske, prefix)
                             : setSamplingMode(dsske, prefix, " for LiDAR device " + deviceId);
-
-      float minKernelRadius;
-      if (this->get_parameter(prefix + "kernel_radius", minKernelRadius))
-        ke->SetMinKernelRadius(minKernelRadius);
-
-      float planePtDistThreshold;
-      if (this->get_parameter(prefix + "plane_pt_dist_thresh", planePtDistThreshold))
-        ke->SetPlanePtDistThreshold(planePtDistThreshold);
-
-      float edgePtDistThreshold;
-      if (this->get_parameter(prefix + "edge_pt_dist_thresh", edgePtDistThreshold))
-        ke->SetEdgePtDistThreshold(edgePtDistThreshold);
-
       ke = dsske;
     }
 

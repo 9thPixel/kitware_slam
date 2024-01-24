@@ -37,10 +37,10 @@ struct PtFeat
   float SpaceGap;
   float DepthGap;
   float IntensityGap;
-  float PlaneDist;
-  float EdgeDist;
+  float Angle;
   std::bitset<Keypoint::nKeypointTypes> KptTypes;
-  PtFeat() : Index(0), Depth(0.0f), SpaceGap(-1.0f), DepthGap(0.0f), IntensityGap(-1.0f), PlaneDist(1.0f), EdgeDist(-1.0f), KptTypes({}) {}
+
+  PtFeat() : Index(0), Depth(0.0f), SpaceGap(-1.0f), DepthGap(0.0f), IntensityGap(-1.0f), Angle(1.0f), KptTypes({}) {}
 };
 
 struct IdxVM
@@ -53,17 +53,15 @@ class DenseSpinningSensorKeypointExtractor : public KeypointExtractor
 {
 public:
 
+  // Set EdgeCosAngleThreshold and PlaneCosAngleThreshold from angle in degrees
+  void SetEdgeAngleThreshold(float angle) override {this->EdgeCosAngleThreshold = std::cos(Utils::Deg2Rad(angle));};
+  void SetPlaneAngleThreshold(float angle) override {this->PlaneCosAngleThreshold = std::cos(Utils::Deg2Rad(angle));};
+  // Associated getters
+  float GetEdgeAngleThreshold() const override {return this->EdgeCosAngleThreshold;};
+  float GetPlaneAngleThreshold() const override {return this->PlaneCosAngleThreshold;};
+
   GetMacro(PatchSize, int)
   SetMacro(PatchSize, int)
-
-  GetMacro(MinKernelRadius, float)
-  SetMacro(MinKernelRadius, float)
-
-  GetMacro(PlanePtDistThreshold, float)
-  SetMacro(PlanePtDistThreshold, float)
-
-  GetMacro(EdgePtDistThreshold, float)
-  SetMacro(EdgePtDistThreshold, float)
 
   GetMacro(SamplingDSSKE, LidarSlam::SamplingModeDSSKE)
   SetMacro(SamplingDSSKE, LidarSlam::SamplingModeDSSKE)
@@ -88,10 +86,6 @@ private:
 
   // Count the number of non null ptr in a scanline
   int GetScanLineSize(const std::vector<std::shared_ptr<PtFeat>>& scanLine);
-
-  // Get the 2D neighborhood of a point in the Vertex Map
-  // Returns a sort of a patch of the vertex map (same structure as the vertex map)
-  std::unordered_map<Neighbor, std::vector<int>> GetKernel(int i, int j);
 
   // Initialize LaserIdMap, NbLaserRings, AzimuthalResolution and Pc2VmIndices
   void InitInternalParameters();
@@ -150,22 +144,13 @@ private:
   // Sharpness threshold to select an edge keypoint
   float EdgeCosAngleThreshold = -0.5; // ~cos(120°) (selected, if cos angle is more than threshold)
 
-  // Size of a patch (nb of points in one dimension, a patch is a square)
-  // Patches are used for 2D grid construction to downsample the keypoints
-  // A patch with size 32 means that the patch will contain at most 32x32 points
-  int PatchSize = 32; // [nb]
-
   // Downsampling mode
   SamplingModeDSSKE SamplingDSSKE = SamplingModeDSSKE::PATCH;
 
-  // Minimum diameter of a kernel (in meters)
-  float MinKernelRadius = 0.2f; // [m]
-
-  // Threshold for mean distance to plane defined by point normal to be considered as a plane
-  float PlanePtDistThreshold = 0.5f; // [0, 1]
-
-  // Threshold for mean distance to plane defined by point normal to be considered as a plane
-  float EdgePtDistThreshold = 0.5f; // [0, 1]
+    // Size of a patch (nb of points in one dimension, a patch is a square)
+  // Patches are used for 2D grid construction to downsample the keypoints
+  // A patch with size 32 means that the patch will contain at most 32x32 points
+  int PatchSize = 32; // [nb]
 
   // ---------------------------------------------------------------------------
   //   Internal variables

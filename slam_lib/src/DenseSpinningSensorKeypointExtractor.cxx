@@ -77,92 +77,6 @@ int DenseSpinningSensorKeypointExtractor::GetScanLineSize(const std::vector<std:
 }
 
 //-----------------------------------------------------------------------------
-std::unordered_map<Neighbor, std::vector<int>> DenseSpinningSensorKeypointExtractor::GetKernel(int i, int j)
-{
-  auto getNeighbors = [&](Neighbor dir) -> std::vector<int>
-  {
-    std::vector<int> neighbors;
-    int dirH, dirV;
-    switch (dir)
-    {
-      case Neighbor::TOP:
-        dirH = 0;
-        dirV = -1;
-        break;
-      case Neighbor::BOTTOM:
-        dirH = 0;
-        dirV = 1;
-        break;
-      case Neighbor::LEFT:
-        dirH = -1;
-        dirV = 0;
-        break;
-      case Neighbor::RIGHT:
-        dirH = 1;
-        dirV = 0;
-        break;
-    }
-    int idxNeigh = 1;
-    float lineLength = 0.f;
-    const auto& centralIdx = VertexMap[i][j]->Index;
-
-    //! Version with one neighbor at least
-    // Add a first valid point to the neighbors vector
-    // auto& ptrFeat = this->VertexMap[(i + dirV * idxNeigh + this->HeightVM) % this->HeightVM]
-    //                                [(j + dirH * idxNeigh + this->WidthVM) % this->WidthVM];
-    // while (ptrFeat == nullptr)
-    // {
-    //   idxNeigh++;
-    //   ptrFeat = this->VertexMap[(i + dirV * idxNeigh + this->HeightVM) % this->HeightVM]
-    //                            [(j + dirH * idxNeigh + this->WidthVM) % this->WidthVM];
-    // }
-    // neighbors.emplace_back(ptrFeat->Index);
-    // lineLength = (this->Scan->at(neighbors.back()).getVector3fMap() - this->Scan->at(centralIdx).getVector3fMap()).norm();
-
-    // ! Empty version
-    // Try to add the first valid point to the neighbors vector
-    auto& ptrFeat = this->VertexMap[(i + dirV * idxNeigh + this->HeightVM) % this->HeightVM]
-                                   [(j + dirH * idxNeigh + this->WidthVM) % this->WidthVM];
-    while (ptrFeat == nullptr)
-    {
-      idxNeigh++;
-      ptrFeat = this->VertexMap[(i + dirV * idxNeigh + this->HeightVM) % this->HeightVM]
-                               [(j + dirH * idxNeigh + this->WidthVM) % this->WidthVM];
-    }
-    // If the point is too far from the central point, this neighborhood will be empty
-    lineLength = (this->Scan->at(ptrFeat->Index).getVector3fMap() - this->Scan->at(centralIdx).getVector3fMap()).norm();
-    if (lineLength > this->MinKernelRadius)
-      return neighbors;
-    neighbors.emplace_back(ptrFeat->Index);
-
-    // Complete the neighborhood if the line is too small compared to the minimum radius
-    while (lineLength < this->MinKernelRadius &&
-           ((idxNeigh < this->HeightVM && (dir == Neighbor::TOP || dir == Neighbor::BOTTOM)) ||
-           (idxNeigh < this->WidthVM && (dir == Neighbor::LEFT || dir == Neighbor::RIGHT))))
-    {
-      const auto& ptrFeat = this->VertexMap[(i + dirV * idxNeigh + this->HeightVM) % this->HeightVM]
-                                           [(j + dirH * idxNeigh + this->WidthVM) % this->WidthVM];
-      if (ptrFeat != nullptr)
-      {
-        lineLength = (this->Scan->at(ptrFeat->Index).getVector3fMap() - this->Scan->at(centralIdx).getVector3fMap()).norm();
-        // If the new valid point is above the radius, we stop filling the neighborhood
-        if (lineLength > this->MinKernelRadius)
-          return neighbors;
-        // If the new valid point is still in the radius, we add it to the neighborhood
-        neighbors.emplace_back(ptrFeat->Index);
-      }
-      ++idxNeigh;
-    }
-    return neighbors;
-  };
-
-  std::unordered_map<Neighbor, std::vector<int>> kernel;
-  for (auto dir : {Neighbor::TOP, Neighbor::BOTTOM, Neighbor::LEFT, Neighbor::RIGHT})
-    kernel[dir] = getNeighbors(dir);
-  return kernel;
-}
-
-//-----------------------------------------------------------------------------
 void DenseSpinningSensorKeypointExtractor::InitInternalParameters()
 {
   // Map laser_ids
@@ -278,8 +192,6 @@ void DenseSpinningSensorKeypointExtractor::OutputFeatures(std::string path)
   OUTPUT_FEATURE(path + "SpaceGap.pgm", SpaceGap, 1., -1., 0.);
   OUTPUT_FEATURE(path + "DepthGap.pgm", DepthGap, 10., 0., -15.);
   OUTPUT_FEATURE(path + "IntensityGap.pgm", IntensityGap, 35., -1., 0.);
-  OUTPUT_FEATURE(path + "CosNormal.pgm", CosNormal, 1., 1., 0.);
-  OUTPUT_FEATURE(path + "SinNormal.pgm", SinNormal, 1., 1., 0.);
 }
 
 //-----------------------------------------------------------------------------
@@ -544,71 +456,36 @@ void DenseSpinningSensorKeypointExtractor::ComputeCurvature()
         }
       }
 
-      // ---- Compute normals ----
+      // ---- Compute angle ----
 
-      if (this->Enabled[EDGE] || this->Enabled[PLANE])
+      if (this->Enabled[PLANE] || this->Enabled[EDGE])
       {
-        std::unordered_map<Neighbor, std::vector<int>> kernel = GetKernel(i, j);
-        std::vector<int> kernelIndices;
-        for (const auto& line : kernel)
+        // Compute angles
+        currentFeat->Angle = leftLine.Direction.dot(rightLine.Direction);
+        // Remove angles too small to be edges
+        if (currentFeat->Angle > -this->PlaneCosAngleThreshold)
         {
-          for (const auto& neigh : line.second)
-            kernelIndices.emplace_back(neigh);
-        }
-        if (kernelIndices.empty())
+          currentFeat->Angle = 1.f;
           continue;
+        }
 
-        // Compute normal in centralPoint
-
-        Eigen::Vector3f centroid;
-        Eigen::Matrix<float, 3, 3> eigenVectors;
-        Eigen::Matrix<float, 3, 1> eigenValues;
-
-        Utils::ComputeMeanAndPCA<LidarSlam::LidarPoint, float>(*this->Scan, kernelIndices, centroid, eigenVectors, eigenValues);
-
-        // The cross product of the eigenvectors associated with the biggest eigenValues is the normal of the plane
-        Eigen::Vector3f currentNormal = eigenVectors.col(0);
-
-        // Ensure the normal is oriented consistently
-        // if (currentNormal.dot(centroid) > 0)
-        //   currentNormal *= -1.0;
-
-        // Compute mean distance between plan and a kernel point
-
-        float distMean = 0.f;
-        int nbValidNeigh = 0;
-        for (const auto& line : kernel)
+        // Remove previous point from angle inspection if the angle is not maximal locally
+        if (this->Enabled[EDGE] && currentFeat->Angle > this->EdgeCosAngleThreshold)
         {
-          for (const auto& neigh : line.second)
+          // Check previously computed angle to keep only the maximal angle keypoint locally
+          for (int idx = 1; idx < leftNeighbors.size(); idx++)
           {
-            if (neigh == currentFeat->Index)
-              continue;
-            ++nbValidNeigh;
-            const Eigen::Vector3f& pt = this->Scan->at(neigh).getVector3fMap();
-            const Eigen::Vector3f& vec = (pt - centralPoint);
-            distMean += currentNormal.dot(vec);
+            std::shared_ptr<PtFeat> neighPtr = this->GetPtFeat(leftNeighbors[idx]);
+            if (neighPtr->Angle > this->EdgeCosAngleThreshold &&
+                neighPtr->Angle < -this->PlaneCosAngleThreshold)
+            {
+              if (neighPtr->Angle > currentFeat->Angle)
+                currentFeat->Angle = 1.f;
+              else
+                neighPtr->Angle = 1.f;
+              break;
+            }
           }
-        }
-        if (nbValidNeigh == 0)
-          continue;
-        currentFeat->PlaneDist = std::abs(distMean / nbValidNeigh);
-        currentFeat->EdgeDist = std::abs(distMean / nbValidNeigh);
-
-        // Remove neighbor points to get the best normal discontinuity locally
-        // We maximize distance values for edges
-        int idxMaxDist = currentFeat->Index;
-        for (const auto& neigh : kernel[Neighbor::LEFT])
-        {
-          if (this->GetPtFeat(idxMaxDist)->EdgeDist < this->GetPtFeat(neigh)->EdgeDist)
-            idxMaxDist = neigh;
-        }
-        // Then we remove all EdgeDist values of neighborhood that are not maximal
-        if (idxMaxDist != currentFeat->Index)
-          this->GetPtFeat(idxMaxDist)->EdgeDist = -1;
-        for (const auto& neigh : kernel[Neighbor::LEFT])
-        {
-          if (idxMaxDist != neigh)
-            this->GetPtFeat(neigh)->EdgeDist = -1;
         }
       }
     }
@@ -739,8 +616,7 @@ void DenseSpinningSensorKeypointExtractor::ComputePlanes()
   {
     return pt != nullptr &&
            (!pt->KptTypes[static_cast<int>(PLANE)] && !pt->KptTypes[static_cast<int>(EDGE)]) &&
-           pt->PlaneDist > -1.0f &&
-           pt->PlaneDist < this->PlanePtDistThreshold;;
+           pt->Angle < this->PlaneCosAngleThreshold;
   };
   switch (this->SamplingDSSKE)
   {
@@ -759,11 +635,7 @@ void DenseSpinningSensorKeypointExtractor::ComputePlanes()
                                else if (!isPtValid(a) && !isPtValid(b))
                                  return true;  // Both are nullptr, no preference
 
-                              if (a->PlaneDist > b->PlaneDist && b->PlaneDist < this->PlanePtDistThreshold)
-                                 return true;
-                              if (b->PlaneDist > a->PlaneDist && a->PlaneDist < this->PlanePtDistThreshold)
-                                 return false;
-                              return (a->PlaneDist > b->PlaneDist);
+                              return (a->Angle > b->Angle);
                              });
       break;
     }
@@ -782,11 +654,7 @@ void DenseSpinningSensorKeypointExtractor::ComputePlanes()
                                else if (!isPtValid(a) && !isPtValid(b))
                                  return true;  // Both are nullptr, no preference
 
-                               if (a->PlaneDist > b->PlaneDist && b->PlaneDist < this->PlanePtDistThreshold)
-                                 return true;
-                               if (b->PlaneDist > a->PlaneDist && a->PlaneDist < this->PlanePtDistThreshold)
-                                 return false;
-                               return (a->PlaneDist > b->PlaneDist);
+                               return (a->Angle > b->Angle);
                              });
       break;
     }
@@ -801,7 +669,7 @@ void DenseSpinningSensorKeypointExtractor::ComputeEdges()
     return pt != nullptr &&
            (!pt->KptTypes[static_cast<int>(PLANE)] && !pt->KptTypes[static_cast<int>(EDGE)])&&
            ((pt->DepthGap - (-1.0f) > 1e-6 && pt->DepthGap > this->EdgeDepthGapThreshold) ||
-            (pt->EdgeDist < 1.0f && pt->EdgeDist > this->EdgePtDistThreshold) ||
+            (pt->Angle < -this->PlaneCosAngleThreshold && pt->Angle > this->EdgeCosAngleThreshold) ||
             (pt->SpaceGap - (-1.0f) > 1e-6 && pt->SpaceGap > this->EdgeDepthGapThreshold));
   };
   switch (this->SamplingDSSKE)
@@ -826,9 +694,9 @@ void DenseSpinningSensorKeypointExtractor::ComputeEdges()
                                if (b->DepthGap < a->DepthGap && a->DepthGap > this->EdgeDepthGapThreshold)
                                  return false;
 
-                               if (a->EdgeDist < b->EdgeDist && b->EdgeDist > this->EdgePtDistThreshold)
+                               if (a->Angle < b->Angle && b->Angle < -this->PlaneCosAngleThreshold && b->Angle > this->EdgeCosAngleThreshold)
                                  return true;
-                               if (b->EdgeDist < a->EdgeDist && a->EdgeDist > this->EdgePtDistThreshold)
+                               if (b->Angle < a->Angle && a->Angle < -this->PlaneCosAngleThreshold && a->Angle > this->EdgeCosAngleThreshold)
                                  return false;
 
                                if (a->SpaceGap < b->SpaceGap && b->SpaceGap > this->EdgeDepthGapThreshold)
@@ -860,9 +728,9 @@ void DenseSpinningSensorKeypointExtractor::ComputeEdges()
                                if (b->DepthGap < a->DepthGap && a->DepthGap > this->EdgeDepthGapThreshold)
                                  return false;
 
-                               if (a->EdgeDist < b->EdgeDist && b->EdgeDist > this->EdgePtDistThreshold)
+                               if (a->Angle < b->Angle && b->Angle < -this->PlaneCosAngleThreshold && b->Angle > this->EdgeCosAngleThreshold)
                                  return true;
-                               if (b->EdgeDist < a->EdgeDist && a->EdgeDist > this->EdgePtDistThreshold)
+                               if (b->Angle < a->Angle && a->Angle < -this->PlaneCosAngleThreshold && a->Angle > this->EdgeCosAngleThreshold)
                                  return false;
 
                                if (a->SpaceGap < b->SpaceGap && b->SpaceGap > this->EdgeDepthGapThreshold)
@@ -958,8 +826,6 @@ std::unordered_map<std::string, std::vector<float>> DenseSpinningSensorKeypointE
     debugArray["space_gap"][i]               = ptrFeat->SpaceGap;
     debugArray["depth_gap"][i]               = ptrFeat->DepthGap;
     debugArray["intensity_gap"][i]           = ptrFeat->IntensityGap;
-    debugArray["cos_normal"][i]              = ptrFeat->CosNormal;
-    debugArray["sin_normal"][i]              = ptrFeat->SinNormal;
     debugArray["edge_keypoint"][i]           = ptrFeat->KptTypes[static_cast<int>(Keypoint::EDGE)];
     debugArray["plane_keypoint"][i]          = ptrFeat->KptTypes[static_cast<int>(Keypoint::PLANE)];
     debugArray["intensity_edge_keypoint"][i] = ptrFeat->KptTypes[static_cast<int>(Keypoint::INTENSITY_EDGE)];
