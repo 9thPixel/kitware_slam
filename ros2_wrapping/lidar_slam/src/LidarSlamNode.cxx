@@ -1855,17 +1855,13 @@ void LidarSlamNode::SetSlamParameters()
       if (this->get_parameter(prefix + "kernel_radius", minKernelRadius))
         ke->SetMinKernelRadius(minKernelRadius);
 
-      float distToNeighborThreshold;
-      if (this->get_parameter(prefix + "dist_to_neighbor_threshold", distToNeighborThreshold))
-        ke->SetDistToNeighborThreshold(distToNeighborThreshold);
+      float planePtDistThreshold;
+      if (this->get_parameter(prefix + "plane_pt_dist_thresh", planePtDistThreshold))
+        ke->SetPlanePtDistThreshold(planePtDistThreshold);
 
-      float planeCosNormalThreshold;
-      if (this->get_parameter(prefix + "plane_cos_normal_threshold", planeCosNormalThreshold))
-        ke->SetPlaneCosNormalThreshold(planeCosNormalThreshold);
-
-      float edgeSinNormalThreshold;
-      if (this->get_parameter(prefix + "edge_sin_normal_threshold", edgeSinNormalThreshold))
-        ke->SetEdgeSinNormalThreshold(edgeSinNormalThreshold);
+      float edgePtDistThreshold;
+      if (this->get_parameter(prefix + "edge_pt_dist_thresh", edgePtDistThreshold))
+        ke->SetEdgePtDistThreshold(edgePtDistThreshold);
 
       ke = dsske;
     }
