@@ -729,10 +729,11 @@ bool Slam::OptimizeGraph()
     return false;
   }
 
-  if ((!this->UsePGOConstraints[PGOConstraint::LANDMARK]     || !this->LmHasData())  &&
-      (!this->UsePGOConstraints[PGOConstraint::GPS]          || !this->GpsHasData()) &&
-      (!this->UsePGOConstraints[PGOConstraint::EXT_POSE]     || !this->PoseHasData()) &&
-      (!this->UsePGOConstraints[PGOConstraint::LOOP_CLOSURE] || this->LoopDetections.empty()))
+  if ((!this->UsePGOConstraints[PGOConstraint::LANDMARK]     || !this->LmHasData())           &&
+      (!this->UsePGOConstraints[PGOConstraint::GPS]          || !this->GpsHasData())          &&
+      (!this->UsePGOConstraints[PGOConstraint::EXT_POSE]     || !this->PoseHasData())         &&
+      (!this->UsePGOConstraints[PGOConstraint::LOOP_CLOSURE] || this->LoopDetections.empty()) &&
+      !this->UsePGOConstraints[PGOConstraint::BUNDLE_ADJUSTMENT])
   {
     PRINT_WARNING("No external constraint found, graph cannot be optimized");
     return false;
@@ -777,7 +778,7 @@ bool Slam::OptimizeGraph()
         // by registering the keypoints of the query frame onto the keypoints of the revisited frame
         Eigen::Isometry3d loopClosureTransform;
         Eigen::Matrix6d loopClosureCovariance;
-        if (this->LoopClosureRegistration(itQueryState, itRevisitedState,
+        if (this->LoopClosureRegistration(itQueryState, itRevisitedState, this->LoopParams,
                                           loopClosureTransform, loopClosureCovariance))
         {
           // Add loop closure constraint into pose graph
@@ -894,6 +895,31 @@ bool Slam::OptimizeGraph()
       graphManager.AddExtPoseConstraint(itState->Index, poseSynchMeasure);
 
       externalConstraint = true;
+    }
+  }
+
+  if (this->UsePGOConstraints[PGOConstraint::BUNDLE_ADJUSTMENT])
+  {
+    auto itQueryState = this->LogStates.begin();
+    auto itRevisitedState = itQueryState;
+    while (itQueryState->Index < this->BAStartFrameIdx)
+      ++itQueryState;
+    while (itQueryState->Index <= this->BAEndFrameIdx)
+    {
+      itRevisitedState = this->FetchStateIndex(itQueryState, this->BAInterval);
+      Eigen::Isometry3d bundleAdjustmentTransform;
+      Eigen::Matrix6d bundleAdjustmentCovariance;
+      if (this->LoopClosureRegistration(itQueryState, itRevisitedState, this->BAParams,
+                                        bundleAdjustmentTransform, bundleAdjustmentCovariance))
+      {
+        // Add a loop closure constraint into pose graph for bundle adjustment
+        graphManager.AddLoopClosureConstraint(itQueryState->Index, itRevisitedState->Index,
+                                              bundleAdjustmentTransform, bundleAdjustmentCovariance);
+        externalConstraint = true;
+      }
+
+      // Move to next query frame
+      itQueryState = this->FetchStateIndex(itQueryState, this->BAFrequency);
     }
   }
 
@@ -2230,6 +2256,7 @@ std::vector<std::pair<int, int>> Slam::CalculateCorrespondences(pcl::PointCloud<
 //-----------------------------------------------------------------------------
 bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState,
                                    std::list<LidarState>::iterator& itRevisitedState,
+                                   LoopClosure::Parameters& loopParams,
                                    Eigen::Isometry3d& loopClosureTransform,
                                    Eigen::Matrix6d& loopClosureCovariance)
 {
@@ -2241,15 +2268,15 @@ bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState
   Maps loopClosureRevisitedSubMaps;
   this->InitSubMaps(loopClosureRevisitedSubMaps);
   this->BuildMaps(loopClosureRevisitedSubMaps,
-                  this->FetchStateIndex(itRevisitedState, this->LoopParams.RevisitedMapStartRange)->Index,
-                  this->FetchStateIndex(itRevisitedState, this->LoopParams.RevisitedMapEndRange)->Index);
+                  this->FetchStateIndex(itRevisitedState, loopParams.RevisitedMapStartRange)->Index,
+                  this->FetchStateIndex(itRevisitedState, loopParams.RevisitedMapEndRange)->Index);
   PRINT_VERBOSE(3, "Sub maps are created around revisited frame #" << itRevisitedState->Index << ".");
 
   // Pose prior for optimization
   Eigen::Isometry3d loopClosureTworld = itQueryState->Isometry;
   if (!this->LoopDetectionTransform.matrix().isIdentity())
     loopClosureTworld = this->LoopDetectionTransform;
-  else if (this->LoopParams.EnableOffset)
+  else if (loopParams.EnableOffset)
   {
     // Enable to add an offset to the pose prior when two poses are too far from each other.
     PointCloud::Ptr revisitedPlaneKeypoints(new PointCloud);
@@ -2269,13 +2296,13 @@ bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState
   std::map<Keypoint, PointCloud::Ptr> loopClosureQueryKeypoints;
   for (auto k : this->UsableKeypoints)
     loopClosureQueryKeypoints[k].reset(new PointCloud);
-  if (this->LoopParams.ICPWithSubmap)
+  if (loopParams.ICPWithSubmap)
   {
     Maps loopClosureQuerySubMaps;
     this->InitSubMaps(loopClosureQuerySubMaps);
     this->BuildMaps(loopClosureQuerySubMaps,
-                    this->FetchStateIndex(itQueryState, this->LoopParams.QueryMapStartRange)->Index,
-                    this->FetchStateIndex(itQueryState, this->LoopParams.QueryMapEndRange)->Index,
+                    this->FetchStateIndex(itQueryState, loopParams.QueryMapStartRange)->Index,
+                    this->FetchStateIndex(itQueryState, loopParams.QueryMapEndRange)->Index,
                     itQueryState->Index);
     PRINT_VERBOSE(3, "Sub maps are created around query frame #" << itQueryState->Index << ".");
     for (auto k : this->UsableKeypoints)
@@ -2297,7 +2324,21 @@ bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState
   {
     Keypoint k = static_cast<Keypoint>(this->UsableKeypoints[i]);
     if (!loopClosureRevisitedSubMaps[k]->IsSubMapKdTreeValid())
-      loopClosureRevisitedSubMaps[k]->BuildKdTree(true); // true to build kdtree on all grid points
+    {
+      if(this->UsePGOConstraints[PGOConstraint::BUNDLE_ADJUSTMENT])
+      {
+        // Estimate query keypoints bounding box
+        PointCloud queryWorldKeypoints;
+        pcl::transformPointCloud(*loopClosureQueryKeypoints[k], queryWorldKeypoints, loopClosureTworld.matrix());
+        Eigen::Vector4f minPoint, maxPoint;
+        pcl::getMinMax3D(queryWorldKeypoints, minPoint, maxPoint);
+        // Build submap of all points lying in this bounding box
+        loopClosureRevisitedSubMaps[k]->BuildSubMap(minPoint.head<3>().array(), maxPoint.head<3>().array());
+        loopClosureRevisitedSubMaps[k]->BuildKdTree(); // build kdtree on the submap
+      }
+      else
+        loopClosureRevisitedSubMaps[k]->BuildKdTree(true); // true to build kdtree on all grid points
+    }
   }
 
   if (this->Verbosity >= 2)
@@ -2316,12 +2357,12 @@ bool Slam::LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState
   this->TotalMatchedKeypoints = 0;
 
   // Set loop closure parameters which do not have a setter
-  this->LoopParams.OptParams.MatchingParams.NbThreads = static_cast<unsigned int>(this->NbThreads);
-  this->LoopParams.OptParams.MatchingParams.SingleEdgePerRing = false;
+  loopParams.OptParams.MatchingParams.NbThreads = static_cast<unsigned int>(this->NbThreads);
+  loopParams.OptParams.MatchingParams.SingleEdgePerRing = false;
   // ICP - Levenberg-Marquardt loop to estimate the pose of the current frame relatively to the close loop frame
   std::map<Keypoint, KeypointsMatcher::MatchingResults> loopMatchingResults;
   loopClosureUncertainty = this->EstimatePose(loopClosureQueryKeypoints, loopClosureRevisitedSubMaps,
-                                              this->LoopParams.OptParams, loopClosureTworld,
+                                              loopParams.OptParams, loopClosureTworld,
                                               loopMatchingResults);
 
   IF_VERBOSE(3, Utils::Timer::StopAndDisplay("Loop closure Registration : whole ICP-LM loop"));

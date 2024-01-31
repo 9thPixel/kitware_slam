@@ -279,6 +279,12 @@ void vtkSlam::EnablePGOConstraintExtPose(bool enabled)
   this->SlamAlgo->EnablePGOConstraint(LidarSlam::PGOConstraint::EXT_POSE, enabled);
 }
 
+void vtkSlam::EnablePGOConstraintBundleAdjustment(bool enabled)
+{
+  vtkDebugMacro(<< "Enabling bundle adjustment constraint for pose graph optimization");
+  this->SlamAlgo->EnablePGOConstraint(LidarSlam::PGOConstraint::BUNDLE_ADJUSTMENT, enabled);
+}
+
 //-----------------------------------------------------------------------------
 bool vtkSlam::GetPGOConstraintLoopClosure()
 {
@@ -317,6 +323,16 @@ bool vtkSlam::GetPGOConstraintExtPose()
     vtkDebugMacro(<< "Ext pose constraint for PGO is enabled");
   else
     vtkDebugMacro(<< "Ext pose constraint for PGO is disabled");
+  return enabled;
+}
+
+bool vtkSlam::GetPGOConstraintBundleAdjustment()
+{
+  bool enabled = this->SlamAlgo->IsPGOConstraintEnabled(LidarSlam::PGOConstraint::BUNDLE_ADJUSTMENT);
+  if (enabled)
+    vtkDebugMacro(<< "Bundle adjustment constraint for PGO is enabled");
+  else
+    vtkDebugMacro(<< "Bundle adjustment constraint for PGO is disabled");
   return enabled;
 }
 
@@ -2116,4 +2132,46 @@ void vtkSlam::LoadLoopDetectionIndices(const std::string& fileName)
 
   // Refresh view
   this->ParametersModificationTime.Modified();
+}
+
+//-----------------------------------------------------------------------------
+void vtkSlam::SetBAStartFrameIdx(unsigned int startIdx)
+{
+  // Check the input frame index can be found in Logstates
+  const std::list<LidarSlam::LidarState>& lidarStates = this->SlamAlgo->GetLogStates();
+  if (lidarStates.empty())
+    return;
+  if (startIdx < lidarStates.front().Index || startIdx > lidarStates.back().Index )
+  {
+    vtkWarningMacro(<< "The input bundle adjustment start frame index is not valid. Please enter a frame index between ["
+                    << lidarStates.front().Index << ", " << lidarStates.back().Index << "].");
+    return;
+  }
+  vtkDebugMacro(<< "Setting BAStartFrameIdx to " << startIdx);
+  if (this->SlamAlgo->GetBAStartFrameIdx() != startIdx)
+  {
+    this->SlamAlgo->SetBAStartFrameIdx(startIdx);
+    this->ParametersModificationTime.Modified();
+  }
+}
+
+//-----------------------------------------------------------------------------
+void vtkSlam::SetBAEndFrameIdx(unsigned int endIdx)
+{
+  // Check the input frame index can be found in Logstates
+  const std::list<LidarSlam::LidarState>& lidarStates = this->SlamAlgo->GetLogStates();
+  if (lidarStates.empty())
+    return;
+  if (endIdx < lidarStates.front().Index || endIdx > lidarStates.back().Index )
+  {
+    vtkWarningMacro(<< "The input bundle adjustment end frame index is not valid. Please enter a frame index between ["
+                    << lidarStates.front().Index << ", " << lidarStates.back().Index << "].");
+    return;
+  }
+  vtkDebugMacro(<< "Setting BAEndFrameIdx to " << endIdx);
+  if (this->SlamAlgo->GetBAEndFrameIdx() != endIdx)
+  {
+    this->SlamAlgo->SetBAEndFrameIdx(endIdx);
+    this->ParametersModificationTime.Modified();
+  }
 }

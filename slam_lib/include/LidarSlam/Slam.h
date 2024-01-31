@@ -837,6 +837,33 @@ public:
   SetNestedStructParamsMacro(Loop, OptParams, FinalSaturationDistance, double)
 
   // ---------------------------------------------------------------------------
+  //   Bundle Adjustment parameters
+  // ---------------------------------------------------------------------------
+  GetMacro(BAFrequency, double)
+  SetMacro(BAFrequency, double)
+
+  GetMacro(BAInterval, double)
+  SetMacro(BAInterval, double)
+
+  GetMacro(BAStartFrameIdx, unsigned int)
+  SetMacro(BAStartFrameIdx, unsigned int)
+
+  GetMacro(BAEndFrameIdx, unsigned int)
+  SetMacro(BAEndFrameIdx, unsigned int)
+
+  GetStructParamsMacro(BA, QueryMapStartRange, double)
+  SetStructParamsMacro(BA, QueryMapStartRange, double)
+
+  GetStructParamsMacro(BA, QueryMapEndRange, double)
+  SetStructParamsMacro(BA, QueryMapEndRange, double)
+
+  GetStructParamsMacro(BA, RevisitedMapStartRange, double)
+  SetStructParamsMacro(BA, RevisitedMapStartRange, double)
+
+  GetStructParamsMacro(BA, RevisitedMapEndRange, double)
+  SetStructParamsMacro(BA, RevisitedMapEndRange, double)
+
+  // ---------------------------------------------------------------------------
   //   Confidence estimation
   // ---------------------------------------------------------------------------
 
@@ -1082,6 +1109,23 @@ private:
   Eigen::Isometry3d LoopDetectionTransform = Eigen::Isometry3d::Identity();
 
   // ---------------------------------------------------------------------------
+  //   Bundle Adjustment
+  // ---------------------------------------------------------------------------
+
+  // Loop closure registration parameters for bundle adjustment
+  LoopClosure::Parameters BAParams;
+
+  // The bundle adjustment frequency. e.g. BAFrequency = 4 means to launch a LoopClosureRegistration each 4 meters.
+  double BAFrequency = 2;
+
+  // Set the interval distance (in meters) between a query frame and a revisited frame
+  double BAInterval = 3;
+
+  // The bundle adjustment is applied between BAStartFrameIdx and BAEndFrameIdx
+  unsigned int BAStartFrameIdx = 0;
+  unsigned int BAEndFrameIdx = 1;
+
+  // ---------------------------------------------------------------------------
   //   Optimization data
   // ---------------------------------------------------------------------------
 
@@ -1245,10 +1289,11 @@ private:
   int NbGraphIterations = 100;
 
   // Booleans to decide whether to use a pose graph constraint for the optimization
-  std::map<PGOConstraint, bool> UsePGOConstraints = {{PGOConstraint::LOOP_CLOSURE, true},
-                                                     {PGOConstraint::LANDMARK,     true},
-                                                     {PGOConstraint::GPS,          true},
-                                                     {PGOConstraint::EXT_POSE,     true}};
+  std::map<PGOConstraint, bool> UsePGOConstraints = {{PGOConstraint::LOOP_CLOSURE,     true},
+                                                     {PGOConstraint::LANDMARK,         true},
+                                                     {PGOConstraint::GPS,              true},
+                                                     {PGOConstraint::EXT_POSE,         true},
+                                                     {PGOConstraint::BUNDLE_ADJUSTMENT,false}};
 
   // ---------------------------------------------------------------------------
   //   Confidence estimation
@@ -1365,6 +1410,7 @@ private:
   // revisitedFrameIdx is the frame index where the query frame meets a loop.
   bool LoopClosureRegistration(std::list<LidarState>::iterator& itQueryState,
                                std::list<LidarState>::iterator& itRevisitedState,
+                               LoopClosure::Parameters& loopParams,
                                Eigen::Isometry3d& loopClosureTransform,
                                Eigen::Matrix6d& loopClosureCovariance);
 

@@ -229,11 +229,13 @@ public:
   void EnablePGOConstraintLandmark(bool enable);
   void EnablePGOConstraintGPS(bool enable);
   void EnablePGOConstraintExtPose(bool enable);
+  void EnablePGOConstraintBundleAdjustment(bool enable);
 
   bool GetPGOConstraintLoopClosure();
   bool GetPGOConstraintLandmark();
   bool GetPGOConstraintGPS();
   bool GetPGOConstraintExtPose();
+  bool GetPGOConstraintBundleAdjustment();
 
   // ---------------------------------------------------------------------------
   //   Loop closure parameters
@@ -311,6 +313,35 @@ public:
 
   vtkCustomGetMacro(LoopFinalSaturationDistance, double)
   vtkCustomSetMacro(LoopFinalSaturationDistance, double)
+
+  // ---------------------------------------------------------------------------
+  //   Bundle Adjustment parameters
+  // ---------------------------------------------------------------------------
+
+  // Get/Set bundle adjustment parameters
+  vtkCustomGetMacro(BAFrequency, double)
+  vtkCustomSetMacro(BAFrequency, double)
+
+  vtkCustomGetMacro(BAInterval, double)
+  vtkCustomSetMacro(BAInterval, double)
+
+  vtkCustomGetMacro(BAStartFrameIdx, unsigned int)
+  virtual void SetBAStartFrameIdx(unsigned int startIdx);
+
+  vtkCustomGetMacro(BAEndFrameIdx, unsigned int)
+  virtual void SetBAEndFrameIdx(unsigned int endIdx);
+
+  vtkCustomGetMacro(BAQueryMapStartRange, double)
+  vtkCustomSetMacro(BAQueryMapStartRange, double)
+
+  vtkCustomGetMacro(BAQueryMapEndRange, double)
+  vtkCustomSetMacro(BAQueryMapEndRange, double)
+
+  vtkCustomGetMacro(BARevisitedMapStartRange, double)
+  vtkCustomSetMacro(BARevisitedMapStartRange, double)
+
+  vtkCustomGetMacro(BARevisitedMapEndRange, double)
+  vtkCustomSetMacro(BARevisitedMapEndRange, double)
 
   // ---------------------------------------------------------------------------
   //   BASE to LIDAR transform
