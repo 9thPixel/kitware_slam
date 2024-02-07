@@ -401,6 +401,9 @@
         edge_angle_threshold: 120.         # [°] Threshold upon angle between left and right lines to consider a point as edge.
                                            # It is used with its absolute sine value in SSKE for edges and
                                            # with its cosine value in DSSKE for edges.
+        dist_to_neighbor_threshold: 0.005  # [m] Threshold upon distance to neighbor to avoid using noise in normal computation.
+        plane_cos_normal_threshold: 0.03   # [0, 1] Threshold upon cos to consider a point belongs to a plane.
+        edge_sin_normal_threshold: 0.6     # [0, 1] Threshold upon sin to consider a point belongs to an edge.
         edge_depth_gap_threshold: 1.       # [m] Threshold upon depth gap in neighborhood to select an edge keypoint.
         edge_nb_gap_points: 10             # [points] Minimum number of successive missing points to consider a space gap.
         edge_intensity_gap_threshold: 50.  # [0-255] Threshold upon intensity gap to select an edge keypoint.
@@ -445,6 +448,9 @@
         #   edge_angle_threshold: 120.         # [°] Threshold upon angle between left and right lines to consider a point as edge.
         #                                      # It is used with its absolute sine value in SSKE for edges and
         #                                      # with its cosine value in DSSKE for edges.
+        #   dist_to_neighbor_threshold: 0.005  # [m] Threshold upon distance to neighbor to avoid using noise in normal computation.
+        #   plane_cos_normal_threshold: 0.03   # [0, 1] Threshold upon cos to consider a point belongs to a plane.
+        #   edge_sin_normal_threshold: 0.6     # [0, 1] Threshold upon sin to consider a point belongs to an edge.
         #   edge_depth_gap_threshold: 1.5      # [m] Threshold upon depth gap in neighborhood to select an edge keypoint.
         #   edge_nb_gap_points: 10             # [points] Minimum number of successive missing points to consider a space gap.
         #   edge_intensity_gap_threshold: 30.  # [0-255] Threshold upon intensity gap to select an edge keypoint.
@@ -482,6 +488,9 @@
         #   edge_angle_threshold: 120.         # [°] Threshold upon angle between left and right lines to consider a point as edge.
         #                                      # It is used with its absolute sine value in SSKE for edges and
         #                                      # with its cosine value in DSSKE for edges.
+        #   dist_to_neighbor_threshold: 0.005  # [m] Threshold upon distance to neighbor to avoid using noise in normal computation.
+        #   plane_cos_normal_threshold: 0.03   # [0, 1] Threshold upon cos to consider a point belongs to a plane.
+        #   edge_sin_normal_threshold: 0.6     # [0, 1] Threshold upon sin to consider a point belongs to an edge.
         #   edge_depth_gap_threshold: 1.5      # [m] Threshold upon depth gap in neighborhood to select an edge keypoint.
         #   edge_nb_gap_points: 10             # [points] Minimum number of successive missing points to consider a space gap.
         #   edge_intensity_gap_threshold: 200. # [0-255] Threshold upon intensity gap to select an edge keypoint.

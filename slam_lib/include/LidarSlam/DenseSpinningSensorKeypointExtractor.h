@@ -37,10 +37,10 @@ struct PtFeat
   float SpaceGap;
   float DepthGap;
   float IntensityGap;
-  float Angle;
+  float CosNormal;
+  float SinNormal;
   std::bitset<Keypoint::nKeypointTypes> KptTypes;
-
-  PtFeat() : Index(0), Depth(0.0f), SpaceGap(-1.0f), DepthGap(0.0f), IntensityGap(-1.0f), Angle(1.0f), KptTypes({}) {}
+  PtFeat() : Index(0), Depth(0.0f), SpaceGap(-1.0f), DepthGap(0.0f), IntensityGap(-1.0f), CosNormal(1.0f), SinNormal(1.0f), KptTypes({}) {}
 };
 
 struct IdxVM
@@ -64,6 +64,15 @@ public:
 
   GetMacro(MinKernelRadius, float)
   SetMacro(MinKernelRadius, float)
+
+  GetMacro(DistToNeighborThreshold, float)
+  SetMacro(DistToNeighborThreshold, float)
+
+  GetMacro(PlaneCosNormalThreshold, float)
+  SetMacro(PlaneCosNormalThreshold, float)
+
+  GetMacro(EdgeSinNormalThreshold, float)
+  SetMacro(EdgeSinNormalThreshold, float)
 
   GetMacro(SamplingDSSKE, LidarSlam::SamplingModeDSSKE)
   SetMacro(SamplingDSSKE, LidarSlam::SamplingModeDSSKE)
@@ -91,7 +100,7 @@ private:
 
   // Get the 2D neighborhood of a point in the Vertex Map
   // Returns a sort of a patch of the vertex map (same structure as the vertex map)
-  std::vector<std::vector<std::shared_ptr<PtFeat>>> GetKernel(int i, int j);
+  std::unordered_map<Neighbor, std::vector<int>> GetKernel(int i, int j);
 
   // Initialize LaserIdMap, NbLaserRings, AzimuthalResolution and Pc2VmIndices
   void InitInternalParameters();
@@ -160,6 +169,17 @@ private:
 
   // Minimum diameter of a kernel (in meters)
   float MinKernelRadius = 0.2f; // [m]
+
+  // Threshold for distance between two points to be considered as valid neighbors
+  // useful to avoid to extract noise in neighborhoods
+  float DistToNeighborThreshold = 0.1f; // [m]
+
+  // Threshold for cos of angle between normal and point to be considered as a plane
+  float PlaneCosNormalThreshold = 0.5f; // [0, 1]
+
+  // Threshold for sin of angle between normal and point to be considered as an edge
+  // It compares the normal of the two planes that intersect the edge
+  float EdgeSinNormalThreshold = 0.5f; // [0, 1]
 
   // ---------------------------------------------------------------------------
   //   Internal variables
