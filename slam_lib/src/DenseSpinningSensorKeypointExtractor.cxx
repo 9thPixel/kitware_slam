@@ -77,6 +77,27 @@ int DenseSpinningSensorKeypointExtractor::GetScanLineSize(const std::vector<std:
 }
 
 //-----------------------------------------------------------------------------
+std::vector<std::vector<std::shared_ptr<PtFeat>>> DenseSpinningSensorKeypointExtractor::GetKernel(int i, int j)
+{
+  std::vector<std::vector<std::shared_ptr<PtFeat>>> kernel;
+  kernel.resize(2 * 1 + 1, std::vector<std::shared_ptr<PtFeat>>(2 * 1 + 1));
+  int idxRowKernel = 0;
+  for (int idxRow = -1; idxRow < 1 + 1; ++idxRow)
+  {
+    int idxColKernel = 0;
+    for (int idxCol = -1; idxCol < 1 + 1; ++idxCol)
+    {
+      int row = (i + idxRow + this->HeightVM) % this->HeightVM;
+      int col = (j + idxCol + this->WidthVM) % this->WidthVM;
+      kernel[idxRowKernel][idxColKernel] = this->VertexMap[row][col];
+      ++idxColKernel;
+    }
+    ++idxRowKernel;
+  }
+  return kernel;
+}
+
+//-----------------------------------------------------------------------------
 void DenseSpinningSensorKeypointExtractor::InitInternalParameters()
 {
   // Map laser_ids

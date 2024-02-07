@@ -86,6 +86,10 @@ private:
   // Count the number of non null ptr in a scanline
   int GetScanLineSize(const std::vector<std::shared_ptr<PtFeat>>& scanLine);
 
+  // Get the 2D neighborhood of a point in the Vertex Map
+  // Returns a sort of a patch of the vertex map (same structure as the vertex map)
+  std::vector<std::vector<std::shared_ptr<PtFeat>>> GetKernel(int i, int j);
+
   // Initialize LaserIdMap, NbLaserRings, AzimuthalResolution and Pc2VmIndices
   void InitInternalParameters();
 
