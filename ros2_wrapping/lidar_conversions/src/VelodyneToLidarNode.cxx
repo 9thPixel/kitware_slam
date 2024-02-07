@@ -69,6 +69,9 @@ void VelodyneToLidarNode::Callback(const Pcl2_msg& msg_received)
   double diffTimePrevFrame = currFrameTime - this->PrevFrameTime;
   this->PrevFrameTime = currFrameTime;
 
+  RCLCPP_WARN_STREAM(this->get_logger(), std::setprecision(15) << "Current frame time : " << currFrameTime );
+
+
   // If the rotation duration has not been estimated
   if (this->RotationDuration < 0.)
   {
@@ -112,7 +115,7 @@ void VelodyneToLidarNode::Callback(const Pcl2_msg& msg_received)
   bool timeIsValid = duration > 1e-8 && duration < 2. * this->RotationDuration;
 
   if (!timeIsValid)
-    RCLCPP_WARN_STREAM(this->get_logger(), "Invalid 'time' field, it will be built from azimuth advancement.");
+      RCLCPP_WARN_STREAM(this->get_logger(), "Invalid 'time' field, it will be built from azimuth advancement.");
 
   Eigen::Vector2d firstPoint = {cloudV[0].x, cloudV[0].y};
 
