@@ -393,6 +393,7 @@
         min_beam_surface_angle: 10.        # [°] Minimal angle between the point surface and the laser beam to consider a point as valid.
         neighbors_side_nb: 5               # [>1] Minimum number of neighbors used on each side to estimate curvature and detect edges and planes.
         neighbors_radius: 0.10             # [m] Minimum radius to define a neighborhood on each side of the studied point.
+        kernel_radius: 0.1                 # [m] Radius of the kernel used to compute normals.
         plane_angle_threshold: 150.        # [°] Threshold upon angle between left and right lines to consider a point as plane.
                                            # It is used with its absolute sine value in SSKE for planes,
                                            # with its cosine value in DSSKE for planes and
@@ -437,6 +438,7 @@
         #   min_beam_surface_angle: 10.        # [°] Minimal angle between the point surface and the laser beam to consider a point as valid.
         #   neighbors_side_nb: 5               # [>1] Minimum number of neighbors used on each side to estimate curvature and detect edges and planes.
         #   neighbors_radius: 0.10             # [m] Minimum radius to define a neighborhood on each side of the studied point.
+        #   kernel_radius: 0.1                 # [m] Radius of the kernel used to compute normals.
         #   plane_angle_threshold: 150.        # [°] Threshold upon angle between left and right lines to consider a point as plane.
         #                                      # It is used with its absolute sine value in SSKE for planes,
         #                                      # with its cosine value in DSSKE for planes and
@@ -473,6 +475,7 @@
         #   min_beam_surface_angle: 10.        # [°] Minimal angle between the point surface and the laser beam to consider a point as valid.
         #   neighbors_side_nb: 5               # [>1] Minimum number of neighbors used on each side to estimate curvature and detect edges and planes.
         #   neighbors_radius: 0.10             # [m] Minimum radius to define a neighborhood on each side of the studied point.
+        #   kernel_radius: 0.1                 # [m] Radius of the kernel used to compute normals.
         #   plane_angle_threshold: 150.        # [°] Threshold upon angle between left and right lines to consider a point as plane.
         #                                      # It is used with its absolute sine value in SSKE for planes,
         #                                      # with its cosine value in DSSKE for planes and

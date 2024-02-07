@@ -77,23 +77,88 @@ int DenseSpinningSensorKeypointExtractor::GetScanLineSize(const std::vector<std:
 }
 
 //-----------------------------------------------------------------------------
-std::vector<std::vector<std::shared_ptr<PtFeat>>> DenseSpinningSensorKeypointExtractor::GetKernel(int i, int j)
+std::unordered_map<Neighbor, std::vector<int>> DenseSpinningSensorKeypointExtractor::GetKernel(int i, int j)
 {
-  std::vector<std::vector<std::shared_ptr<PtFeat>>> kernel;
-  kernel.resize(2 * 1 + 1, std::vector<std::shared_ptr<PtFeat>>(2 * 1 + 1));
-  int idxRowKernel = 0;
-  for (int idxRow = -1; idxRow < 1 + 1; ++idxRow)
+  auto getNeighbors = [&](Neighbor dir) -> std::vector<int>
   {
-    int idxColKernel = 0;
-    for (int idxCol = -1; idxCol < 1 + 1; ++idxCol)
+    std::vector<int> neighbors;
+    int dirH, dirV;
+    switch (dir)
     {
-      int row = (i + idxRow + this->HeightVM) % this->HeightVM;
-      int col = (j + idxCol + this->WidthVM) % this->WidthVM;
-      kernel[idxRowKernel][idxColKernel] = this->VertexMap[row][col];
-      ++idxColKernel;
+      case Neighbor::TOP:
+        dirH = 0;
+        dirV = -1;
+        break;
+      case Neighbor::BOTTOM:
+        dirH = 0;
+        dirV = 1;
+        break;
+      case Neighbor::LEFT:
+        dirH = -1;
+        dirV = 0;
+        break;
+      case Neighbor::RIGHT:
+        dirH = 1;
+        dirV = 0;
+        break;
     }
-    ++idxRowKernel;
-  }
+    int idxNeigh = 1;
+    float lineLength = 0.f;
+    const auto& centralIdx = VertexMap[i][j]->Index;
+
+    //! Version with one neighbor at least
+    // Add a first valid point to the neighbors vector
+    // auto& ptrFeat = this->VertexMap[(i + dirV * idxNeigh + this->HeightVM) % this->HeightVM]
+    //                                [(j + dirH * idxNeigh + this->WidthVM) % this->WidthVM];
+    // while (ptrFeat == nullptr)
+    // {
+    //   idxNeigh++;
+    //   ptrFeat = this->VertexMap[(i + dirV * idxNeigh + this->HeightVM) % this->HeightVM]
+    //                            [(j + dirH * idxNeigh + this->WidthVM) % this->WidthVM];
+    // }
+    // neighbors.emplace_back(ptrFeat->Index);
+    // lineLength = (this->Scan->at(neighbors.back()).getVector3fMap() - this->Scan->at(centralIdx).getVector3fMap()).norm();
+
+    // ! Empty version
+    // Try to add the first valid point to the neighbors vector
+    auto& ptrFeat = this->VertexMap[(i + dirV * idxNeigh + this->HeightVM) % this->HeightVM]
+                                   [(j + dirH * idxNeigh + this->WidthVM) % this->WidthVM];
+    while (ptrFeat == nullptr)
+    {
+      idxNeigh++;
+      ptrFeat = this->VertexMap[(i + dirV * idxNeigh + this->HeightVM) % this->HeightVM]
+                               [(j + dirH * idxNeigh + this->WidthVM) % this->WidthVM];
+    }
+    // If the point is too far from the central point, this neighborhood will be empty
+    lineLength = (this->Scan->at(ptrFeat->Index).getVector3fMap() - this->Scan->at(centralIdx).getVector3fMap()).norm();
+    if (lineLength > this->MinKernelRadius)
+      return neighbors;
+    neighbors.emplace_back(ptrFeat->Index);
+
+    // Complete the neighborhood if the line is too small compared to the minimum radius
+    while (lineLength < this->MinKernelRadius &&
+           ((idxNeigh < this->HeightVM && (dir == Neighbor::TOP || dir == Neighbor::BOTTOM)) ||
+           (idxNeigh < this->WidthVM && (dir == Neighbor::LEFT || dir == Neighbor::RIGHT))))
+    {
+      const auto& ptrFeat = this->VertexMap[(i + dirV * idxNeigh + this->HeightVM) % this->HeightVM]
+                                           [(j + dirH * idxNeigh + this->WidthVM) % this->WidthVM];
+      if (ptrFeat != nullptr)
+      {
+        lineLength = (this->Scan->at(ptrFeat->Index).getVector3fMap() - this->Scan->at(centralIdx).getVector3fMap()).norm();
+        // If the new valid point is above the radius, we stop filling the neighborhood
+        if (lineLength > this->MinKernelRadius)
+          return neighbors;
+        // If the new valid point is still in the radius, we add it to the neighborhood
+        neighbors.emplace_back(ptrFeat->Index);
+      }
+      ++idxNeigh;
+    }
+    return neighbors;
+  };
+
+  std::unordered_map<Neighbor, std::vector<int>> kernel;
+  for (auto dir : {Neighbor::TOP, Neighbor::BOTTOM, Neighbor::LEFT, Neighbor::RIGHT})
+    kernel[dir] = getNeighbors(dir);
   return kernel;
 }
 

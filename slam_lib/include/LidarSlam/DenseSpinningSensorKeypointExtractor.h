@@ -62,6 +62,9 @@ public:
   GetMacro(PatchSize, int)
   SetMacro(PatchSize, int)
 
+  GetMacro(MinKernelRadius, float)
+  SetMacro(MinKernelRadius, float)
+
   GetMacro(SamplingDSSKE, LidarSlam::SamplingModeDSSKE)
   SetMacro(SamplingDSSKE, LidarSlam::SamplingModeDSSKE)
 
@@ -154,6 +157,9 @@ private:
   // Patches are used for 2D grid construction to downsample the keypoints
   // A patch with size 32 means that the patch will contain at most 32x32 points
   int PatchSize = 32; // [nb]
+
+  // Minimum diameter of a kernel (in meters)
+  float MinKernelRadius = 0.2f; // [m]
 
   // ---------------------------------------------------------------------------
   //   Internal variables
