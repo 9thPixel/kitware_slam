@@ -40,6 +40,15 @@ static const std::vector<Keypoint> KeypointTypes = { EDGE, INTENSITY_EDGE, PLANE
 static const std::map<Keypoint, std::string> KeypointTypeNames = { {EDGE, "edge"}, {INTENSITY_EDGE, "intensity_edge"}, {PLANE, "plane"}, {BLOB, "blob"} };
 
 //------------------------------------------------------------------------------
+//! Type of direction of neighborhood
+enum NeighborDir
+{
+  TOP   = 0,   ///< neighborhood above
+  BOTTOM = 1,   ///< neighborhood below
+  nNeighbors
+};
+
+//------------------------------------------------------------------------------
 //! How to deal with undistortion
 enum UndistortionMode
 {

@@ -411,6 +411,7 @@
           sampling_mode: 0                 # {0, 1} Sampling mode for keypoint extraction :
                                            # 0) Patch mode --> for a 2D grid built on the vertex map.
                                            # 1) Voxel mode --> for a 3D grid built on the scan cloud, use voxel_grid_resolution common to SSKE.
+
         # # Multi LiDAR inputs
         # # The multiple devices to use for SLAM.
         # # A keypoint extractor will be initialized for each device.

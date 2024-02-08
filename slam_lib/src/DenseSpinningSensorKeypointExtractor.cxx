@@ -77,6 +77,46 @@ int DenseSpinningSensorKeypointExtractor::GetScanLineSize(const std::vector<std:
 }
 
 //-----------------------------------------------------------------------------
+std::unordered_map<NeighborDir, PartOfKernel> DenseSpinningSensorKeypointExtractor::GetKernel(int i, int j)
+{
+  std::unordered_map<NeighborDir, PartOfKernel> kernel;
+  int width = this->WidthVM;
+  int height = this->HeightVM;
+
+  auto getNeighbors = [&](bool topOrBottom) -> PartOfKernel
+  {
+    std::shared_ptr<PartOfKernel> neighbors = std::make_shared<PartOfKernel>();
+    neighbors->Indices.reserve(this->MinNeighNb);
+    int dirV = topOrBottom ? -1 : 1;
+    int idxNeigh = 1;
+    float lineLength = 0.f;
+    while ((lineLength < this->MinNeighRadius ||
+            int(neighbors->Indices.size()) < this->MinNeighNb))
+    {
+      const auto& ptrFeat = this->VertexMap[(i + dirV * idxNeigh + this->HeightVM) % this->HeightVM][j];
+      if (ptrFeat != nullptr)
+      {
+        neighbors->Indices.emplace_back(ptrFeat->Index);
+        if (lineLength < this->MinNeighRadius)
+          lineLength = (this->Scan->at(neighbors->Indices.back()).getVector3fMap() - this->Scan->at(neighbors->Indices.front()).getVector3fMap()).norm();
+        if (this->Enabled[Keypoint::EDGE] &&
+            ((ptrFeat->DepthGap > this->EdgeDepthGapThreshold) ||
+            (ptrFeat->Angle < -this->PlaneCosAngleThreshold && ptrFeat->Angle > this->EdgeCosAngleThreshold) ||
+            (ptrFeat->SpaceGap > this->EdgeDepthGapThreshold)))
+          neighbors->hasEdge = true;
+      }
+      ++idxNeigh;
+    }
+    neighbors->Indices.shrink_to_fit();
+    return *neighbors;
+  };
+
+  kernel[NeighborDir::TOP] = getNeighbors(true);
+  kernel[NeighborDir::BOTTOM] = getNeighbors(false);
+  return kernel;
+}
+
+//-----------------------------------------------------------------------------
 void DenseSpinningSensorKeypointExtractor::InitInternalParameters()
 {
   // Map laser_ids
@@ -192,7 +232,6 @@ void DenseSpinningSensorKeypointExtractor::OutputFeatures(std::string path)
   OUTPUT_FEATURE(path + "SpaceGap.pgm", SpaceGap, 1., -1., 0.);
   OUTPUT_FEATURE(path + "DepthGap.pgm", DepthGap, 10., 0., -15.);
   OUTPUT_FEATURE(path + "IntensityGap.pgm", IntensityGap, 35., -1., 0.);
-  OUTPUT_FEATURE(path + "Angles.pgm", Angle, 1., 1., -1.);
 }
 
 //-----------------------------------------------------------------------------
@@ -476,7 +515,7 @@ void DenseSpinningSensorKeypointExtractor::ComputeCurvature()
           // Check previously computed angle to keep only the maximal angle keypoint locally
           for (int idx = 1; idx < leftNeighbors.size(); idx++)
           {
-            const std::shared_ptr<PtFeat>& neighPtr = this->GetPtFeat(leftNeighbors[idx]);
+            std::shared_ptr<PtFeat> neighPtr = this->GetPtFeat(leftNeighbors[idx]);
             if (neighPtr->Angle > this->EdgeCosAngleThreshold &&
                 neighPtr->Angle < -this->PlaneCosAngleThreshold)
             {
@@ -491,6 +530,22 @@ void DenseSpinningSensorKeypointExtractor::ComputeCurvature()
       }
     }
   }
+}
+
+//-----------------------------------------------------------------------------
+bool DenseSpinningSensorKeypointExtractor::FilterEdgeWithNeigh(const std::shared_ptr<PtFeat>& currentFeat)
+{
+  int i = this->Pc2VmIndices[currentFeat->Index].Row;
+  int j = this->Pc2VmIndices[currentFeat->Index].Col;
+  std::unordered_map<NeighborDir, PartOfKernel> kernelCurr = this->GetKernel(i, j);
+  std::unordered_map<NeighborDir, PartOfKernel> kernelLeft, kernelRight;
+  if (this->VertexMap[i][j - 1] != nullptr)
+    kernelLeft = this->GetKernel(i, j - 1);
+  if (this->VertexMap[i][j + 1] != nullptr)
+    kernelRight = this->GetKernel(i, j + 1);
+  if (kernelCurr[TOP].hasEdge || kernelCurr[BOTTOM].hasEdge || kernelLeft[TOP].hasEdge || kernelLeft[BOTTOM].hasEdge || kernelRight[TOP].hasEdge || kernelRight[BOTTOM].hasEdge)
+    return true;
+  return false;
 }
 
 //-----------------------------------------------------------------------------
@@ -636,7 +691,7 @@ void DenseSpinningSensorKeypointExtractor::ComputePlanes()
                                else if (!isPtValid(a) && !isPtValid(b))
                                  return true;  // Both are nullptr, no preference
 
-                               return (a->Angle > b->Angle);
+                              return (a->Angle > b->Angle);
                              });
       break;
     }
@@ -671,7 +726,8 @@ void DenseSpinningSensorKeypointExtractor::ComputeEdges()
            (!pt->KptTypes[static_cast<int>(PLANE)] && !pt->KptTypes[static_cast<int>(EDGE)])&&
            ((pt->DepthGap - (-1.0f) > 1e-6 && pt->DepthGap > this->EdgeDepthGapThreshold) ||
             (pt->Angle < -this->PlaneCosAngleThreshold && pt->Angle > this->EdgeCosAngleThreshold) ||
-            (pt->SpaceGap - (-1.0f) > 1e-6 && pt->SpaceGap > this->EdgeDepthGapThreshold));
+            (pt->SpaceGap - (-1.0f) > 1e-6 && pt->SpaceGap > this->EdgeDepthGapThreshold)) &&
+           this->FilterEdgeWithNeigh(pt);
   };
   switch (this->SamplingDSSKE)
   {
@@ -730,9 +786,9 @@ void DenseSpinningSensorKeypointExtractor::ComputeEdges()
                                  return false;
 
                                if (a->Angle < b->Angle && b->Angle < -this->PlaneCosAngleThreshold && b->Angle > this->EdgeCosAngleThreshold)
-                                  return true;
-                                if (b->Angle < a->Angle && a->Angle < -this->PlaneCosAngleThreshold && a->Angle > this->EdgeCosAngleThreshold)
-                                  return false;
+                                 return true;
+                               if (b->Angle < a->Angle && a->Angle < -this->PlaneCosAngleThreshold && a->Angle > this->EdgeCosAngleThreshold)
+                                 return false;
 
                                if (a->SpaceGap < b->SpaceGap && b->SpaceGap > this->EdgeDepthGapThreshold)
                                  return true;
@@ -827,7 +883,6 @@ std::unordered_map<std::string, std::vector<float>> DenseSpinningSensorKeypointE
     debugArray["space_gap"][i]               = ptrFeat->SpaceGap;
     debugArray["depth_gap"][i]               = ptrFeat->DepthGap;
     debugArray["intensity_gap"][i]           = ptrFeat->IntensityGap;
-    debugArray["cos_angle"][i]               = ptrFeat->Angle;
     debugArray["edge_keypoint"][i]           = ptrFeat->KptTypes[static_cast<int>(Keypoint::EDGE)];
     debugArray["plane_keypoint"][i]          = ptrFeat->KptTypes[static_cast<int>(Keypoint::PLANE)];
     debugArray["intensity_edge_keypoint"][i] = ptrFeat->KptTypes[static_cast<int>(Keypoint::INTENSITY_EDGE)];

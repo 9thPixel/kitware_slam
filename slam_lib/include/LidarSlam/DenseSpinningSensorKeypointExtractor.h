@@ -49,10 +49,18 @@ struct IdxVM
   int Col;
 };
 
+struct PartOfKernel
+{
+  NeighborDir Dir;
+  std::vector<int> Indices;
+  bool hasEdge;
+};
+
 class DenseSpinningSensorKeypointExtractor : public KeypointExtractor
 {
 public:
 
+  // Set EdgeCosAngleThreshold and PlaneCosAngleThreshold from angle in degrees
   void SetEdgeAngleThreshold(float angle) override {this->EdgeCosAngleThreshold = std::cos(Utils::Deg2Rad(angle));};
   void SetPlaneAngleThreshold(float angle) override {this->PlaneCosAngleThreshold = std::cos(Utils::Deg2Rad(angle));};
   // Associated getters
@@ -64,6 +72,9 @@ public:
 
   GetMacro(SamplingDSSKE, LidarSlam::SamplingModeDSSKE)
   SetMacro(SamplingDSSKE, LidarSlam::SamplingModeDSSKE)
+
+  GetMacro(MinKernelRadius, float)
+  SetMacro(MinKernelRadius, float)
 
   // Extract keypoints from the pointcloud. The key points
   // will be separated in two classes : Edges keypoints which
@@ -86,7 +97,11 @@ private:
   // Count the number of non null ptr in a scanline
   int GetScanLineSize(const std::vector<std::shared_ptr<PtFeat>>& scanLine);
 
-  // Initialize LaserIdMap, NbLaserRings, AzimuthalResolution and Pc2VmIndices
+  // Compute the top and bottom neighborhood of a point
+  // Adds the information of if a neighborhood contains an edge candidate
+  std::unordered_map<NeighborDir, PartOfKernel> GetKernel(int i, int j);
+
+  // Initialize LaserIdMap, NbLaserRings and AzimuthalResolution
   void InitInternalParameters();
 
   // Create vertex map from input pointcloud using indices stored in Pc2VmIndices
@@ -115,6 +130,9 @@ private:
 
   // Add point to keypoint structure
   void AddKeypoint(const Keypoint& k, const LidarPoint &pt) override;
+
+  // Filter for edges looking if they have edges in their up and down neighborhood
+  bool FilterEdgeWithNeigh(const std::shared_ptr<PtFeat>& currentFeat);
 
   // Create square division of the image using 2 dimensions
   void Create2DGrid(std::function<bool(const std::shared_ptr<PtFeat>&)> isPtFeatValid);
@@ -150,6 +168,9 @@ private:
   // Patches are used for 2D grid construction to downsample the keypoints
   // A patch with size 32 means that the patch will contain at most 32x32 points
   int PatchSize = 32; // [nb]
+
+  // Minimum diameter of a kernel (in meters)
+  float MinKernelRadius = 0.2f; // [m]
 
   // ---------------------------------------------------------------------------
   //   Internal variables
