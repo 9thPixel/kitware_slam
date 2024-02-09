@@ -1,6 +1,7 @@
 set(interfaces)
 set(sources)
 set(ui_files
+  UserInterface/Resources/UI/sqPresetDialog.ui
   UserInterface/Resources/UI/sqSlamToolbar.ui
 )
 
@@ -9,6 +10,10 @@ set(subdir_sources
   sqAddSlamReaction.h
   sqButtonPausePropertyWidget.cxx
   sqButtonPausePropertyWidget.h
+  sqPresetDialog.cxx
+  sqPresetDialog.h
+  sqPresetDialogReaction.cxx
+  sqPresetDialogReaction.h
   sqSlamManager.cxx
   sqSlamManager.h
   sqSlamStarter.cxx

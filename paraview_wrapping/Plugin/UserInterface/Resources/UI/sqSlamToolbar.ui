@@ -25,6 +25,15 @@
     <string>Add a SLAM filter</string>
    </property>
   </action>
+  <action name="actionSlamPresetSettings">
+   <property name="icon">
+    <iconset resource="../sqResources.qrc">
+     <normaloff>:/sqResources/Icons/sqPresets.svg</normaloff>:/sqResources/Icons/sqPresets.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Open SLAM presets settings</string>
+   </property>
+  </action>
   <action name="actionInitialize">
    <property name="icon">
     <iconset resource="../sqResources.qrc">
@@ -64,6 +73,7 @@ is set back to origin and clear and refill external sensor data.</string>
   </action>
   <addaction name="actionAddSlamFilter"/>
   <addaction name="separator"/>
+  <addaction name="actionSlamPresetSettings"/>
   <addaction name="actionInitialize"/>
   <addaction name="actionAddExternalSensor"/>
   <addaction name="actionOptimizeGraph"/>

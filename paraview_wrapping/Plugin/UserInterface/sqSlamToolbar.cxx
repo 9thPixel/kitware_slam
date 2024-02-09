@@ -16,6 +16,7 @@
 
 #include "sqSlamToolbar.h"
 #include "sqAddSlamReaction.h"
+#include "sqPresetDialogReaction.h"
 #include "sqSubsetPropertiesDialog.h"
 #include "sqTriggerSlamCommandReaction.h"
 #include "vtkSlamFinder.h"
@@ -75,6 +76,7 @@ void sqSlamToolbar::constructor()
     &sqSlamToolbar::updateEnableState);
 
   new sqAddSlamReaction(ui->actionAddSlamFilter);
+  new sqPresetDialogReaction(ui->actionSlamPresetSettings);
   new sqSubsetPropertiesDialog(ui->actionInitialize, sqSubsetPropertiesDialog::INITIALIZATION);
   new sqSubsetPropertiesDialog(
     ui->actionAddExternalSensor, sqSubsetPropertiesDialog::ADD_EXTERNAL_SENSOR);
@@ -99,6 +101,7 @@ void sqSlamToolbar::updateEnableState()
   bool isSlamFilter = vtkSlamFinder::isSlamFilter(source->getSourceProxy());
 
   ui->actionAddSlamFilter->setEnabled(!isSlamFilter);
+  ui->actionSlamPresetSettings->setEnabled(isSlamFilter);
   ui->actionInitialize->setEnabled(isSlamFilter);
   ui->actionAddExternalSensor->setEnabled(isSlamFilter);
   ui->actionOptimizeGraph->setEnabled(isSlamFilter);
