@@ -1889,6 +1889,9 @@
         <Documentation>
           If enabled, loop closure constraint are used in pose graph optimization.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator" mode="visibility" property="Use pose graph" value="1" />
+        </Hints>
       </IntVectorProperty>
 
       <IntVectorProperty name="Use landmark constraint"
