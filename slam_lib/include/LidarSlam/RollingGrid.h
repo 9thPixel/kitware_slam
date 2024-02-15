@@ -168,19 +168,18 @@ public:
 
   //! Check if the KD-tree built on top of the submap is valid or if it needs to be updated.
   //! The KD-tree is cleared every time the map is modified.
-  bool IsSubMapKdTreeValid() const {return this->KdTree.GetInputCloud() && !this->KdTree.GetInputCloud()->empty();}
+  bool IsSubMapKdTreeValid(int idxVoxel) const {return this->KdTrees.at(idxVoxel).GetInputCloud() && !this->KdTrees.at(idxVoxel).GetInputCloud()->empty();}
 
   //! Get the internal pointcloud used by the KD-Tree
-  const PointCloud::Ptr GetKdTreePcl() const{return this->KdTree.GetInputCloud();}
+  const PointCloud::Ptr GetKdTreePcl(int idxVoxel) const{return this->KdTrees.at(idxVoxel).GetInputCloud();}
 
   //! Do a KnnSearch on the RollingGrid Submap
-  inline size_t KnnSearch(const float queryPoint[3], int knearest, int* knnIndices, float* knnSqDistances) const
-  {return this->KdTree.KnnSearch(queryPoint, knearest, knnIndices, knnSqDistances);}
+  inline size_t KnnSearch(int idxVoxel, const float queryPoint[3], int knearest, int* knnIndices, float* knnSqDistances) const
+  {return this->KdTrees.at(idxVoxel).KnnSearch(queryPoint, knearest, knnIndices, knnSqDistances);}
 
   //! Do a KnnSearch on the RollingGrid Submap
-  inline size_t KnnSearch(const double queryPoint[3], int knearest, std::vector<int>& knnIndices, std::vector<float>& knnSqDistances) const
-  {return this->KdTree.KnnSearch(queryPoint, knearest, knnIndices, knnSqDistances);}
-
+  inline size_t KnnSearch(int idxVoxel, const double queryPoint[3], int knearest, std::vector<int>& knnIndices, std::vector<float>& knnSqDistances) const
+  {return this->KdTrees.at(idxVoxel).KnnSearch(queryPoint, knearest, knnIndices, knnSqDistances);}
   //! Get the sub map lastly computed
   const PointCloud::Ptr GetSubMap() const {return this->SubMap;}
 
@@ -231,8 +230,8 @@ private:
   //! Total number of points stored in the rolling grid
   unsigned int NbPoints;
 
-  //! KD-Tree built on top of local sub-map for fast NN queries in sub-map
-  KDTree KdTree;
+  //! KD-Trees built on top of local sub-maps for fast NN queries in sub-map
+  std::unordered_map<int, KDTree> KdTrees;
 
   //! Local sub-map stored for further visualization
   PointCloud::Ptr SubMap;
@@ -250,6 +249,10 @@ private:
   //! Time threshold to discard removable keypoints
   //! If negative, the keypoints are never removed
   double DecayingThreshold = -1;
+
+  //! Map of the submap voxel clouds
+  //! A cloud is built on every voxel captured by the submap
+  std::unordered_map<int, PointCloud::Ptr> SubMapVoxelClouds;
 
 private:
 

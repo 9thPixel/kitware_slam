@@ -334,9 +334,12 @@ void RollingGrid::Add(const PointCloud::Ptr& pointcloud, bool fixed, bool roll)
     }
   }
 
-  // Clear the deprecated KD-tree if the map has been updated
+  // Clear the deprecated KD-trees if the map has been updated
   if (updated)
-    this->KdTree.Reset();
+  {
+    for (auto& kv : this->SubMapVoxelClouds)
+      this->KdTrees[kv.first].Reset(kv.second);
+  }
 }
 
 //==============================================================================
@@ -419,6 +422,14 @@ void RollingGrid::BuildSubMap()
 {
   // Get all points from all voxels
   this->SubMap = this->Get();
+
+  for (auto& vox : this->Voxels)
+  {
+    this->SubMapVoxelClouds[vox.first].reset(new PointCloud);
+    this->SubMapVoxelClouds[vox.first]->reserve(vox.second.size());
+    for (auto& kvIn : vox.second)
+      this->SubMapVoxelClouds[vox.first]->push_back(kvIn.second.point);
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -448,7 +459,10 @@ void RollingGrid::BuildSubMap(const Eigen::Array3f& minPoint, const Eigen::Array
      if (((intersectionMin <= idx3d) && (idx3d <= intersectionMax)).all())
      {
        for (const auto& kvIn : kvOut.second)
+       {
         this->SubMap->push_back(kvIn.second.point);
+        this->SubMapVoxelClouds[kvIn.first]->push_back(kvIn.second.point);
+       }
      }
     }
   }
@@ -469,7 +483,10 @@ void RollingGrid::BuildSubMap(const Eigen::Array3f& minPoint, const Eigen::Array
          // Check if enough points lie in the voxel
          // or if the points are fixed before adding it
          if (kvIn.second.count >= this->MinFramesPerVoxel || kvIn.second.point.label == 1)
+         {
           this->SubMap->push_back(kvIn.second.point);
+          this->SubMapVoxelClouds[kvIn.first]->push_back(kvIn.second.point);
+         }
        }
      }
     }
@@ -491,7 +508,10 @@ void RollingGrid::BuildSubMap(const Eigen::Array3f& minPoint, const Eigen::Array
          {
            // Invert constraint to add the other points
            if (kvIn.second.count < this->MinFramesPerVoxel && kvIn.second.point.label != 1)
-              this->SubMap->push_back(kvIn.second.point);
+           {
+            this->SubMap->push_back(kvIn.second.point);
+            this->SubMapVoxelClouds[kvIn.first]->push_back(kvIn.second.point);
+           }
          }
        }
       }
@@ -569,7 +589,10 @@ void RollingGrid::BuildSubMap(const PointCloud& pc, int minNbPoints)
     {
       // Add all points in this outer voxel
       for (const auto& kvIn : this->Voxels[vxIdx])
+      {
         this->SubMap->push_back(kvIn.second.point);
+        this->SubMapVoxelClouds[kvIn.first]->push_back(kvIn.second.point);
+      }
     }
   }
   // If we want to filter moving objects
@@ -583,7 +606,10 @@ void RollingGrid::BuildSubMap(const PointCloud& pc, int minNbPoints)
       {
         if (kvIn.second.count > this->MinFramesPerVoxel ||
             kvIn.second.point.label == 1)
+        {
           this->SubMap->push_back(kvIn.second.point);
+          this->SubMapVoxelClouds[kvIn.first]->push_back(kvIn.second.point);
+        }
       }
     }
 
@@ -598,7 +624,10 @@ void RollingGrid::BuildSubMap(const PointCloud& pc, int minNbPoints)
         {
           if (kvIn.second.count < this->MinFramesPerVoxel &&
               kvIn.second.point.label != 1)
+          {
             this->SubMap->push_back(kvIn.second.point);
+            this->SubMapVoxelClouds[kvIn.first]->push_back(kvIn.second.point);
+          }
         }
       }
     }
@@ -611,13 +640,17 @@ void RollingGrid::BuildSubMap(const PointCloud& pc, int minNbPoints)
 //------------------------------------------------------------------------------
 void RollingGrid::BuildKdTree()
 {
-  if (!this->SubMap)
+  for (auto& kv : this->SubMapVoxelClouds)
   {
-    PRINT_WARNING("RollingGrid: no submap, Kdtree cannot be built");
-    return;
+    if (kv.second->empty())
+    {
+      PRINT_WARNING("RollingGrid: empty voxel cloud, Kdtree cannot be built");
+      return;
+    }
   }
 
-  this->KdTree.Reset(this->SubMap);
+  for (auto& kv : this->SubMapVoxelClouds)
+    this->KdTrees[kv.first].Reset(kv.second);
 }
 
 //------------------------------------------------------------------------------
