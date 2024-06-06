@@ -28,6 +28,9 @@
 // Boost
 #include <boost/filesystem.hpp>
 
+// PCL
+#include <pcl/common/transforms.h>
+
 //==============================================================================
 //   Basic SLAM use
 //==============================================================================
@@ -80,6 +83,12 @@ AggregationNode::AggregationNode(std::string name_node, const rclcpp::NodeOption
   this->get_parameter_or<double>("slice.angle_resolution", angleStepDeg, 3.);
   this->AngleStep = (M_PI / 180.) * angleStepDeg;
 
+  // Ground extraction parameters
+  this->get_parameter_or<bool>("ground.enable", this->DoExtractGround, false);
+  this->get_parameter_or<double>("ground.width", this->Ground.Width, 0.1);
+  this->get_parameter_or<double>("ground.distance", this->Ground.Distance, 0.);
+  this->get_parameter_or<bool>("ground.invert", this->InvertGroundExtraction, false);
+
   // Get max size in meters
   double maxSize;
   this->get_parameter_or<double>("max_size", maxSize, 200.);
@@ -123,18 +132,26 @@ void AggregationNode::Callback(const Pcl2_msg& registeredCloudMsg)
     closest->reserve(registeredCloud->size());
     for (const auto& pt : *registeredCloud)
     {
-      if ((pt.getVector3fMap() - this->CurrentPosition.cast<float>()).norm() < this->MaxDistAroundTrajectory)
+      if ((pt.getVector3fMap() - this->CurrentPose.translation().cast<float>()).norm() < this->MaxDistAroundTrajectory)
         closest->emplace_back(pt);
     }
   }
   else
     closest = registeredCloud;
 
+  // Select ground or not ground if required
+  CloudS::Ptr preprocessedCloud = std::make_shared<CloudS>();
+  if (this->DoExtractGround)
+    // Extract the ground points
+    this->ExtractGround(*closest, *preprocessedCloud);
+  else
+    preprocessedCloud = closest;
+
   // Add the points to the map
   // Map is not rolled because if some points are wrong or a frame is bad,
   // the whole map will be rolled and parts will be forgotten.
   // The size of the map is relative to the first frame reveived
-  this->DenseMap->Add(closest, false, false);
+  this->DenseMap->Add(preprocessedCloud, false, false);
 
   // Publish the map
   this->Pointcloud = this->DenseMap->Get(true);
@@ -179,17 +196,17 @@ void AggregationNode::ResetService(const std::shared_ptr<lidar_slam::srv::Reset:
 //------------------------------------------------------------------------------
 void AggregationNode::PoseCallback(const nav_msgs::msg::Odometry& poseMsg)
 {
-  this->CurrentPosition = Utils::PoseMsgToIsometry(poseMsg.pose.pose).translation();
+  this->CurrentPose = Utils::PoseMsgToIsometry(poseMsg.pose.pose);
 
   if (this->MinDistAroundTrajectory > 0.)
-    this->DenseMap->EmptyAroundPoint(this->MinDistAroundTrajectory, this->CurrentPosition.cast<float>().array());
+    this->DenseMap->EmptyAroundPoint(this->MinDistAroundTrajectory, this->CurrentPose.translation().cast<float>().array());
 
   if (!this->DoExtractSlice)
     return;
 
   // Store pose
-  this->Positions.push_back(this->CurrentPosition);
-  while ((this->CurrentPosition - this->Positions.front()).norm() > this->TrajectoryMaxLength)
+  this->Positions.push_back(this->CurrentPose.translation());
+  while ((this->CurrentPose.translation() - this->Positions.front()).norm() > this->TrajectoryMaxLength)
     this->Positions.pop_front();
 
   if (this->Positions.size() < 2)
@@ -287,6 +304,22 @@ double AggregationNode::ExtractSlice(double sliceWidth, double sliceMaxDist, dou
   }
 
   return area;
+}
+
+//------------------------------------------------------------------------------
+void AggregationNode::ExtractGround(const CloudS& inputCloud, CloudS& groundCloud)
+{
+  // Get plane inliers
+  groundCloud.header = inputCloud.header;
+  CloudS inputCloudInBase;
+  pcl::transformPointCloud(inputCloud, inputCloudInBase, this->CurrentPose.inverse().matrix());
+  for (int idxPt = 0; idxPt < inputCloud.size(); ++idxPt)
+  {
+    float distToPlane = std::abs((inputCloudInBase[idxPt].z + this->Ground.Distance));
+    if (!this->InvertGroundExtraction && distToPlane < this->Ground.Width ||
+        this->InvertGroundExtraction && distToPlane > this->Ground.Width)
+      groundCloud.emplace_back(inputCloud[idxPt]);
+  }
 }
 
 //------------------------------------------------------------------------------

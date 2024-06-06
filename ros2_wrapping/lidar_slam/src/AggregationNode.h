@@ -37,7 +37,6 @@
 class AggregationNode : public rclcpp::Node
 {
 public:
-
   using PointS = LidarSlam::LidarPoint;
   using CloudS = pcl::PointCloud<PointS>;  ///< Pointcloud needed by SLAM
   using Pcl2_msg = sensor_msgs::msg::PointCloud2; //messages for Pointcloud
@@ -79,10 +78,21 @@ public:
 
 private:
 
+  struct Plane
+  {
+    Eigen::Vector3f Normal = {0., 0., 1.};
+    // Width corresponding to the noise accepted around the ground
+    double Width = 0.01; // 1cm
+    double Distance = 0.;
+  };
+
   // Tool functions
   // Extract the slice of points perpendicular to the local trajectory
   // Compute its boundary and return its area
   double ExtractSlice(double sliceWidth, double sliceMaxDist, double angleStep, CloudS& boundary);
+
+  // Extract the points belonging to the ground defined by user
+  void ExtractGround(const CloudS& inputCloud, CloudS& outputCloud);
 
   // ROS subscribers, publishers and services
   rclcpp::Subscription<Pcl2_msg>::SharedPtr FrameSubscriber;
@@ -90,6 +100,7 @@ private:
   rclcpp::Publisher<Pcl2_msg>::SharedPtr PointsPublisher;
   rclcpp::Publisher<Pcl2_msg>::SharedPtr SlicePublisher;
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr SliceAreaPublisher;
+  rclcpp::Publisher<Pcl2_msg>::SharedPtr GroundPublisher;
   rclcpp::Service<lidar_slam::srv::SavePc>::SharedPtr SaveService;
   rclcpp::Service<lidar_slam::srv::Reset>::SharedPtr RstService;
 
@@ -102,14 +113,21 @@ private:
   // Optional positions logged to compute
   // the direction to create a slice
   std::list<Eigen::Vector3d> Positions;
-  Eigen::Vector3d CurrentPosition = {0., 0., 0.};
+  Eigen::Isometry3d CurrentPose = Eigen::Isometry3d::Identity();
   double TrajectoryMaxLength = 0.5; // 50 cm
   double SliceWidth = 0.2; // 20 cm
   double SliceMaxDist = 5.; // 5 m
   unsigned int MinSlicePtsWithoutMovObjects = 50;
-  double AlphaShapeRadius = 0.1; // 10 cm
   // Bin range for the circular histogram
   double AngleStep = 3. * M_PI / 180.; // 3°
+
+  // Ground extraction parameters
+  bool DoExtractGround = false;
+  bool InvertGroundExtraction = false;
+  // Ground parameters
+  Plane Ground;
+  // Output pointcloud
+  CloudS GroundPts;
 
   // Minimal distance around trajectory to remove points from the map
   double MinDistAroundTrajectory = 1.;

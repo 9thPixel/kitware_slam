@@ -18,3 +18,12 @@
       width: 0.2           # [meters] Width of the pointcloud slice to take to create the slice projection
       max_dist: 4.         # [meters] Maximal distance of the points from the trajectory position onto the slice plane
       angle_resolution: 3. # [°] Resolution of the slice pointcloud w.r.t the trajectory position
+
+    # Ground extraction parameters
+    # base link is supposed to be z upward, x frontward
+    # Ground should be on z axis, if not, base_link should be changed in slam params
+    ground:
+      enable: false
+      width: 0.1  # Distance to plane allowed
+      distance: 0. # distance on z axis (on -z direction, only positive values allowed)
+      invert: false
