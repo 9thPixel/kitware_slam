@@ -235,7 +235,7 @@ void RollingGrid::Add(const PointCloud::Ptr& pointcloud, bool fixed, bool roll)
         auto& voxel = this->Voxels[idxOut][idxIn];
 
         // Check if the voxel contains a fixed point
-        if (voxel.point.label == 1)
+        if (voxel.point.label == static_cast<int>(LidarSlam::LidarPointLabel::FIXED))
           continue;
 
         // If the point is not fixed, force label with new point label
@@ -324,8 +324,10 @@ void RollingGrid::Add(const PointCloud::Ptr& pointcloud, bool fixed, bool roll)
       // Shortcut to voxel
       auto& voxel = this->Voxels[idxOut][idxIn];
       voxel.point.time = Utils::PclStampToSec(pointcloud->header.stamp) + point.time;
-      // Point added is not fixed
-      voxel.point.label = static_cast<int>(fixed);
+
+      // If fixed is set, force the voxel to be fixed
+      if (fixed)
+          voxel.point.label = static_cast<int>(LidarSlam::LidarPointLabel::FIXED);
 
       if (!seen.count(idxOut) || !seen[idxOut].count(idxIn))
       {
@@ -405,7 +407,8 @@ void RollingGrid::Erase(int outVoxIdx, std::function<bool(const Point&)> heurist
     // Shortcut to voxel
     Voxel& voxel = itVoxelsIn->second;
     // If voxel is removable and in sphere, remove it
-    if (!voxel.point.label && heuristic(itVoxelsIn->second.point))
+    if (voxel.point.label != static_cast<int>(LidarSlam::LidarPointLabel::FIXED) &&
+        heuristic(itVoxelsIn->second.point))
     {
       itVoxelsIn = this->Voxels[outVoxIdx].erase(itVoxelsIn);
       --this->NbPoints;
@@ -469,7 +472,8 @@ void RollingGrid::BuildSubMap(const Eigen::Array3f& minPoint, const Eigen::Array
        {
          // Check if enough points lie in the voxel
          // or if the points are fixed before adding it
-         if (kvIn.second.count >= this->MinFramesPerVoxel || kvIn.second.point.label == 1)
+         if (kvIn.second.count >= this->MinFramesPerVoxel ||
+             kvIn.second.point.label == static_cast<int>(LidarSlam::LidarPointLabel::FIXED))
           this->SubMap->push_back(kvIn.second.point);
        }
      }
@@ -583,7 +587,7 @@ void RollingGrid::BuildSubMap(const PointCloud& pc, int minNbPoints)
       for (const auto& kvIn : this->Voxels[vxIdx])
       {
         if (kvIn.second.count > this->MinFramesPerVoxel ||
-            kvIn.second.point.label == 1)
+            kvIn.second.point.label == static_cast<int>(LidarSlam::LidarPointLabel::FIXED))
           this->SubMap->push_back(kvIn.second.point);
       }
     }
