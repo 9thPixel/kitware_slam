@@ -238,6 +238,9 @@ void RollingGrid::Add(const PointCloud::Ptr& pointcloud, bool fixed, bool roll)
         if (voxel.point.label == 1)
           continue;
 
+        // If the point is not fixed, force label with new point label
+        voxel.point.label = point.label;
+
         switch(this->Sampling)
         {
           // If first mode enabled,
