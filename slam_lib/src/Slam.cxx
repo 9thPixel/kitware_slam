@@ -1126,7 +1126,7 @@ void Slam::LoadMapsFromPCD(const std::string& filePrefix, bool resetMaps)
     if (pcl::io::loadPCDFile(path, *keypoints) == 0)
     {
       std::cout << "SLAM keypoints map successfully loaded from " << path << std::endl;
-      // If mapping mode is NONE or ADD_DECAYING_KPTS, the first map points are fixed,
+      // If mapping mode is NONE or ADD_KPTS_TO_FIXED_MAP, the first map points are fixed,
       // else, the initial map points can be updated
       bool fixedMap = this->MapUpdate == MappingMode::NONE || this->MapUpdate == MappingMode::ADD_KPTS_TO_FIXED_MAP;
       this->LocalMaps[k]->Add(keypoints, fixedMap);
