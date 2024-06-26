@@ -441,13 +441,13 @@ void RollingGrid::BuildSubMap(const Eigen::Array3f& minPoint, const Eigen::Array
     // to extract all intersecting voxels
     for (const auto& kvOut : this->Voxels)
     {
-     // Check if the voxel lies within bounds
-     Eigen::Array3i idx3d = this->To3d(kvOut.first, this->GridSize);
-     if (((intersectionMin <= idx3d) && (idx3d <= intersectionMax)).all())
-     {
-       for (const auto& kvIn : kvOut.second)
+      // Check if the voxel lies within bounds
+      Eigen::Array3i idx3d = this->To3d(kvOut.first, this->GridSize);
+      if (((intersectionMin <= idx3d) && (idx3d <= intersectionMax)).all())
+      {
+        for (const auto& kvIn : kvOut.second)
         this->SubMap->push_back(kvIn.second.point);
-     }
+      }
     }
   }
   // If we want to reject moving objects
