@@ -125,8 +125,8 @@ RollingGrid::PointCloud::Ptr RollingGrid::Get(bool clean) const
     {
       // If all points can be used or if the point
       // does not lie in a moving object, extract it.
-      if (!clean || kvIn.second.count > this->MinFramesPerVoxel)
-        pc->push_back(kvIn.second.point);
+      if (!clean || kvIn.second.count >= this->MinFramesPerVoxel)
+        pc->emplace_back(kvIn.second.point);
     }
   }
 
