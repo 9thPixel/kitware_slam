@@ -1,17 +1,20 @@
 # Default variables/parameters for all jobs
 variables:
-  data_folder: /usr/src/app/data
+  data_folder: /root/data
   cmake_option_GENERATOR: -GNinja
   cmake_option_build_type: -DCMAKE_BUILD_TYPE=Release
   cmake_option_shared: -DBUILD_SHARED_LIBS=ON
   SB_deps_install_path: "${CI_PROJECT_DIR}/../${CI_PROJECT_NAME}_build/build_SB/install"
   GIT_SUBMODULE_STRATEGY: recursive
   GIT_SUBMODULE_DEPTH: 20
+  CI_ENV_IMAGE: gitlab.kitware.com:4567/keu-computervision/slam/ci_ros2_env
+  ROS2_ENV_IMAGE: gitlab.kitware.com:4567/keu-computervision/slam/ros2_env
 
 stages:
   - superbuild
   - slam_lib
   - ros2_wrapping_build
+  - ros2_wrapping_package
   - ros2_test
 
 # Windows specific configuration
@@ -187,7 +190,7 @@ linux_ros2_wrapping_build:
   tags: [linux, ros]
   stage: ros2_wrapping_build
   needs: []
-  image: gitlab.kitware.com:4567/keu-computervision/slam:ros2_humble
+  image: $CI_ENV_IMAGE
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: always
@@ -197,8 +200,8 @@ linux_ros2_wrapping_build:
       when: always
   artifacts:
       paths:
-        - ros2_ws
-      expire_in: "60 days"
+        - ros2_ws/install
+      expire_in: "30 days"
   script:
     # Create a hidden ros2 workspace folder beside sources
     # This is used to move all files from the current directory
@@ -207,10 +210,51 @@ linux_ros2_wrapping_build:
     - mv * .ros2_ws/src/slam
     # Convert to not hidden folder to be able to cache it for next jobs
     - mv .ros2_ws ros2_ws
-    # Compile
+    # Build/Install
     - cd ros2_ws
     - source /opt/ros/humble/setup.bash
     - colcon build --base-paths src/slam/ros2_wrapping --cmake-args ${cmake_option_build_type}
+
+# Create new docker image packaging the SLAM
+# WARNING : nobody external to Kitware should be able to modify this job
+create_docker_image:
+  tags: [docker, privileged]
+  stage: ros2_wrapping_package
+  image: $ROS2_ENV_IMAGE
+  services:
+  - name: docker:dind
+    command: ["--tls"]
+  variables:
+    DOCKER_TLS_VERIFY: 1
+    DOCKER_CERT_PATH: "$CI_PROJECT_DIR/certs/client"
+    DOCKER_HOST: "tcp://docker:2376"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: always
+    - if: $CI_COMMIT_BRANCH == "feat/ROS2"
+      when: always
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: always
+  needs: [linux_ros2_wrapping_build]
+  dependencies: [linux_ros2_wrapping_build]
+  artifacts:
+    paths:
+      - slam_image.tar
+    expire_in: "30 days"
+  script:
+    - cmake -E make_directory $DOCKER_CERT_PATH
+    - echo "$CA_PEM_BASE64" | base64 -d > $DOCKER_CERT_PATH/ca.pem
+    - echo "$CERT_PEM_BASE64" | base64 -d > $DOCKER_CERT_PATH/cert.pem
+    - echo "$KEY_PEM_BASE64" | base64 -d > $DOCKER_CERT_PATH/key.pem
+    - |
+      cat <<EOF > Dockerfile
+      FROM $ROS2_ENV_IMAGE
+      COPY /root/ros2_ws/install /root/ros2_ws/install
+      RUN echo "source /root/ros2_ws/install/setup.bash" >> /root/.bashrc
+      WORKDIR /root/ros2_ws/install
+      EOF
+    - docker build -t slam:$CI_COMMIT_SHA .
+    - docker save slam:$CI_COMMIT_SHA > slam_image.tar
 
 # ------------------------------------------------------------------------------
 #   Perform ROS tests (on docker)
@@ -222,14 +266,14 @@ linux_ros2_wrapping_build:
   tags: [linux, ros]
   needs: [linux_ros2_wrapping_build]
   dependencies: [linux_ros2_wrapping_build]
-  image: gitlab.kitware.com:4567/keu-computervision/slam:ros2_humble
+  image: $CI_ENV_IMAGE
   variables:
     GIT_STRATEGY: none
     PATH_REFERENCE_LOG: "test_log/${test_name}/reference"
   artifacts:
     paths:
     - "ros2_ws/$PATH_REFERENCE_LOG"
-    expire_in: "60 days"
+    expire_in: "30 days"
   rules:
     # Allow to manually create a reference for feat/ROS2 from the web interface
     - if: $CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "feat/ROS2"
@@ -262,7 +306,7 @@ linux_ros2_wrapping_build:
   tags: [linux, ros]
   needs: [linux_ros2_wrapping_build]
   dependencies: [linux_ros2_wrapping_build]
-  image: gitlab.kitware.com:4567/keu-computervision/slam:ros2_humble
+  image: $CI_ENV_IMAGE
   variables:
     GIT_STRATEGY: none
     PATH_REFERENCE_LOG: "test_log/${test_name}/reference"
@@ -274,7 +318,7 @@ linux_ros2_wrapping_build:
   artifacts:
     paths:
     - "ros2_ws/test_log/${test_name}"
-    expire_in: "60 days"
+    expire_in: "30 days"
     when: always
   script:
     # Search the id of the latest pipeline from feat/ROS2
