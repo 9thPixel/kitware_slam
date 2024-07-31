@@ -212,7 +212,6 @@ linux_ros2_wrapping_build:
     - mv .ros2_ws ros2_ws
     # Build/Install
     - cd ros2_ws
-    - source /opt/ros/humble/setup.bash
     - colcon build --base-paths src/slam/ros2_wrapping --cmake-args ${cmake_option_build_type}
 
 # Create new docker image packaging the SLAM
