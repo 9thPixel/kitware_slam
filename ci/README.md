@@ -39,11 +39,20 @@ To register a new docker runner:
 - Get the image either from the [Package/Container Registery](../../container_registry), build it from the [Dockerfile](Dockerfile) or from an available image on the [Docker Hub](https://hub.docker.com/search?q=&type=image) .
 - Change the runner [docker pull policy](https://docs.gitlab.com/runner/executors/docker.html#using-the-if-not-present-pull-policy) to `if-not-present`. This will enable to use the local image you just get. To do so, open your [runner configuration file](https://docs.gitlab.com/runner/configuration/advanced-configuration.html).
 
-## Pushing a docker image
+## Using a docker image
+
+A CI specific [Dockerfile](Dockerfile) is provided to build an image with the [test data](https://drive.google.com/drive/folders/1hJRNcVXlj2SUZI7iIG8O28X1avwav6k8?usp=sharing) from the ROS2 environment image and **jq** utility. The relative docker image must be built in the data folder.
 
 To push a docker image on the Slam repository, execute this command
 ```bash
-docker push gitlab.kitware.com:4567/keu-computervision/slam:image_name
+docker login gitlab.kitware.com:4567
+docker push gitlab.kitware.com:4567/keu-computervision/slam:my_image
+```
+
+Then you can use this image in any job like :
+```yaml
+my_job:
+  image: gitlab.kitware.com:4567/keu-computervision/slam:my_image
 ```
 
 ## Add a test
