@@ -245,6 +245,7 @@ create_docker_image:
     - echo "$CA_PEM_BASE64" | base64 -d > $DOCKER_CERT_PATH/ca.pem
     - echo "$CERT_PEM_BASE64" | base64 -d > $DOCKER_CERT_PATH/cert.pem
     - echo "$KEY_PEM_BASE64" | base64 -d > $DOCKER_CERT_PATH/key.pem
+    - docker info
     - |
       cat <<EOF > Dockerfile
       FROM $ROS2_ENV_IMAGE
