@@ -241,10 +241,13 @@ create_docker_image:
       - slam_image.tar
     expire_in: "30 days"
   script:
+    - apt-get update && apt-get install -y docker.io ca-certificates
     - cmake -E make_directory $DOCKER_CERT_PATH
     - echo "$CA_PEM_BASE64" | base64 -d > $DOCKER_CERT_PATH/ca.pem
     - echo "$CERT_PEM_BASE64" | base64 -d > $DOCKER_CERT_PATH/cert.pem
     - echo "$KEY_PEM_BASE64" | base64 -d > $DOCKER_CERT_PATH/key.pem
+    - cp $DOCKER_CERT_PATH/ca.pem /usr/local/share/ca-certificates/docker-ca.crt
+    - update-ca-certificates
     - docker info
     - |
       cat <<EOF > Dockerfile
