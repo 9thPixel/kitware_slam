@@ -267,7 +267,9 @@ create_docker_image:
 .ros2_make_reference:
   stage: ros2_test
   tags: [linux, ros]
-  needs: [linux_ros2_wrapping_build]
+  needs:
+    - job: linux_ros2_wrapping_build
+      artifacts: true
   dependencies: [linux_ros2_wrapping_build]
   image: $CI_ENV_IMAGE
   variables:
@@ -307,7 +309,9 @@ create_docker_image:
 .ros2_test:
   stage: ros2_test
   tags: [linux, ros]
-  needs: [linux_ros2_wrapping_build]
+  needs:
+    - job: linux_ros2_wrapping_build
+      artifacts: true
   dependencies: [linux_ros2_wrapping_build]
   image: $CI_ENV_IMAGE
   variables:
