@@ -124,6 +124,7 @@ linux_build_superbuild:
     slam_cmake_option_glog_DIR: "-Dglog_DIR=${SB_deps_install_path}/lib/cmake/glog"
     slam_cmake_option_Ceres_DIR: "-DCeres_DIR=${SB_deps_install_path}/lib/cmake/Ceres"
     slam_cmake_option_nanoflann_DIR: "-Dnanoflann_DIR=${SB_deps_install_path}/share/nanoflann/cmake"
+    slam_cmake_option_BOOST_DIR: "-DBOOST_DIR=${SB_deps_install_path}/lib/cmake/Boost-1.76.0"
     slam_cmake_option_BOOST_ROOT: "-DBOOST_ROOT=${SB_deps_install_path}/"
     slam_cmake_option_Boost_STATIC: "-DBoost_USE_STATIC_LIBS=OFF"
     slam_cmake_option_g2o_DIR: "-Dg2o_DIR=${SB_deps_install_path}/lib/cmake/g2o"
@@ -145,7 +146,9 @@ linux_build_superbuild:
       $slam_cmake_option_glog_DIR
       $slam_cmake_option_Ceres_DIR
       $slam_cmake_option_nanoflann_DIR
+      $slam_cmake_option_BOOST_DIR
       $slam_cmake_option_BOOST_ROOT
+      $slam_cmake_option_Boost_INCLUDE_DIR
       $slam_cmake_option_Boost_STATIC
       $slam_cmake_option_PCL_DIR
       $slam_cmake_option_g2o_DIR"
@@ -158,7 +161,9 @@ linux_build_superbuild:
       $slam_cmake_option_glog_DIR
       $slam_cmake_option_Ceres_DIR
       $slam_cmake_option_nanoflann_DIR
+      $slam_cmake_option_BOOST_DIR
       $slam_cmake_option_BOOST_ROOT
+      $slam_cmake_option_Boost_INCLUDE_DIR
       $slam_cmake_option_Boost_STATIC
       $slam_cmake_option_PCL_DIR
       $slam_cmake_option_g2o_DIR
@@ -171,6 +176,7 @@ linux_slam_lib:
     - .slam_lib
   variables:
     slam_cmake_option_PCL_DIR: "-DPCL_DIR=${SB_deps_install_path}/share/pcl-1.13"
+    slam_cmake_option_Boost_INCLUDE_DIR: "-DBoost_INCLUDE_DIR=${SB_deps_install_path}/include"
 
 # Build core LidarSlam lib on Windows
 windows_slam_lib:
@@ -180,6 +186,7 @@ windows_slam_lib:
   - .slam_lib
   variables:
     slam_cmake_option_PCL_DIR: "-DPCL_DIR=${SB_deps_install_path}/cmake"
+    slam_cmake_option_Boost_INCLUDE_DIR: "-DBoost_INCLUDE_DIR=${SB_deps_install_path}/include/boost-1_76"
 
 # ------------------------------------------------------------------------------
 #   Build ROS2 wrapping (on docker)
