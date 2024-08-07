@@ -7,7 +7,6 @@
 
 - If all these dependencies are not installed system-wide or not visible by CMake, it is necessary to indicate where to find them on the runner. To do so, the following variables can be optionally defined in the `environment` field of the `[[runners]]` section, defined in the `config.toml` file. These variables are CMake options that will be forwarded for the configuration step. For example, on a Linux runner, we can set:
 ```
-
 environment = ["slam_cmake_option_Eigen_DIR=-DEIGEN3_INCLUDE_DIR=/home/ci/deps/install/include/eigen3",
                "slam_cmake_option_Ceres_DIR=-DCeres_DIR=/home/ci/deps/install/lib/cmake/Ceres",
                "slam_cmake_option_nanoflann_DIR=-Dnanoflann_DIR=/home/ci/deps/install/lib/cmake/nanoflann",
@@ -57,15 +56,26 @@ my_job:
 
 ## Add a test
 
-Architecture choices :
-- The test data are included in the image using the COPY command
-- Build data are stored in cache after build job for next test job
-- When the pipeline is triggered for master branch, log data are stored in cache
-- When the pipeline is triggered on another branch, the log data are computed and compared with the master log data
+Current test data are stored [here](https://drive.google.com/drive/folders/1hJRNcVXlj2SUZI7iIG8O28X1avwav6k8?usp=sharing).
 
-Therefore, these are the detailed steps to add a test :
-1. Add a *testk* (for test #**k**) folder to the gitlab-runner/Testing/SLAM folder containing the new bag file on which to test the SLAM
-2. Add a COPY line to the Dockerfile for these new test data
-3. Build the new docker image, cf [ros2_humble/README.md](ros2_humble/README.md)
-4. Add a make_reference job with the *testk* variable and its specific parameters (velodyne_driver, outdoor...)
-5. Add a test job with the same config as the one used in reference creation
+Architecture choices :
+- The test data are included in the docker image using the COPY command
+- Build data are stored as artifacts after build job for next test job
+- When the pipeline is triggered for **feat/ROS2** branch, SLAM results are stored as artifacts
+- When the pipeline is triggered on a derived branch, the SLAM new results are compared with the previously stored reference results
+
+Then, these are the detailed steps to add a new test :
+1. Create a test data folder
+2. Add a *testk* (for test #**k**) subfolder containing the new bag file
+3. Create a new Dockerfile in the test data folder copying the behavior of [the provided Dockerfile](Dockerfile). The corresponding base docker image should be: gitlab.kitware.com:4567/keu-computervision/slam/ci_ros2_env
+and it should contain a new COPY line for *testk* data.
+4. Build the new docker image :
+   ```bash
+   docker build -t gitlab.kitware.com:4567/keu-computervision/slam/ci_ros2_env .
+   ```
+5. Push the new image to gitlab registry :
+   ```bash
+   docker push gitlab.kitware.com:4567/keu-computervision/slam/ci_ros2_env
+   ```
+6. Add a make_reference job with the *testk* variable and its specific parameters (velodyne_driver, outdoor...)
+7. Add a test job with the same config as the one used to create the reference results data in 6.
