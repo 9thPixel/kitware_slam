@@ -198,7 +198,7 @@ linux_ros2_wrapping_build:
   artifacts:
       paths:
         - ros2_ws
-      expire_in: "60 days"
+      expire_in: "30 days"
   script:
     # Create a hidden ros2 workspace folder beside sources
     # This is used to move all files from the current directory
@@ -229,7 +229,7 @@ linux_ros2_wrapping_build:
   artifacts:
     paths:
     - "ros2_ws/$PATH_REFERENCE_LOG"
-    expire_in: "60 days"
+    expire_in: "30 days"
   rules:
     # Allow to manually create a reference for feat/ROS2 from the web interface
     - if: $CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "feat/ROS2"
@@ -274,7 +274,7 @@ linux_ros2_wrapping_build:
   artifacts:
     paths:
     - "ros2_ws/test_log/${test_name}"
-    expire_in: "60 days"
+    expire_in: "30 days"
     when: always
   script:
     # Search the id of the latest pipeline from feat/ROS2
