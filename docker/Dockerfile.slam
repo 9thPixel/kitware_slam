@@ -10,5 +10,8 @@ COPY install_slam.bash install_slam.bash
 RUN bash install_slam.bash
 RUN rm install_slam.bash
 
+RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc
+RUN echo "source /root/slam/install/setup.bash" >> ~/.bashrc
+
 COPY slam_entrypoint.bash slam_entrypoint.bash
 ENTRYPOINT ["bash", "slam_entrypoint.bash"]
