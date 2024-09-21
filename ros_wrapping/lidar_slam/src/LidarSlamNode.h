@@ -39,6 +39,7 @@
 
 // SLAM
 #include <LidarSlam/Slam.h>
+#include "lidar_slam/save_pc.h"
 
 class LidarSlamNode
 {
@@ -153,6 +154,13 @@ public:
    * @param[in] msg The command message.
    */
   void SlamCommandCallback(const lidar_slam::SlamCommand& msg);
+
+  //----------------------------------------------------------------------------
+  /*!
+   * @brief     Callback to service to save the maps
+   * @param[in] request and result
+   */
+  bool SavePointcloudService(lidar_slam::save_pcRequest& req, lidar_slam::save_pcResponse& res);
 
 protected:
 
@@ -297,6 +305,9 @@ protected:
   ros::Subscriber SlamCommandSub, SetPoseSub;
   std::unordered_map<int, ros::Publisher> Publishers;
   std::unordered_map<int, bool> Publish;
+
+  // Services
+  ros::ServiceServer SaveService;
 
   // Output pose required frequency (Hz)
   double TrajFrequency = -1;

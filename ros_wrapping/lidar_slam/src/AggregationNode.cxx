@@ -140,12 +140,17 @@ bool AggregationNode::SavePointcloudService(lidar_slam::save_pcRequest& req, lid
     outputPrefixPath = boost::filesystem::path(std::getenv("HOME")) / boost::filesystem::path(outputPrefixPath.stem());
   }
 
-  if (req.format > 2 || req.format < 0)
-    req.format = 0;
-  LidarSlam::PCDFormat f = static_cast<LidarSlam::PCDFormat>(req.format);
-  std::cout << ros::Time().toSec() << std::endl;
+  LidarSlam::PCDFormat pcdFormat = static_cast<LidarSlam::PCDFormat>(req.format);
+  if (pcdFormat != LidarSlam::PCDFormat::ASCII &&
+      pcdFormat != LidarSlam::PCDFormat::BINARY &&
+      pcdFormat != LidarSlam::PCDFormat::BINARY_COMPRESSED)
+  {
+    ROS_ERROR_STREAM("Incorrect PCD format value (" << pcdFormat << "). Setting it to 'BINARY_COMPRESSED'.");
+    pcdFormat = LidarSlam::PCDFormat::BINARY_COMPRESSED;
+  }
+
   std::string outputFilePath = outputPrefixPath.string() + "_" + std::to_string(int(ros::Time::now().toSec())) + ".pcd";
-  LidarSlam::savePointCloudToPCD<PointS>(outputFilePath, *this->Pointcloud, f);
+  LidarSlam::savePointCloudToPCD<PointS>(outputFilePath, *this->Pointcloud, pcdFormat);
   ROS_INFO_STREAM("Pointcloud saved to " << outputFilePath);
   res.success = true;
   return true;
